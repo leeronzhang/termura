@@ -1,0 +1,77 @@
+import Foundation
+
+/// Test double for TerminalEngine. Captures all interactions for assertion.
+@MainActor
+final class MockTerminalEngine: TerminalEngine {
+
+    // MARK: - Streams
+
+    let outputStream: AsyncStream<TerminalOutputEvent>
+    let shellEventsStream: AsyncStream<ShellIntegrationEvent>
+
+    // MARK: - State
+
+    private(set) var isRunning = true
+    private(set) var sentTexts: [String] = []
+    private(set) var sentBytes: [Data] = []
+    private(set) var resizes: [(UInt16, UInt16)] = []
+    private(set) var terminateCallCount = 0
+
+    // MARK: - Continuations
+
+    private let continuation: AsyncStream<TerminalOutputEvent>.Continuation
+    private let shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
+
+    // MARK: - Init
+
+    init() {
+        var outputCap: AsyncStream<TerminalOutputEvent>.Continuation?
+        outputStream = AsyncStream { outputCap = $0 }
+        guard let outputCap else {
+            preconditionFailure("AsyncStream continuation must be set synchronously")
+        }
+        continuation = outputCap
+
+        var shellCap: AsyncStream<ShellIntegrationEvent>.Continuation?
+        shellEventsStream = AsyncStream { shellCap = $0 }
+        guard let shellCap else {
+            preconditionFailure("AsyncStream shell continuation must be set synchronously")
+        }
+        shellContinuation = shellCap
+    }
+
+    // MARK: - Test helpers
+
+    /// Inject a terminal output event for testing.
+    func emit(_ event: TerminalOutputEvent) {
+        continuation.yield(event)
+    }
+
+    /// Inject a shell integration event for testing.
+    func emitShellEvent(_ event: ShellIntegrationEvent) {
+        shellContinuation.yield(event)
+    }
+
+    // MARK: - TerminalEngine
+
+    func send(_ text: String) async {
+        sentTexts.append(text)
+    }
+
+    func sendBytes(_ data: Data) async {
+        sentBytes.append(data)
+    }
+
+    func resize(columns: UInt16, rows: UInt16) async {
+        resizes.append((columns, rows))
+    }
+
+    func cursorLineContent() -> String? { nil }
+
+    func terminate() async {
+        isRunning = false
+        terminateCallCount += 1
+        shellContinuation.finish()
+        continuation.finish()
+    }
+}

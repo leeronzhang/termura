@@ -1,0 +1,240 @@
+disabled_rules:
+  - trailing_whitespace
+
+# === 函数与类型体积限制 ===
+function_body_length:
+  warning: 60
+  error: 100
+
+type_body_length:
+  warning: 250
+  error: 500
+
+file_length:
+  warning: 300
+  error: 500
+
+line_length:
+  warning: 140
+  error: 200
+
+cyclomatic_complexity:
+  warning: 15
+  error: 30
+
+# === 命名规范 ===
+type_name:
+  min_length: 3
+  excluded:
+    - ID
+    - URL
+    - PTY
+    - OSC
+
+identifier_name:
+  min_length: 2
+  excluded:
+    - x
+    - y
+    - dx
+    - dy
+    - i
+    - j
+    - k
+    - r
+    - g
+    - b
+    - a
+    - id
+    - n
+    - s
+    - fd
+
+# === Opt-in 规则 ===
+opt_in_rules:
+  # 安全：禁止强制解包/转换
+  - force_unwrapping
+  - force_try
+  - force_cast
+  - implicitly_unwrapped_optional
+
+  # 性能
+  - empty_count            # 推荐 isEmpty 替换 count == 0
+  - empty_string           # 推荐 isEmpty 替换字符串空判断
+  - first_where            # 推荐 .first(where:) 替换 .filter().first
+
+  # 现代化
+  - legacy_random          # 推荐 Int.random() 替换 arc4random
+
+  # 代码清洁
+  - redundant_nil_coalescing
+  - fatal_error_message
+  - unneeded_parentheses_in_closure_argument
+
+  # 内存安全
+  - weak_delegate          # Delegate 应为 weak，防止循环引用
+
+  # 架构
+  - strict_fileprivate     # 推荐 private 替代 fileprivate
+  - function_parameter_count
+  - large_tuple
+  - private_outlet
+  - private_subject        # Combine Subject 应为 private，仅公开 Publisher
+  - overridden_super_call
+  - collection_alignment
+
+included:
+  - Sources/Termura
+
+excluded:
+  - TermuraTests
+  - TermuraUITests
+  - .build
+
+# ============================================================
+# 自定义规则
+# ============================================================
+custom_rules:
+
+  # --- 并发门禁 ---
+  no_dispatch_queue_main:
+    name: "Concurrency: Use Task/@MainActor instead of DispatchQueue"
+    regex: "DispatchQueue\\.main\\.(async|asyncAfter)"
+    message: "禁止使用 DispatchQueue.main。请使用 Task { @MainActor in ... } 或 Task.sleep。"
+    severity: error
+
+  no_dispatch_global:
+    name: "Concurrency: Use Task.detached instead of DispatchQueue.global"
+    regex: "DispatchQueue\\.global\\("
+    message: "禁止使用 DispatchQueue.global()。请使用 Task.detached 或 async 方法。"
+    severity: warning
+
+  no_combine_dispatch_main:
+    name: "Concurrency: Use RunLoop.main for Combine"
+    regex: "\\.receive\\(on: DispatchQueue\\.main\\)"
+    message: "Combine 的 .receive(on:) 请使用 RunLoop.main，以保持 MainActor 隔离一致性。"
+    severity: warning
+
+  unchecked_sendable_documentation:
+    name: "Concurrency: @unchecked Sendable Must Be Documented"
+    regex: "@unchecked\\s+Sendable"
+    message: "@unchecked Sendable 必须附带注释说明线程安全保障机制。"
+    severity: warning
+
+  # --- 错误处理门禁 ---
+  no_try_optional:
+    name: "Error Handling: Avoid try?"
+    regex: "try\\?"
+    message: "禁止使用 try? 吞没错误。请使用 do-catch 显式处理，或至少记录错误日志。"
+    severity: error
+
+  no_empty_catch:
+    name: "Error Handling: No Empty Catch"
+    regex: "catch\\s*\\{\\s*\\}"
+    message: "禁止空 catch 块。错误必须被记录、上报或处理。"
+    severity: error
+
+  no_silent_catch_comments:
+    name: "Error Handling: No Silent Catch (Comments Only)"
+    regex: "catch\\s*\\{\\s*//[^\\n]*\\s*\\}"
+    message: "catch 块中只有注释是不允许的。必须有实际的错误处理逻辑。"
+    severity: error
+
+  # --- 依赖注入门禁 ---
+  no_services_shared_in_logic:
+    included: ".*Sources/Termura/(ViewModels|Services|Repositories)/.*"
+    name: "DI Violation: AppServices Singleton in Logic Layer"
+    regex: "AppServices\\.shared"
+    match_kinds:
+      - identifier
+    excluded: ".*Sources/Termura/App/.*"
+    message: "逻辑层禁止直接访问 AppServices.shared。请通过构造函数注入依赖。"
+    severity: error
+
+  no_generic_shared_in_logic:
+    included: ".*Sources/Termura/(ViewModels|Repositories)/.*"
+    name: "DI Violation: Generic .shared Access"
+    regex: "(?<!UserDefaults|NotificationCenter|FileManager|AppConfig|ProcessInfo)\\.shared(?![a-z])"
+    message: "逻辑层应优先使用依赖注入，而非直接访问 .shared 单例（除经批准的系统服务）。"
+    severity: warning
+
+  # --- Clean Architecture 门禁 ---
+  no_grdb_in_views:
+    included: ".*Sources/Termura/Views/.*"
+    excluded: ".*Preview.*\\.swift"
+    name: "Clean Architecture: No GRDB in Views"
+    regex: "import GRDB|DatabaseQueue|DatabasePool|try db\\."
+    message: "Views 禁止直接访问 GRDB。请通过 ViewModel/Repository 封装数据操作。"
+    severity: error
+
+  no_swiftterm_in_views:
+    included: ".*Sources/Termura/Views/.*"
+    excluded:
+      - ".*Preview.*\\.swift"
+      - ".*TerminalContainerView.*\\.swift"
+    name: "Clean Architecture: No SwiftTerm in Views"
+    regex: "import SwiftTerm|LocalProcessTerminalView|\\bTerminalView\\b"
+    message: "Views 禁止直接持有 SwiftTerm 实例。请通过 TerminalViewModel 管理终端生命周期。"
+    severity: warning
+
+  no_main_actor_repository:
+    included: ".*Sources/Termura/Services/.*Repository.*\\.swift"
+    name: "Architecture: Repository Must Not Be MainActor"
+    regex: "@MainActor"
+    message: "Repository 禁止标记为 @MainActor。I/O 操作必须在后台执行。"
+    severity: error
+
+  # --- 配置管理门禁 ---
+  no_hardcoded_config:
+    included: ".*Sources/Termura/(ViewModels|Services|Repositories)/.*"
+    excluded: ".*AppConfig.*\\.swift"
+    name: "Config: Hardcoded Magic Number"
+    regex: "(let|var)\\s+\\w+\\s*:\\s*(TimeInterval|Int|Int64)\\s*=\\s*(?!0(\\.0+)?(?![\\d]))\\d+(\\.\\d+)?(?![\\d\\w])"
+    message: "检测到硬编码配置值。请迁移至 AppConfig.swift 集中管理。"
+    severity: error
+
+  no_magic_delays:
+    name: "Config: Hardcoded Delay"
+    regex: "Task\\.sleep\\(seconds:\\s*(?!0(\\.0+)?)[0-9]+\\.?[0-9]*\\b"
+    excluded: ".*AppConfig.*\\.swift"
+    message: "硬编码延迟时间请移至 AppConfig.Runtime 命名常量。"
+    severity: error
+
+  # --- 安全门禁 ---
+  no_hardcoded_api_key:
+    included: ".*Sources/Termura/(ViewModels|Services|Repositories)/.*"
+    name: "Security: Possible Hardcoded Key"
+    regex: "(let|var)\\s+(apiKey|secretKey|accessKey|apiSecret)\\s*=\\s*\"[a-zA-Z0-9]{10,}\""
+    message: "检测到疑似硬编码 API Key。请迁移至受保护的配置文件或 Keychain。"
+    severity: error
+
+  no_exit_call:
+    excluded: ".*Tests.*\\.swift"
+    name: "Forbidden: exit()"
+    regex: "exit\\("
+    match_kinds: [identifier]
+    message: "禁止使用 exit()。违反 App Store 规则。请使用 UI 提示或平滑退出机制。"
+    severity: error
+
+  no_fatal_error_production:
+    excluded: ".*Tests.*\\.swift"
+    name: "Forbidden: fatalError in Production"
+    regex: "fatalError\\("
+    message: "生产代码禁止使用 fatalError。请使用错误处理机制或安全降级方案。"
+    severity: error
+
+  # --- 终端缓冲区安全 ---
+  no_unbounded_terminal_buffer:
+    included: ".*Sources/Termura/Terminal/.*"
+    name: "Terminal: Unbounded Buffer Risk"
+    regex: "var\\s+\\w*(lines|buffer|history|output)\\s*[:=]\\s*\\[.*\\]"
+    message: "终端缓冲区数组必须有上限（参考 AppConfig.Terminal.maxScrollbackLines）以防内存泄漏。"
+    severity: warning
+
+  # --- 测试规范 ---
+  no_task_sleep_in_tests:
+    included: ".*Tests.*\\.swift"
+    name: "Test: No Task.sleep"
+    regex: "Task\\.sleep"
+    message: "测试代码禁止使用 Task.sleep。请使用 XCTestExpectation 确保测试确定性。"
+    severity: error

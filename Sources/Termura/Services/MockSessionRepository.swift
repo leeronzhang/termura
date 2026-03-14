@@ -1,0 +1,46 @@
+import Foundation
+
+/// In-memory session repository for unit tests and previews. No GRDB dependency.
+actor MockSessionRepository: SessionRepositoryProtocol {
+    private var store: [SessionID: SessionRecord] = [:]
+    private var order: [SessionID] = []
+
+    func fetchAll() async throws -> [SessionRecord] {
+        order.compactMap { store[$0] }
+    }
+
+    func save(_ record: SessionRecord) async throws {
+        if store[record.id] == nil { order.append(record.id) }
+        store[record.id] = record
+    }
+
+    func delete(id: SessionID) async throws {
+        store[id] = nil
+        order.removeAll { $0 == id }
+    }
+
+    func archive(id: SessionID) async throws {
+        store[id] = nil
+        order.removeAll { $0 == id }
+    }
+
+    func search(query: String) async throws -> [SessionRecord] {
+        let lowered = query.lowercased()
+        return order.compactMap { store[$0] }.filter {
+            $0.title.lowercased().contains(lowered) ||
+            $0.workingDirectory.lowercased().contains(lowered)
+        }
+    }
+
+    func reorder(ids: [SessionID]) async throws {
+        order = ids.filter { store[$0] != nil }
+    }
+
+    func setColorLabel(id: SessionID, label: SessionColorLabel) async throws {
+        store[id]?.colorLabel = label
+    }
+
+    func setPinned(id: SessionID, pinned: Bool) async throws {
+        store[id]?.isPinned = pinned
+    }
+}

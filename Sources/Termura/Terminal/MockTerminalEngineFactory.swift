@@ -1,0 +1,14 @@
+import Foundation
+
+/// Mock factory for testing — returns the injected MockTerminalEngine.
+final class MockTerminalEngineFactory: TerminalEngineFactory {
+    private let engine: MockTerminalEngine
+
+    init(engine: MockTerminalEngine = MockTerminalEngine()) {
+        self.engine = engine
+    }
+
+    func makeEngine(for sessionID: SessionID, shell: String) -> any TerminalEngine {
+        engine
+    }
+}
