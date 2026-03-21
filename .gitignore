@@ -17,5 +17,10 @@ docs/
 CLAUDE.md
 .claude/
 
+# Lint & CI
+.swiftlint.yml
+.swiftformat
+.github/
+
 # macOS
 .DS_Store
