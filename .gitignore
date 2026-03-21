@@ -22,5 +22,11 @@ CLAUDE.md
 .swiftformat
 .github/
 
+# Build & Project tools
+Makefile
+scripts/
+project.yml
+*.xcodeproj/
+
 # macOS
 .DS_Store
