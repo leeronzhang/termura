@@ -27,9 +27,13 @@ struct InterventionToolbarView: View {
             insertButton
         }
         .padding(.horizontal, DS.Spacing.lg)
-        .padding(.vertical, DS.Spacing.md)
+        .padding(.vertical, DS.Spacing.smMd)
         .background(.ultraThinMaterial)
-        .cornerRadius(DS.Radius.lg)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.lg))
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.lg)
+                .stroke(Color.secondary.opacity(DS.Opacity.softBorder), lineWidth: 0.5)
+        )
         .popover(isPresented: $showDirectiveInput) {
             directivePopover
         }

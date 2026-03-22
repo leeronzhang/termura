@@ -17,6 +17,7 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             header
             sessionList
+            Divider()
             footer
         }
         .frame(minWidth: AppConfig.UI.sidebarMinWidth, maxWidth: AppConfig.UI.sidebarMaxWidth)
@@ -29,12 +30,12 @@ struct SidebarView: View {
         HStack {
             Text("Sessions")
                 .panelHeaderStyle()
-                .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.secondary))
+                .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.tertiary))
             Spacer()
         }
         .padding(.horizontal, DS.Spacing.lg)
-        .padding(.top, DS.Spacing.xl)
-        .padding(.bottom, DS.Spacing.md)
+        .padding(.top, DS.Spacing.lg)
+        .padding(.bottom, DS.Spacing.smMd)
     }
 
     // MARK: - Session list
@@ -142,12 +143,14 @@ struct SidebarView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(DS.Font.title2)
-                    .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.strong))
+                    .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.dimmed))
             }
             .buttonStyle(.plain)
-            .padding(DS.Spacing.lg)
+            .contentShape(Rectangle())
             Spacer()
         }
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.vertical, DS.Spacing.md)
         .background(themeManager.current.sidebarBackground)
     }
 }

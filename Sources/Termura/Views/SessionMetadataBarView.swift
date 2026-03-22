@@ -11,7 +11,7 @@ struct SessionMetadataBarView: View {
             panelHeader
             Divider()
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: DS.Spacing.xl) {
+                VStack(alignment: .leading, spacing: DS.Spacing.lgXl) {
                     if metadata.currentAgentType != nil {
                         agentSection
                     }
@@ -20,7 +20,8 @@ struct SessionMetadataBarView: View {
                     commandSection
                     durationSection
                 }
-                .padding(DS.Spacing.lg)
+                .padding(.horizontal, DS.Spacing.lg)
+                .padding(.vertical, DS.Spacing.lgXl)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -34,7 +35,7 @@ struct SessionMetadataBarView: View {
             .panelHeaderStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, DS.Spacing.lg)
-            .padding(.vertical, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.mdLg)
     }
 
     // MARK: - Agent
@@ -44,7 +45,7 @@ struct SessionMetadataBarView: View {
         if let agentType = metadata.currentAgentType,
            let agentStatus = metadata.currentAgentStatus {
             metadataItem(label: "Agent") {
-                HStack(spacing: DS.Spacing.md) {
+                HStack(spacing: DS.Spacing.smMd) {
                     AgentStatusBadgeView(status: agentStatus, agentType: agentType)
                     Text(agentType.rawValue)
                         .font(DS.Font.bodyMedium)
@@ -79,6 +80,7 @@ struct SessionMetadataBarView: View {
                 ProgressView(value: tokenFraction, total: 1.0)
                     .progressViewStyle(.linear)
                     .tint(tokenFraction >= AppConfig.UI.tokenProgressWarningFraction ? .orange : .accentColor)
+                    .clipShape(Capsule())
                 Text(formattedTokenCount)
                     .font(DS.Font.label)
                     .foregroundColor(

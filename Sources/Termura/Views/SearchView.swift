@@ -56,6 +56,7 @@ struct SearchView: View {
         HStack(spacing: DS.Spacing.md) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
+                .frame(width: DS.Size.iconFrame)
             TextField("Search sessions and notes\u{2026}", text: $viewModel.query)
                 .textFieldStyle(.plain)
                 .font(DS.Font.searchField)
@@ -66,8 +67,10 @@ struct SearchView: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
+                .font(DS.Font.label)
         }
-        .padding(DS.Spacing.lg)
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.vertical, DS.Spacing.mdLg)
     }
 
     // MARK: - Results list

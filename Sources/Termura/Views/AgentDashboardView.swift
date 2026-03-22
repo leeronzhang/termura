@@ -34,7 +34,7 @@ struct AgentDashboardView: View {
                 .foregroundColor(.secondary)
         }
         .padding(.horizontal, DS.Spacing.lg)
-        .padding(.vertical, DS.Spacing.md)
+        .padding(.vertical, DS.Spacing.mdLg)
     }
 
     // MARK: - List
@@ -45,7 +45,8 @@ struct AgentDashboardView: View {
                 agentRow(agent)
             }
         }
-        .padding(.vertical, DS.Spacing.md)
+        .padding(.vertical, DS.Spacing.smMd)
+        .padding(.horizontal, DS.Spacing.sm)
     }
 
     private var sortedAgents: [AgentState] {
@@ -91,16 +92,16 @@ struct AgentDashboardView: View {
     // MARK: - Empty
 
     private var emptyState: some View {
-        VStack(spacing: DS.Spacing.md) {
+        VStack(spacing: DS.Spacing.smMd) {
             Image(systemName: "cpu")
-                .font(DS.Font.title1)
-                .foregroundColor(.secondary.opacity(DS.Opacity.dimmed))
+                .font(DS.Font.hero)
+                .foregroundColor(.secondary.opacity(DS.Opacity.muted))
             Text("No agents detected")
                 .font(DS.Font.label)
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, DS.Spacing.xxxl)
+        .padding(.top, DS.Spacing.xxxxl)
     }
 
     // MARK: - Helpers

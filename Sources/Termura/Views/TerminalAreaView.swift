@@ -223,8 +223,11 @@ struct TerminalAreaView: View {
     /// top divider so the overlay reads as a floating card above the terminal.
     @ViewBuilder
     private var editorOverlay: some View {
+        let isFloating = !viewModel.isInteractivePrompt
+        let radius: CGFloat = isFloating ? DS.Radius.xl : 0
+
         VStack(spacing: 0) {
-            if !viewModel.isInteractivePrompt {
+            if isFloating {
                 Divider()
             }
             EditorInputView(viewModel: editorViewModel, viewHandle: editorHandle)
@@ -232,14 +235,17 @@ struct TerminalAreaView: View {
                     minHeight: AppConfig.UI.editorMinHeightPoints,
                     maxHeight: AppConfig.UI.editorMaxHeightPoints
                 )
-                .clipShape(RoundedRectangle(cornerRadius: viewModel.isInteractivePrompt ? 0 : DS.Radius.lg))
+                .clipShape(RoundedRectangle(cornerRadius: radius))
                 .overlay(
-                    RoundedRectangle(cornerRadius: viewModel.isInteractivePrompt ? 0 : DS.Radius.lg)
-                        .stroke(Color.secondary.opacity(viewModel.isInteractivePrompt ? 0 : DS.Opacity.border),
-                                lineWidth: 1)
+                    RoundedRectangle(cornerRadius: radius)
+                        .stroke(
+                            Color.secondary.opacity(isFloating ? DS.Opacity.softBorder : 0),
+                            lineWidth: 0.5
+                        )
                 )
-                .padding(.horizontal, viewModel.isInteractivePrompt ? 0 : DS.Spacing.md)
-                .padding(.bottom, viewModel.isInteractivePrompt ? 0 : DS.Spacing.md)
+                .padding(.horizontal, isFloating ? DS.Spacing.lg : 0)
+                .padding(.bottom, isFloating ? DS.Spacing.md : 0)
+                .if(isFloating) { $0.floatingCard() }
         }
         // Always opaque so the overlay is visible on top of the SwiftTerm NSView.
         // Interactive mode → match terminal background (seamless cover over `>`).
@@ -261,8 +267,9 @@ struct TerminalAreaView: View {
             onResume: { Task { await engine.send("\n") } },
             onInsertDirective: { directive in Task { await engine.send(directive + "\n") } }
         )
-        .padding(.horizontal, DS.Spacing.md)
-        .padding(.bottom, DS.Spacing.sm)
+        .floatingCard()
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.bottom, DS.Spacing.smMd)
     }
 
     // MARK: - Key routing

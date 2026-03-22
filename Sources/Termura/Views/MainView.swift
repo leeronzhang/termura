@@ -233,14 +233,23 @@ struct MainView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: DS.Spacing.xl) {
+        VStack(spacing: DS.Spacing.lg) {
+            Image(systemName: "terminal")
+                .font(DS.Font.hero)
+                .foregroundColor(themeManager.current.foreground.opacity(DS.Opacity.muted))
             Text("No Active Session")
                 .font(DS.Font.title1)
                 .foregroundColor(themeManager.current.foreground.opacity(DS.Opacity.dimmed))
+            Text("Press \u{2318}T to create a new session")
+                .font(DS.Font.label)
+                .foregroundColor(themeManager.current.foreground.opacity(DS.Opacity.tertiary))
             Button("New Session") {
                 sessionStore.createSession(title: "Terminal")
             }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
             .keyboardShortcut("t", modifiers: .command)
+            .padding(.top, DS.Spacing.sm)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(themeManager.current.background)

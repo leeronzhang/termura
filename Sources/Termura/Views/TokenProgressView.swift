@@ -20,6 +20,7 @@ struct TokenProgressView: View {
             ProgressView(value: fraction, total: 1.0)
                 .progressViewStyle(.linear)
                 .tint(progressColor)
+                .clipShape(Capsule())
 
             HStack {
                 Text(formattedTokens)

@@ -13,16 +13,17 @@ struct SessionRowView: View {
 
     @State private var isEditing = false
     @State private var editTitle = ""
+    @State private var isHovered = false
     @State private var glowOpacity: Double = 0.0
     @EnvironmentObject private var themeManager: ThemeManager
 
     private var isWaiting: Bool { agentStatus == .waitingInput }
 
     var body: some View {
-        HStack(spacing: DS.Spacing.md) {
+        HStack(spacing: DS.Spacing.smMd) {
             colorDot
             sessionTitle
-            Spacer()
+            Spacer(minLength: DS.Spacing.sm)
             if let status = agentStatus, let type = agentType {
                 AgentStatusBadgeView(status: status, agentType: type)
             }
@@ -33,13 +34,16 @@ struct SessionRowView: View {
             }
             closeButton
         }
-        .padding(.horizontal, DS.Spacing.lg)
-        .padding(.vertical, DS.Spacing.md)
+        .padding(.horizontal, DS.Spacing.mdLg)
+        .padding(.vertical, DS.Spacing.smMd)
         .background(rowBackground)
-        .cornerRadius(DS.Radius.md)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
+        .overlay(glowBorder)
         .onTapGesture(count: 2) { beginEditing() }
         .onTapGesture(count: 1) { onActivate() }
+        .onHover { isHovered = $0 }
         .contextMenu { contextMenuItems }
+        .animation(.easeOut(duration: DS.Animation.quick), value: isHovered)
         .onChange(of: isWaiting) { _, waiting in
             if waiting {
                 withAnimation(
@@ -58,11 +62,13 @@ struct SessionRowView: View {
 
     // MARK: - Subviews
 
+    @ViewBuilder
     private var colorDot: some View {
-        Circle()
-            .fill(colorForLabel(session.colorLabel))
-            .frame(width: DS.Size.dotMedium, height: DS.Size.dotMedium)
-            .opacity(session.colorLabel == .none ? 0 : 1)
+        if session.colorLabel != .none {
+            Circle()
+                .fill(colorForLabel(session.colorLabel))
+                .frame(width: DS.Size.dotMedium, height: DS.Size.dotMedium)
+        }
     }
 
     @ViewBuilder
@@ -74,7 +80,7 @@ struct SessionRowView: View {
                 .foregroundColor(themeManager.current.sidebarText)
                 .onExitCommand { cancelEdit() }
         } else {
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 Text(session.title)
                     .font(DS.Font.title3)
                     .foregroundColor(themeManager.current.sidebarText)
@@ -82,7 +88,7 @@ struct SessionRowView: View {
                 if let dir = workingDirectorySubtitle {
                     Text(dir)
                         .font(DS.Font.caption)
-                        .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.dimmed))
+                        .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.tertiary))
                         .lineLimit(1)
                 }
             }
@@ -98,24 +104,30 @@ struct SessionRowView: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark")
-                .font(DS.Font.sectionHeader)
-                .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.dimmed))
+                .font(DS.Font.micro)
+                .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.tertiary))
         }
         .buttonStyle(.plain)
-        .opacity(isActive ? 1 : 0)
+        .opacity(isActive || isHovered ? 1 : 0)
     }
 
     private var rowBackground: some View {
         RoundedRectangle(cornerRadius: DS.Radius.md)
-            .fill(
-                isActive
-                    ? themeManager.current.activeSessionHighlight.opacity(DS.Opacity.muted)
-                    : Color.clear
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.Radius.md)
-                    .stroke(Color.accentColor.opacity(glowOpacity), lineWidth: 1.5)
-            )
+            .fill(rowFillColor)
+    }
+
+    private var rowFillColor: Color {
+        if isActive {
+            return themeManager.current.activeSessionHighlight.opacity(DS.Opacity.selected)
+        } else if isHovered {
+            return themeManager.current.sidebarText.opacity(DS.Opacity.whisper)
+        }
+        return .clear
+    }
+
+    private var glowBorder: some View {
+        RoundedRectangle(cornerRadius: DS.Radius.md)
+            .stroke(Color.accentColor.opacity(glowOpacity), lineWidth: 1)
     }
 
     @ViewBuilder

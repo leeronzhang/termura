@@ -7,20 +7,30 @@ enum DS {
     // MARK: - Spacing Scale
 
     enum Spacing {
-        /// 2pt — hairline gaps, inline icon-to-text
+        /// 1pt — hairline, single-pixel gaps
+        static let xxs: CGFloat = 1
+        /// 2pt — inline icon-to-text, tight stacks
         static let xs: CGFloat = 2
-        /// 4pt — tight vertical stacks, badge padding
+        /// 4pt — badge padding, compact gaps
         static let sm: CGFloat = 4
+        /// 6pt — row vertical padding (half-grid)
+        static let smMd: CGFloat = 6
         /// 8pt — standard inner padding, HStack spacing
         static let md: CGFloat = 8
+        /// 10pt — content padding within rows
+        static let mdLg: CGFloat = 10
         /// 12pt — panel padding, section gaps
         static let lg: CGFloat = 12
+        /// 14pt — panel header vertical breathing room
+        static let lgXl: CGFloat = 14
         /// 16pt — major section separation
         static let xl: CGFloat = 16
         /// 20pt — sheet padding
         static let xxl: CGFloat = 20
         /// 24pt — hero/alert padding
         static let xxxl: CGFloat = 24
+        /// 32pt — large empty state top padding
+        static let xxxxl: CGFloat = 32
     }
 
     // MARK: - Corner Radius
@@ -28,23 +38,27 @@ enum DS {
     enum Radius {
         /// 2pt — color swatches, tiny elements
         static let xs: CGFloat = 2
-        /// 4pt — badges, inline tags, timeline rows
+        /// 4pt — badges, inline tags, timeline rows, progress bars
         static let sm: CGFloat = 4
         /// 6pt — list rows, session cards
         static let md: CGFloat = 6
         /// 8pt — panels, sheets, cards
         static let lg: CGFloat = 8
+        /// 10pt — floating overlays, search dialogs
+        static let xl: CGFloat = 10
     }
 
     // MARK: - Typography
 
     enum Font {
+        /// 9pt — tiny icons (close buttons)
+        static let micro = SwiftUI.Font.system(size: 9)
         /// 10pt — meta labels, timestamps, uppercase headers
         static let caption = SwiftUI.Font.system(size: 10)
         /// 10pt monospaced — token counts, small data
         static let captionMono = SwiftUI.Font.system(size: 10, design: .monospaced)
-        /// 10pt semibold — section headers (UPPERCASE)
-        static let sectionHeader = SwiftUI.Font.system(size: 10, weight: .semibold)
+        /// 10pt medium — section headers (UPPERCASE)
+        static let sectionHeader = SwiftUI.Font.system(size: 10, weight: .medium)
         /// 11pt — secondary labels, sidebar subtitle, timeline text
         static let label = SwiftUI.Font.system(size: 11)
         /// 11pt semibold — panel headers
@@ -67,23 +81,31 @@ enum DS {
         static let title2 = SwiftUI.Font.system(size: 14, weight: .medium)
         /// 15pt — search field input
         static let searchField = SwiftUI.Font.system(size: 15)
-        /// 16pt semibold — view titles, empty state headings
-        static let title1 = SwiftUI.Font.system(size: 16, weight: .semibold)
+        /// 16pt medium — view titles, empty state headings
+        static let title1 = SwiftUI.Font.system(size: 16, weight: .medium)
+        /// 24pt — empty state hero icons
+        static let hero = SwiftUI.Font.system(size: 24, weight: .light)
     }
 
     // MARK: - Opacity
 
     enum Opacity {
+        /// 0.06 — barely visible tints (hover backgrounds on dark)
+        static let whisper: Double = 0.06
         /// 0.08 — subtle tinted backgrounds (feature cards)
         static let tint: Double = 0.08
         /// 0.1 — attention/highlight backgrounds
         static let highlight: Double = 0.1
         /// 0.15 — selected state backgrounds, hover
         static let selected: Double = 0.15
+        /// 0.25 — soft borders, faint strokes
+        static let softBorder: Double = 0.25
         /// 0.3 — active session highlight, muted overlays
         static let muted: Double = 0.3
         /// 0.35 — border strokes
         static let border: Double = 0.35
+        /// 0.4 — tertiary text
+        static let tertiary: Double = 0.4
         /// 0.5 — dimmed text, disabled states
         static let dimmed: Double = 0.5
         /// 0.6 — secondary content, muted text
@@ -97,12 +119,27 @@ enum DS {
     enum Size {
         /// 6pt — small indicator dots (exit code, timeline)
         static let dotSmall: CGFloat = 6
+        /// 7pt — medium-small dots (timeline exit codes)
+        static let dotMediumSmall: CGFloat = 7
         /// 8pt — standard indicator dots (status, color label)
         static let dotMedium: CGFloat = 8
         /// 16pt — icon frame width (search results)
         static let iconFrame: CGFloat = 16
+        /// 18pt — icon frame width (feature rows)
+        static let iconFrameLarge: CGFloat = 18
         /// Divider height inside toolbars
         static let toolbarDivider: CGFloat = 16
+    }
+
+    // MARK: - Shadow
+
+    enum Shadow {
+        /// Floating card shadow radius
+        static let cardRadius: CGFloat = 8
+        /// Floating card shadow Y offset
+        static let cardY: CGFloat = 2
+        /// Floating card shadow opacity
+        static let cardOpacity: Double = 0.15
     }
 
     // MARK: - Animation
@@ -110,5 +147,9 @@ enum DS {
     enum Animation {
         /// Standard fade out duration
         static let fadeOut: Double = 0.3
+        /// Quick micro-interaction
+        static let quick: Double = 0.15
+        /// Panel show/hide
+        static let panel: Double = 0.2
     }
 }

@@ -11,7 +11,7 @@ struct TimelineView: View {
             headerBar
             Divider()
             ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                LazyVStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                     ForEach(timeline.turns) { turn in
                         TimelineTurnRow(turn: turn) {
                             onSelectChunkID(turn.chunkID)
@@ -21,7 +21,8 @@ struct TimelineView: View {
                         }
                     }
                 }
-                .padding(.vertical, DS.Spacing.md)
+                .padding(.vertical, DS.Spacing.smMd)
+                .padding(.horizontal, DS.Spacing.sm)
             }
         }
         .frame(width: AppConfig.Timeline.panelWidth)
@@ -33,7 +34,7 @@ struct TimelineView: View {
             .panelHeaderStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, DS.Spacing.lg)
-            .padding(.vertical, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.mdLg)
     }
 }
 
@@ -47,14 +48,15 @@ private struct TimelineTurnRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: DS.Spacing.md) {
+            HStack(spacing: DS.Spacing.smMd) {
                 exitIndicator
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     commandLabel
                     Text(turn.startedAt, style: .time)
                         .font(DS.Font.caption)
                         .foregroundColor(.secondary)
                 }
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, DS.Spacing.md)
             .padding(.vertical, DS.Spacing.sm)
@@ -68,7 +70,7 @@ private struct TimelineTurnRow: View {
     private var exitIndicator: some View {
         Circle()
             .fill(indicatorColor)
-            .frame(width: DS.Size.dotSmall, height: DS.Size.dotSmall)
+            .frame(width: DS.Size.dotMediumSmall, height: DS.Size.dotMediumSmall)
     }
 
     private var commandLabel: some View {
@@ -104,7 +106,7 @@ private struct BranchPointIndicator: View {
                 .font(DS.Font.caption)
                 .foregroundColor(.secondary)
         }
-        .padding(.leading, DS.Spacing.xxl)
-        .padding(.vertical, 1)
+        .padding(.leading, DS.Spacing.xxxl)
+        .padding(.vertical, DS.Spacing.xxs)
     }
 }
