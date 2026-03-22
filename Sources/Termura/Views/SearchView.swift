@@ -4,35 +4,61 @@ struct SearchView: View {
     @StateObject private var viewModel: SearchViewModel
     @Binding var isPresented: Bool
     let onSelectSession: (SessionID) -> Void
+    let vectorService: VectorSearchService?
+
+    @State private var searchMode: SearchMode = .keyword
 
     init(
         searchService: SearchService,
         isPresented: Binding<Bool>,
-        onSelectSession: @escaping (SessionID) -> Void
+        onSelectSession: @escaping (SessionID) -> Void,
+        vectorService: VectorSearchService? = nil
     ) {
         _viewModel = StateObject(wrappedValue: SearchViewModel(searchService: searchService))
         _isPresented = isPresented
         self.onSelectSession = onSelectSession
+        self.vectorService = vectorService
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            searchField
-            Divider()
-            resultsList
+            if vectorService != nil {
+                searchModePicker
+            }
+            if searchMode == .keyword {
+                searchField
+                Divider()
+                resultsList
+            } else if let vs = vectorService {
+                SemanticSearchView(
+                    vectorService: vs,
+                    onSelectSession: onSelectSession,
+                    isPresented: $isPresented
+                )
+            }
         }
         .frame(width: 500, height: 400)
+    }
+
+    private var searchModePicker: some View {
+        Picker("", selection: $searchMode) {
+            Text("Keyword").tag(SearchMode.keyword)
+            Text("Semantic").tag(SearchMode.semantic)
+        }
+        .pickerStyle(.segmented)
+        .frame(width: 200)
+        .padding(DS.Spacing.md)
     }
 
     // MARK: - Search field
 
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Spacing.md) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
             TextField("Search sessions and notes\u{2026}", text: $viewModel.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 15))
+                .font(DS.Font.searchField)
             if viewModel.isSearching {
                 ProgressView().scaleEffect(0.7)
             }
@@ -41,7 +67,7 @@ struct SearchView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
         }
-        .padding(12)
+        .padding(DS.Spacing.lg)
     }
 
     // MARK: - Results list
@@ -68,4 +94,11 @@ struct SearchView: View {
             .listStyle(.plain)
         }
     }
+}
+
+// MARK: - Search Mode
+
+private enum SearchMode: String, CaseIterable {
+    case keyword
+    case semantic
 }

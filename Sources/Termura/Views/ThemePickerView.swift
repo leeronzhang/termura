@@ -10,9 +10,9 @@ struct ThemePickerView: View {
     @State private var importError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: DS.Spacing.xl) {
             Text("Themes")
-                .font(.system(size: 16, weight: .semibold))
+                .font(DS.Font.title1)
 
             themeGrid
 
@@ -20,18 +20,18 @@ struct ThemePickerView: View {
 
             if let error = importError {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(DS.Font.body)
                     .foregroundColor(.red)
             }
         }
-        .padding(20)
+        .padding(DS.Spacing.xxl)
         .frame(minWidth: 480)
     }
 
     // MARK: - Theme Grid
 
     private var themeGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: 12) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: DS.Spacing.lg) {
             ForEach(themeManager.availableDefinitions) { definition in
                 ThemeCard(
                     definition: definition,
@@ -48,11 +48,11 @@ struct ThemePickerView: View {
     private var importSection: some View {
         HStack {
             Text("Custom Themes")
-                .font(.system(size: 13, weight: .medium))
+                .font(DS.Font.title3Medium)
             Spacer()
             Button("Import Theme…") { openImportPanel() }
         }
-        .padding(.top, 8)
+        .padding(.top, DS.Spacing.md)
     }
 
     private func openImportPanel() {
@@ -92,22 +92,22 @@ private struct ThemeCard: View {
     let onSelect: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: DS.Spacing.md) {
             colorSwatches
             Text(definition.name)
-                .font(.system(size: 11))
+                .font(DS.Font.label)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .padding(8)
+        .padding(DS.Spacing.md)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: DS.Radius.lg)
                 .fill(isSelected
-                    ? Color.accentColor.opacity(0.15)
+                    ? Color.accentColor.opacity(DS.Opacity.selected)
                     : Color(nsColor: .windowBackgroundColor))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: DS.Radius.lg)
                 .stroke(
                     isSelected ? Color.accentColor : Color(nsColor: .separatorColor),
                     lineWidth: 1
@@ -124,7 +124,7 @@ private struct ThemeCard: View {
                 Rectangle()
                     .fill(ThemeDefinition.color(fromHex: definition.colors[key]) ?? .gray)
                     .frame(width: 14, height: 14)
-                    .cornerRadius(2)
+                    .cornerRadius(DS.Radius.xs)
             }
         }
     }

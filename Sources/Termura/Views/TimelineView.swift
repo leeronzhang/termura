@@ -11,27 +11,29 @@ struct TimelineView: View {
             headerBar
             Divider()
             ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 2) {
+                LazyVStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     ForEach(timeline.turns) { turn in
                         TimelineTurnRow(turn: turn) {
                             onSelectChunkID(turn.chunkID)
                         }
+                        ForEach(turn.branchPoints) { marker in
+                            BranchPointIndicator(marker: marker)
+                        }
                     }
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, DS.Spacing.md)
             }
         }
         .frame(width: AppConfig.Timeline.panelWidth)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.ultraThinMaterial)
     }
 
     private var headerBar: some View {
         Text("Timeline")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(.secondary)
+            .panelHeaderStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DS.Spacing.lg)
+            .padding(.vertical, DS.Spacing.md)
     }
 }
 
@@ -45,24 +47,19 @@ private struct TimelineTurnRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 6) {
+            HStack(spacing: DS.Spacing.md) {
                 exitIndicator
                 VStack(alignment: .leading, spacing: 1) {
                     commandLabel
                     Text(turn.startedAt, style: .time)
-                        .font(.system(size: 10))
+                        .font(DS.Font.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                isHovered
-                    ? Color(nsColor: .selectedContentBackgroundColor).opacity(0.15)
-                    : Color.clear
-            )
-            .cornerRadius(4)
+            .hoverRow(isHovered: isHovered)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
@@ -71,12 +68,12 @@ private struct TimelineTurnRow: View {
     private var exitIndicator: some View {
         Circle()
             .fill(indicatorColor)
-            .frame(width: 6, height: 6)
+            .frame(width: DS.Size.dotSmall, height: DS.Size.dotSmall)
     }
 
     private var commandLabel: some View {
         Text(turn.command.isEmpty ? "(no command)" : turn.command)
-            .font(.system(size: 11, design: .monospaced))
+            .font(DS.Font.labelMono)
             .foregroundColor(labelColor)
             .lineLimit(1)
             .truncationMode(.tail)
@@ -90,5 +87,24 @@ private struct TimelineTurnRow: View {
     private var labelColor: Color {
         guard let code = turn.exitCode, code != 0 else { return .primary }
         return .red
+    }
+}
+
+// MARK: - Branch Point Indicator
+
+private struct BranchPointIndicator: View {
+    let marker: BranchPointMarker
+
+    var body: some View {
+        HStack(spacing: DS.Spacing.sm) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 9))
+                .foregroundColor(.secondary)
+            Text(marker.branchType.rawValue.capitalized)
+                .font(DS.Font.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.leading, DS.Spacing.xxl)
+        .padding(.vertical, 1)
     }
 }

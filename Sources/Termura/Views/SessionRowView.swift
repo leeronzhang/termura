@@ -5,33 +5,55 @@ struct SessionRowView: View {
     let session: SessionRecord
     let isActive: Bool
     let hasUnreadFailure: Bool
+    var agentStatus: AgentStatus?
+    var agentType: AgentType?
     let onActivate: () -> Void
     let onRename: (String) -> Void
     let onClose: () -> Void
 
     @State private var isEditing = false
     @State private var editTitle = ""
+    @State private var glowOpacity: Double = 0.0
     @EnvironmentObject private var themeManager: ThemeManager
 
+    private var isWaiting: Bool { agentStatus == .waitingInput }
+
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Spacing.md) {
             colorDot
             sessionTitle
             Spacer()
+            if let status = agentStatus, let type = agentType {
+                AgentStatusBadgeView(status: status, agentType: type)
+            }
             if hasUnreadFailure {
                 Circle()
                     .fill(Color.red)
-                    .frame(width: 8, height: 8)
+                    .frame(width: DS.Size.dotMedium, height: DS.Size.dotMedium)
             }
             closeButton
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.vertical, DS.Spacing.md)
         .background(rowBackground)
-        .cornerRadius(6)
+        .cornerRadius(DS.Radius.md)
         .onTapGesture(count: 2) { beginEditing() }
         .onTapGesture(count: 1) { onActivate() }
         .contextMenu { contextMenuItems }
+        .onChange(of: isWaiting) { _, waiting in
+            if waiting {
+                withAnimation(
+                    .easeInOut(duration: AppConfig.Agent.glowAnimationDuration)
+                    .repeatForever(autoreverses: true)
+                ) {
+                    glowOpacity = DS.Opacity.secondary
+                }
+            } else {
+                withAnimation(.easeOut(duration: DS.Animation.fadeOut)) {
+                    glowOpacity = 0.0
+                }
+            }
+        }
     }
 
     // MARK: - Subviews
@@ -39,7 +61,7 @@ struct SessionRowView: View {
     private var colorDot: some View {
         Circle()
             .fill(colorForLabel(session.colorLabel))
-            .frame(width: 8, height: 8)
+            .frame(width: DS.Size.dotMedium, height: DS.Size.dotMedium)
             .opacity(session.colorLabel == .none ? 0 : 1)
     }
 
@@ -48,19 +70,19 @@ struct SessionRowView: View {
         if isEditing {
             TextField("Session name", text: $editTitle, onCommit: commitEdit)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(DS.Font.title3)
                 .foregroundColor(themeManager.current.sidebarText)
                 .onExitCommand { cancelEdit() }
         } else {
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.title)
-                    .font(.system(size: 13))
+                    .font(DS.Font.title3)
                     .foregroundColor(themeManager.current.sidebarText)
                     .lineLimit(1)
                 if let dir = workingDirectorySubtitle {
                     Text(dir)
-                        .font(.system(size: 10))
-                        .foregroundColor(themeManager.current.sidebarText.opacity(0.5))
+                        .font(DS.Font.caption)
+                        .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.dimmed))
                         .lineLimit(1)
                 }
             }
@@ -76,19 +98,23 @@ struct SessionRowView: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(themeManager.current.sidebarText.opacity(0.5))
+                .font(DS.Font.sectionHeader)
+                .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.dimmed))
         }
         .buttonStyle(.plain)
         .opacity(isActive ? 1 : 0)
     }
 
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 6)
+        RoundedRectangle(cornerRadius: DS.Radius.md)
             .fill(
                 isActive
-                    ? themeManager.current.activeSessionHighlight.opacity(0.3)
+                    ? themeManager.current.activeSessionHighlight.opacity(DS.Opacity.muted)
                     : Color.clear
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.md)
+                    .stroke(Color.accentColor.opacity(glowOpacity), lineWidth: 1.5)
             )
     }
 

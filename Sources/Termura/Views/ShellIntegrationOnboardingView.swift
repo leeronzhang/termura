@@ -17,20 +17,20 @@ struct ShellIntegrationOnboardingView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: DS.Spacing.xxl) {
             headerSection
             infoSection
             shellPickerSection
             actionSection
         }
-        .padding(24)
+        .padding(DS.Spacing.xxxl)
         .frame(width: 480)
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
             Text("Shell Integration")
                 .font(.title2.bold())
             Text("Enable smart output chunking and accurate command tracking.")
@@ -42,18 +42,18 @@ struct ShellIntegrationOnboardingView: View {
     // MARK: - Info
 
     private var infoSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
             featureRow(icon: "rectangle.split.3x1", text: "Structured output blocks per command")
             featureRow(icon: "clock", text: "Execution time and exit code per command")
             featureRow(icon: "doc.text.magnifyingglass", text: "Accurate token counting")
         }
-        .padding(12)
-        .background(Color.accentColor.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(DS.Spacing.lg)
+        .background(Color.accentColor.opacity(DS.Opacity.tint))
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.lg))
     }
 
     private func featureRow(icon: String, text: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Spacing.md) {
             Image(systemName: icon)
                 .foregroundColor(.accentColor)
                 .frame(width: 18)
@@ -82,7 +82,7 @@ struct ShellIntegrationOnboardingView: View {
             Text(errorMsg)
                 .font(.caption)
                 .foregroundColor(.red)
-                .padding(.bottom, 4)
+                .padding(.bottom, DS.Spacing.sm)
         }
 
         HStack {

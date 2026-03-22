@@ -28,17 +28,20 @@ struct SidebarView: View {
     private var header: some View {
         HStack {
             Text("Sessions")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(themeManager.current.sidebarText.opacity(0.6))
-                .textCase(.uppercase)
+                .panelHeaderStyle()
+                .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.secondary))
             Spacer()
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 14)
-        .padding(.bottom, 6)
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.top, DS.Spacing.xl)
+        .padding(.bottom, DS.Spacing.md)
     }
 
     // MARK: - Session list
+
+    private var treeNodes: [SessionTreeNode] {
+        SessionTreeNode.buildForest(from: sessionStore.sessions)
+    }
 
     private var sessionList: some View {
         List {
@@ -53,15 +56,20 @@ struct SidebarView: View {
                 }
             }
             Section(pinnedSessions.isEmpty ? "" : "Sessions") {
-                ForEach(regularSessions) { session in
-                    sessionRow(session)
-                }
-                .onMove { from, to in
-                    sessionStore.reorderSessions(from: from, to: to)
+                ForEach(treeNodes) { node in
+                    treeNodeRow(node)
                 }
             }
         }
         .listStyle(.sidebar)
+    }
+
+    private func treeNodeRow(_ node: SessionTreeNode) -> some View {
+        SidebarTreeNodeView(
+            node: node,
+            sessionStore: sessionStore,
+            sessionRow: { session in AnyView(sessionRow(session)) }
+        )
     }
 
     private func sessionRow(_ session: SessionRecord) -> some View {
@@ -74,6 +82,8 @@ struct SidebarView: View {
             onClose: { sessionStore.closeSession(id: session.id) }
         )
         .contextMenu {
+            branchMenu(for: session)
+            Divider()
             if session.isPinned {
                 Button("Unpin") { sessionStore.unpinSession(id: session.id) }
             } else {
@@ -82,8 +92,33 @@ struct SidebarView: View {
             Divider()
             colorLabelMenu(for: session)
             Divider()
+            Button("Export\u{2026}") {
+                NotificationCenter.default.post(
+                    name: .showExport,
+                    object: session.id
+                )
+            }
+            Divider()
             Button("Close Session", role: .destructive) {
                 sessionStore.closeSession(id: session.id)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func branchMenu(for session: SessionRecord) -> some View {
+        Menu("New Branch") {
+            ForEach(BranchType.allCases.filter { $0 != .main }, id: \.self) { type in
+                Button(type.rawValue.capitalized) {
+                    Task {
+                        await sessionStore.createBranch(from: session.id, type: type)
+                    }
+                }
+            }
+        }
+        if session.parentID != nil {
+            Button("Back to Parent") {
+                sessionStore.navigateToParent(of: session.id)
             }
         }
     }
@@ -106,13 +141,46 @@ struct SidebarView: View {
                 sessionStore.createSession(title: "Terminal")
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(themeManager.current.sidebarText.opacity(0.7))
+                    .font(DS.Font.title2)
+                    .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.strong))
             }
             .buttonStyle(.plain)
-            .padding(10)
+            .padding(DS.Spacing.lg)
             Spacer()
         }
         .background(themeManager.current.sidebarBackground)
+    }
+}
+
+// MARK: - Recursive tree node (breaks opaque return type cycle)
+
+private struct SidebarTreeNodeView: View {
+    let node: SessionTreeNode
+    let sessionStore: SessionStore
+    let sessionRow: (SessionRecord) -> AnyView
+
+    var body: some View {
+        if !node.record.isPinned {
+            HStack(spacing: 0) {
+                if node.depth > 0 {
+                    BranchIndicatorView(
+                        depth: node.depth,
+                        branchType: node.record.branchType,
+                        hasChildren: node.hasChildren
+                    )
+                }
+                sessionRow(node.record)
+            }
+
+            ForEach(node.children) { child in
+                AnyView(
+                    SidebarTreeNodeView(
+                        node: child,
+                        sessionStore: sessionStore,
+                        sessionRow: sessionRow
+                    )
+                )
+            }
+        }
     }
 }

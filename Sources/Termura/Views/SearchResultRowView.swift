@@ -16,21 +16,21 @@ struct SearchResultRowView: View {
     let result: SearchResult
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Spacing.lg) {
             Image(systemName: iconName)
-                .frame(width: 16)
+                .frame(width: DS.Size.iconFrame)
                 .foregroundColor(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 Text(title)
-                    .font(.system(size: 13))
+                    .font(DS.Font.title3)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(.system(size: 11))
+                    .font(DS.Font.label)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Spacing.sm)
     }
 
     private var iconName: String {
