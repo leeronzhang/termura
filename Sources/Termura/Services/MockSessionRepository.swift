@@ -43,4 +43,31 @@ actor MockSessionRepository: SessionRepositoryProtocol {
     func setPinned(id: SessionID, pinned: Bool) async throws {
         store[id]?.isPinned = pinned
     }
+
+    // MARK: - Session Tree
+
+    func fetchChildren(of parentID: SessionID) async throws -> [SessionRecord] {
+        order.compactMap { store[$0] }.filter { $0.parentID == parentID }
+    }
+
+    func fetchAncestors(of sessionID: SessionID) async throws -> [SessionRecord] {
+        var ancestors: [SessionRecord] = []
+        var currentID = store[sessionID]?.parentID
+        while let parentID = currentID, let parent = store[parentID] {
+            ancestors.append(parent)
+            currentID = parent.parentID
+        }
+        return ancestors
+    }
+
+    func createBranch(from parentID: SessionID, type: BranchType, title: String) async throws -> SessionRecord {
+        let record = SessionRecord(title: title, parentID: parentID, branchType: type)
+        store[record.id] = record
+        order.append(record.id)
+        return record
+    }
+
+    func updateSummary(_ sessionID: SessionID, summary: String) async throws {
+        store[sessionID]?.summary = summary
+    }
 }

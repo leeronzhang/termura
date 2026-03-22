@@ -89,6 +89,14 @@ actor FallbackChunkDetector {
         pendingLines = []
         pendingRawANSI = ""
 
+        let joined = lines.joined(separator: "\n")
+        let classification = SemanticParser.classify(joined, command: command)
+        let uiBlock = SemanticParser.buildUIContent(
+            from: classification,
+            displayLines: lines,
+            exitCode: nil
+        )
+
         return OutputChunk(
             sessionID: sessionID,
             commandText: command,
@@ -96,7 +104,9 @@ actor FallbackChunkDetector {
             rawANSI: raw,
             exitCode: nil,
             startedAt: start,
-            finishedAt: Date()
+            finishedAt: Date(),
+            contentType: classification.type,
+            uiContent: uiBlock
         )
     }
 

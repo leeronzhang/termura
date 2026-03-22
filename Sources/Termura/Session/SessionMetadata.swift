@@ -13,6 +13,12 @@ struct SessionMetadata: Sendable {
     var commandCount: Int
     /// Current working directory.
     var workingDirectory: String
+    /// Number of active agents across all sessions.
+    var activeAgentCount: Int
+    /// Detected agent type for this session, if any.
+    var currentAgentType: AgentType?
+    /// Current agent status for this session, if any.
+    var currentAgentStatus: AgentStatus?
 
     // MARK: - Factory
 
@@ -23,7 +29,10 @@ struct SessionMetadata: Sendable {
             totalCharacterCount: 0,
             sessionDuration: 0,
             commandCount: 0,
-            workingDirectory: workingDirectory
+            workingDirectory: workingDirectory,
+            activeAgentCount: 0,
+            currentAgentType: nil,
+            currentAgentStatus: nil
         )
     }
 }

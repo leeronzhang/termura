@@ -124,6 +124,71 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         persistAsync { try await $0.reorder(ids: ids) }
     }
 
+    // MARK: - Session Tree
+
+    @discardableResult
+    func createBranch(from sessionID: SessionID, type: BranchType, title: String = "") async -> SessionRecord? {
+        guard let repo = repository else {
+            logger.warning("Cannot create branch without repository")
+            return nil
+        }
+        let resolvedTitle = title.isEmpty ? "\(type.rawValue.capitalized) branch" : title
+        do {
+            let branch = try await repo.createBranch(from: sessionID, type: type, title: resolvedTitle)
+            sessions.append(branch)
+            engineStore.createEngine(for: branch.id, shell: defaultShell)
+            activeSessionID = branch.id
+            logger.info("Created branch \(branch.id) from \(sessionID)")
+            return branch
+        } catch {
+            logger.error("Failed to create branch: \(error)")
+            return nil
+        }
+    }
+
+    /// Merge a branch summary back to the parent session.
+    func mergeBranchSummary(
+        branchID: SessionID,
+        summary: String,
+        messageRepo: (any SessionMessageRepositoryProtocol)?
+    ) async {
+        guard let repo = repository,
+              let idx = sessions.firstIndex(where: { $0.id == branchID }),
+              let parentID = sessions[idx].parentID else { return }
+
+        // Update the branch's summary field
+        do {
+            try await repo.updateSummary(branchID, summary: summary)
+            sessions[idx].summary = summary
+
+            // Insert summary as metadata message in parent session
+            if let msgRepo = messageRepo {
+                let summarizer = BranchSummarizer()
+                let msg = await summarizer.createSummaryMessage(
+                    summary: summary,
+                    branchSessionID: branchID,
+                    parentSessionID: parentID
+                )
+                try await msgRepo.save(msg)
+            }
+
+            // Navigate back to parent
+            activeSessionID = parentID
+            logger.info("Merged branch \(branchID) summary to parent \(parentID)")
+        } catch {
+            logger.error("Failed to merge branch summary: \(error)")
+        }
+    }
+
+    func navigateToParent(of sessionID: SessionID) {
+        guard let idx = sessions.firstIndex(where: { $0.id == sessionID }),
+              let parentID = sessions[idx].parentID,
+              sessions.contains(where: { $0.id == parentID }) else {
+            return
+        }
+        activeSessionID = parentID
+    }
+
     // MARK: - Private persistence helpers
 
     private func persistAsync(

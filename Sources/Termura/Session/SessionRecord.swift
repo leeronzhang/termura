@@ -1,6 +1,7 @@
 import Foundation
 
 /// Immutable value type representing a terminal session.
+/// Supports tree structure via `parentID` — nil means root node.
 /// No framework imports — pure domain model.
 struct SessionRecord: Identifiable, Hashable, Sendable {
     let id: SessionID
@@ -11,6 +12,12 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
     var colorLabel: SessionColorLabel
     var isPinned: Bool
     var orderIndex: Int
+    /// Parent session ID — nil for root sessions (no branch parent).
+    var parentID: SessionID?
+    /// AI-generated summary of a completed branch, inserted into parent context.
+    var summary: String
+    /// Purpose categorization for branches.
+    var branchType: BranchType
 
     init(
         id: SessionID = SessionID(),
@@ -20,7 +27,10 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
         lastActiveAt: Date = Date(),
         colorLabel: SessionColorLabel = .none,
         isPinned: Bool = false,
-        orderIndex: Int = 0
+        orderIndex: Int = 0,
+        parentID: SessionID? = nil,
+        summary: String = "",
+        branchType: BranchType = .main
     ) {
         self.id = id
         self.title = title
@@ -30,6 +40,9 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
         self.colorLabel = colorLabel
         self.isPinned = isPinned
         self.orderIndex = orderIndex
+        self.parentID = parentID
+        self.summary = summary
+        self.branchType = branchType
     }
 }
 

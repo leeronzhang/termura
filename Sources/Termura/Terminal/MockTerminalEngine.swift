@@ -68,6 +68,8 @@ final class MockTerminalEngine: TerminalEngine {
 
     func cursorLineContent() -> String? { nil }
 
+    func linesNearCursor(above count: Int) -> [String] { [] }
+
     func terminate() async {
         isRunning = false
         terminateCallCount += 1

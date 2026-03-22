@@ -5,17 +5,34 @@ struct MarkdownEditorView: NSViewRepresentable {
     @Binding var text: String
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        guard let textView = scrollView.documentView as? NSTextView else {
-            return scrollView
-        }
-        let markdownView = MarkdownTextView(
-            frame: textView.frame,
-            textContainer: textView.textContainer
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+
+        let containerSize = NSSize(
+            width: scrollView.contentSize.width,
+            height: CGFloat.greatestFiniteMagnitude
         )
-        scrollView.documentView = markdownView
+        let textContainer = NSTextContainer(size: containerSize)
+        textContainer.widthTracksTextView = true
+        layoutManager.addTextContainer(textContainer)
+
+        let markdownView = MarkdownTextView(
+            frame: NSRect(origin: .zero, size: scrollView.contentSize),
+            textContainer: textContainer
+        )
+        markdownView.isVerticallyResizable = true
+        markdownView.isHorizontallyResizable = false
+        markdownView.autoresizingMask = [.width]
         markdownView.delegate = context.coordinator
         markdownView.string = text
+
+        scrollView.documentView = markdownView
         return scrollView
     }
 

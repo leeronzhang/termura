@@ -114,6 +114,12 @@ actor ChunkDetector {
         exitCode: Int?
     ) -> OutputChunk {
         let lines = output.components(separatedBy: "\n")
+        let classification = SemanticParser.classify(output, command: command)
+        let uiBlock = SemanticParser.buildUIContent(
+            from: classification,
+            displayLines: lines,
+            exitCode: exitCode
+        )
         return OutputChunk(
             sessionID: sessionID,
             commandText: command,
@@ -121,7 +127,9 @@ actor ChunkDetector {
             rawANSI: raw,
             exitCode: exitCode,
             startedAt: startedAt,
-            finishedAt: Date()
+            finishedAt: Date(),
+            contentType: classification.type,
+            uiContent: uiBlock
         )
     }
 }

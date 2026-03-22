@@ -1,7 +1,11 @@
 import Foundation
 
 /// A structured, identifiable unit of terminal output corresponding to one command execution.
-/// `outputLines` are ANSI-stripped for display/copy; `rawANSI` preserves escape sequences.
+///
+/// Follows the LLM/UI side separation protocol:
+/// - `modelContent`: raw text preserved for LLM context (if needed).
+/// - `uiContent`: structured block consumed by the UI layer for card rendering.
+/// - `outputLines` / `rawANSI`: legacy fields retained for backward compatibility.
 struct OutputChunk: Identifiable, Sendable {
     let id: UUID
     let sessionID: SessionID
@@ -19,6 +23,12 @@ struct OutputChunk: Identifiable, Sendable {
     var isCollapsed: Bool
     /// Heuristic: total chars / 4 ≈ tokens.
     var estimatedTokens: Int
+    /// Semantic classification of this output block.
+    let contentType: OutputContentType
+    /// Raw text kept for model context — the LLM side of dual-track.
+    let modelContent: String
+    /// Structured data for UI rendering — the UI side of dual-track.
+    let uiContent: UIContentBlock
 
     init(
         id: UUID = UUID(),
@@ -29,7 +39,9 @@ struct OutputChunk: Identifiable, Sendable {
         exitCode: Int?,
         startedAt: Date,
         finishedAt: Date?,
-        isCollapsed: Bool = false
+        isCollapsed: Bool = false,
+        contentType: OutputContentType = .commandOutput,
+        uiContent: UIContentBlock? = nil
     ) {
         self.id = id
         self.sessionID = sessionID
@@ -42,5 +54,12 @@ struct OutputChunk: Identifiable, Sendable {
         self.isCollapsed = isCollapsed
         let charCount = outputLines.joined().count
         self.estimatedTokens = max(1, charCount / Int(AppConfig.AI.tokenEstimateDivisor))
+        self.contentType = contentType
+        self.modelContent = rawANSI
+        self.uiContent = uiContent ?? UIContentBlock(
+            type: contentType,
+            exitCode: exitCode,
+            displayLines: outputLines
+        )
     }
 }

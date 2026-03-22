@@ -10,6 +10,8 @@ enum DatabaseMigrations {
         registerV2SessionsFTS(into: &migrator)
         registerV3Snapshots(into: &migrator)
         registerV4Notes(into: &migrator)
+        registerV5SessionTree(into: &migrator)
+        registerV6RuleFiles(into: &migrator)
     }
 
     // MARK: - v1: sessions table
@@ -79,6 +81,86 @@ enum DatabaseMigrations {
                 t.column("line_count", .integer).notNull().defaults(to: 0)
                 t.column("saved_at", .double).notNull()
             }
+        }
+    }
+
+    // MARK: - v5: session tree + messages + harness events
+
+    private static func registerV5SessionTree(into migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v5_session_tree") { db in
+            // Add tree columns to sessions
+            try db.alter(table: "sessions") { t in
+                t.add(column: "parent_id", .text)
+                    .references("sessions")
+                t.add(column: "summary", .text)
+                    .notNull()
+                    .defaults(to: "")
+                t.add(column: "branch_type", .text)
+                    .notNull()
+                    .defaults(to: "main")
+            }
+            try db.create(
+                index: "idx_sessions_parent",
+                on: "sessions",
+                columns: ["parent_id"]
+            )
+
+            // Messages table (dual-track: model / metadata / ui)
+            try db.create(table: "session_messages") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("session_id", .text).notNull()
+                    .references("sessions", onDelete: .cascade)
+                t.column("role", .text).notNull()
+                t.column("content_type", .text).notNull()
+                t.column("content", .text).notNull()
+                t.column("token_count", .integer).defaults(to: 0)
+                t.column("created_at", .double).notNull()
+            }
+            try db.create(
+                index: "idx_messages_session",
+                on: "session_messages",
+                columns: ["session_id", "created_at"]
+            )
+
+            // Harness events table
+            try db.create(table: "harness_events") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("session_id", .text).notNull()
+                    .references("sessions", onDelete: .cascade)
+                t.column("event_type", .text).notNull()
+                t.column("payload", .text).notNull()
+                t.column("created_at", .double).notNull()
+            }
+            try db.create(
+                index: "idx_harness_events_session",
+                on: "harness_events",
+                columns: ["session_id", "created_at"]
+            )
+
+            logger.info("v5 migration complete: session tree + messages + harness events")
+        }
+    }
+
+    // MARK: - v6: rule files (Harness management)
+
+    private static func registerV6RuleFiles(into migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v6_rule_files") { db in
+            try db.create(table: "rule_files") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("file_path", .text).notNull()
+                t.column("content", .text).notNull()
+                t.column("content_hash", .text).notNull()
+                t.column("session_id", .text)
+                    .references("sessions")
+                t.column("version", .integer).notNull().defaults(to: 1)
+                t.column("created_at", .double).notNull()
+            }
+            try db.create(
+                index: "idx_rule_files_path",
+                on: "rule_files",
+                columns: ["file_path", "version"]
+            )
+            logger.info("v6 migration complete: rule_files table")
         }
     }
 

@@ -82,9 +82,9 @@ enum AppConfig {
         /// Regex pattern matching shell prompt line endings (zsh/bash/fish/sh).
         /// Matches lines ending with $, %, #, or > optionally followed by whitespace.
         static let fallbackPromptPattern = ".*[$%#>]\\s*$"
-        /// AI tool prompt pattern for Claude Code `> ` style prompts.
-        /// Matches only a bare `>` line — does not overlap with OSC 133 shell prompts.
-        static let aiToolPromptPattern = "^>\\s*$"
+        /// AI tool prompt pattern for Claude Code / Aider style prompts.
+        /// Matches `>` (U+003E), `❯` (U+276F), or `›` (U+203A) as a bare prompt line.
+        static let aiToolPromptPattern = "^[>❯›]\\s*$"
     }
 
     enum Search {
@@ -107,5 +107,78 @@ enum AppConfig {
         static let themesDirectoryName = "themes"
         /// UserDefaults key persisting the selected theme's name.
         static let selectedThemeKey = "selectedThemeName"
+    }
+
+    enum SessionTree {
+        /// Maximum nesting depth for session branches.
+        static let maxDepth = 10
+        /// Maximum branches per parent node.
+        static let maxBranchesPerNode = 5
+        /// Maximum character length for branch summaries.
+        static let summaryMaxLength = 500
+    }
+
+    enum Export {
+        /// Built-in HTML template name (without extension).
+        static let htmlTemplateName = "session_export"
+        /// Maximum messages per export operation.
+        static let maxExportMessages = 10_000
+    }
+
+    enum SplitPane {
+        /// Minimum width of a split pane in points.
+        static let minPaneWidth: Double = 200
+        /// Minimum height of a split pane in points.
+        static let minPaneHeight: Double = 150
+        /// Maximum recursive split depth.
+        static let maxSplitDepth = 4
+    }
+
+    enum Agent {
+        /// How often to poll agent status (seconds).
+        static let statusPollInterval: Double = 0.5
+        /// Glow animation duration for attention sessions (seconds).
+        static let glowAnimationDuration: Double = 2.0
+    }
+
+    enum Harness {
+        /// Rule files to detect and manage.
+        static let supportedRuleFiles = [
+            "AGENTS.md", "CLAUDE.md", ".cursorrules", "CONVENTIONS.md"
+        ]
+        /// Maximum version history entries per rule file.
+        static let maxVersionHistory = 50
+        /// Corruption scan interval in seconds.
+        static let corruptionScanInterval: Double = 300
+    }
+
+    enum SessionHandoff {
+        /// Subdirectory under project root for handoff files.
+        static let directoryName = ".termura"
+        /// Context file name.
+        static let contextFileName = "context.md"
+        /// Maximum summary length in characters.
+        static let maxSummaryLength = 2000
+        /// Maximum number of decision entries to keep.
+        static let maxDecisionEntries = 50
+    }
+
+    enum Backend {
+        enum TerminalBackend: String, Sendable {
+            case swiftTerm
+            case libghostty
+        }
+        static let activeBackend: TerminalBackend = .swiftTerm
+    }
+
+    enum SemanticSearch {
+        /// Embedding vector dimension (MiniLM-L6).
+        static let embeddingDimension = 384
+        /// Token overlap between chunks.
+        static let chunkOverlapTokens = 50
+        /// Maximum tokens per search chunk.
+        static let chunkMaxTokens = 256
+        /// Top-K results to return.
+        static let topK = 20
     }
 }

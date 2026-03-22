@@ -7,10 +7,15 @@ protocol TerminalEngineFactory {
     func makeEngine(for sessionID: SessionID, shell: String) -> any TerminalEngine
 }
 
-/// Live factory — creates real SwiftTermEngine instances.
+/// Live factory — creates terminal engine instances based on the active backend.
 @MainActor
 struct LiveTerminalEngineFactory: TerminalEngineFactory {
     func makeEngine(for sessionID: SessionID, shell: String) -> any TerminalEngine {
-        SwiftTermEngine(sessionID: sessionID, shell: shell)
+        switch AppConfig.Backend.activeBackend {
+        case .swiftTerm:
+            return SwiftTermEngine(sessionID: sessionID, shell: shell)
+        case .libghostty:
+            return LibghosttyEngine(sessionID: sessionID)
+        }
     }
 }

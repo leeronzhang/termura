@@ -32,4 +32,11 @@ protocol TerminalEngine: AnyObject {
     /// (e.g. Claude Code) that position content with cursor-movement escapes
     /// rather than plain newlines.
     func cursorLineContent() -> String?
+
+    /// Returns the text content of lines near the cursor (cursor row and a few
+    /// rows above it). TUI apps like Claude Code position the cursor on hint/status
+    /// lines below the actual prompt; scanning upward finds the real prompt.
+    /// - Parameter count: number of lines above the cursor row to include.
+    /// - Returns: array of line strings, ordered top-to-bottom.
+    func linesNearCursor(above count: Int) -> [String]
 }

@@ -18,6 +18,9 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
     var isPinned: Bool
     var orderIndex: Int
     var archivedAt: Double?
+    var parentId: String?
+    var summary: String
+    var branchType: String
 
     enum Columns: String, ColumnExpression {
         case id, title
@@ -28,6 +31,9 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         case isPinned = "is_pinned"
         case orderIndex = "order_index"
         case archivedAt = "archived_at"
+        case parentId = "parent_id"
+        case summary
+        case branchType = "branch_type"
     }
 
     init(row: Row) throws {
@@ -40,6 +46,9 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         isPinned = row[Columns.isPinned]
         orderIndex = row[Columns.orderIndex]
         archivedAt = row[Columns.archivedAt]
+        parentId = row[Columns.parentId]
+        summary = row[Columns.summary] ?? ""
+        branchType = row[Columns.branchType] ?? "main"
     }
 
     init(record: SessionRecord, archivedAt: Date? = nil) {
@@ -52,6 +61,9 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         isPinned = record.isPinned
         orderIndex = record.orderIndex
         self.archivedAt = archivedAt?.timeIntervalSince1970
+        parentId = record.parentID?.rawValue.uuidString
+        summary = record.summary
+        branchType = record.branchType.rawValue
     }
 
     func encode(to container: inout PersistenceContainer) throws {
@@ -64,6 +76,9 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         container[Columns.isPinned] = isPinned
         container[Columns.orderIndex] = orderIndex
         container[Columns.archivedAt] = archivedAt
+        container[Columns.parentId] = parentId
+        container[Columns.summary] = summary
+        container[Columns.branchType] = branchType
     }
 
     func toRecord() throws -> SessionRecord {
@@ -73,6 +88,12 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         guard let label = SessionColorLabel(rawValue: colorLabel) else {
             throw RepositoryError.invalidColorLabel(colorLabel)
         }
+        guard let branch = BranchType(rawValue: branchType) else {
+            throw RepositoryError.invalidBranchType(branchType)
+        }
+        let parentSessionID: SessionID? = parentId.flatMap { str in
+            UUID(uuidString: str).map { SessionID(rawValue: $0) }
+        }
         return SessionRecord(
             id: SessionID(rawValue: uuid),
             title: title,
@@ -81,7 +102,10 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
             lastActiveAt: Date(timeIntervalSince1970: lastActiveAt),
             colorLabel: label,
             isPinned: isPinned,
-            orderIndex: orderIndex
+            orderIndex: orderIndex,
+            parentID: parentSessionID,
+            summary: summary,
+            branchType: branch
         )
     }
 }
@@ -183,6 +207,77 @@ actor SessionRepository: SessionRepositoryProtocol {
             try database.execute(
                 sql: "UPDATE sessions SET is_pinned = ? WHERE id = ?",
                 arguments: [pinnedInt, idStr]
+            )
+        }
+    }
+
+    // MARK: - Session Tree
+
+    func fetchChildren(of parentID: SessionID) async throws -> [SessionRecord] {
+        let idStr = parentID.rawValue.uuidString
+        return try await db.read { database in
+            let rows = try SessionRow.fetchAll(
+                database,
+                sql: """
+                    SELECT * FROM sessions
+                    WHERE parent_id = ? AND archived_at IS NULL
+                    ORDER BY created_at ASC
+                    """,
+                arguments: [idStr]
+            )
+            return try rows.map { try $0.toRecord() }
+        }
+    }
+
+    func fetchAncestors(of sessionID: SessionID) async throws -> [SessionRecord] {
+        let idStr = sessionID.rawValue.uuidString
+        return try await db.read { database in
+            let rows = try SessionRow.fetchAll(
+                database,
+                sql: """
+                    WITH RECURSIVE ancestors(id) AS (
+                        SELECT parent_id FROM sessions WHERE id = ?
+                        UNION ALL
+                        SELECT s.parent_id FROM sessions s
+                        JOIN ancestors a ON s.id = a.id
+                        WHERE s.parent_id IS NOT NULL
+                    )
+                    SELECT s.* FROM sessions s
+                    JOIN ancestors a ON s.id = a.id
+                    ORDER BY s.created_at ASC
+                    """,
+                arguments: [idStr]
+            )
+            return try rows.map { try $0.toRecord() }
+        }
+    }
+
+    func createBranch(
+        from parentID: SessionID,
+        type: BranchType,
+        title: String
+    ) async throws -> SessionRecord {
+        let ancestors = try await fetchAncestors(of: parentID)
+        guard ancestors.count < AppConfig.SessionTree.maxDepth else {
+            throw RepositoryError.branchDepthExceeded
+        }
+        let record = SessionRecord(
+            title: title,
+            parentID: parentID,
+            branchType: type
+        )
+        try await save(record)
+        logger.info("Created branch \(record.id) from \(parentID) type=\(type.rawValue)")
+        return record
+    }
+
+    func updateSummary(_ sessionID: SessionID, summary: String) async throws {
+        let idStr = sessionID.rawValue.uuidString
+        let trimmed = String(summary.prefix(AppConfig.SessionTree.summaryMaxLength))
+        try await db.write { database in
+            try database.execute(
+                sql: "UPDATE sessions SET summary = ? WHERE id = ?",
+                arguments: [trimmed, idStr]
             )
         }
     }

@@ -63,4 +63,28 @@ final class MockSessionStore: ObservableObject, SessionStoreProtocol {
     func reorderSessions(from source: IndexSet, to destination: Int) {
         sessions.move(fromOffsets: source, toOffset: destination)
     }
+
+    // MARK: - Session Tree
+
+    @discardableResult
+    func createBranch(from sessionID: SessionID, type: BranchType, title: String = "") async -> SessionRecord? {
+        let resolvedTitle = title.isEmpty ? "\(type.rawValue.capitalized) branch" : title
+        let record = SessionRecord(title: resolvedTitle, parentID: sessionID, branchType: type)
+        sessions.append(record)
+        activeSessionID = record.id
+        return record
+    }
+
+    func navigateToParent(of sessionID: SessionID) {
+        guard let idx = sessions.firstIndex(where: { $0.id == sessionID }),
+              let parentID = sessions[idx].parentID else { return }
+        activeSessionID = parentID
+    }
+
+    func mergeBranchSummary(branchID: SessionID, summary: String, messageRepo: (any SessionMessageRepositoryProtocol)?) async {
+        guard let idx = sessions.firstIndex(where: { $0.id == branchID }),
+              let parentID = sessions[idx].parentID else { return }
+        sessions[idx].summary = summary
+        activeSessionID = parentID
+    }
 }

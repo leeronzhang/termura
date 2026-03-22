@@ -96,6 +96,19 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
         return line.translateToString(trimRight: true)
     }
 
+    func linesNearCursor(above count: Int) -> [String] {
+        let terminal = terminalView.getTerminal()
+        let cursorRow = terminal.getCursorLocation().y
+        let startRow = max(0, cursorRow - count)
+        var lines: [String] = []
+        for row in startRow...cursorRow {
+            if let line = terminal.getLine(row: row) {
+                lines.append(line.translateToString(trimRight: true))
+            }
+        }
+        return lines
+    }
+
     func terminate() async {
         isRunning = false
         terminalView.terminate()

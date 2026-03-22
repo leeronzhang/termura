@@ -26,10 +26,88 @@ struct AppCommands: Commands {
                 NotificationCenter.default.post(name: .showNotes, object: nil)
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Export Session\u{2026}") {
+                guard let id = appDelegate?.sessionStore.activeSessionID else { return }
+                NotificationCenter.default.post(name: .showExport, object: id)
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+
+            Divider()
+
+            newBranchMenu
+
+            Divider()
+
+            Button("Harness Rules\u{2026}") {
+                NotificationCenter.default.post(name: .showHarness, object: nil)
+            }
+            .keyboardShortcut("h", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Split Horizontally") {
+                NotificationCenter.default.post(name: .splitHorizontal, object: nil)
+            }
+            .keyboardShortcut("d", modifiers: .command)
+
+            Button("Split Vertically") {
+                NotificationCenter.default.post(name: .splitVertical, object: nil)
+            }
+            .keyboardShortcut("d", modifiers: [.command, .shift])
+
+            Button("Close Split Pane") {
+                NotificationCenter.default.post(name: .closeSplitPane, object: nil)
+            }
+            .keyboardShortcut("w", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Toggle Timeline") {
+                NotificationCenter.default.post(name: .toggleTimeline, object: nil)
+            }
+            .keyboardShortcut("l", modifiers: [.command, .shift])
+
+            Button("Toggle Agent Dashboard") {
+                NotificationCenter.default.post(name: .toggleAgentDashboard, object: nil)
+            }
+            .keyboardShortcut("a", modifiers: [.command, .shift])
         }
 
         CommandGroup(replacing: .undoRedo) {
             SessionSwitchCommands()
+        }
+
+        CommandGroup(after: .undoRedo) {
+            Button("Jump to Next Alert") {
+                guard let store = appDelegate?.agentStateStore,
+                      let targetID = store.nextAttentionSessionID else { return }
+                appDelegate?.sessionStore.activateSession(id: targetID)
+            }
+            .keyboardShortcut("u", modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Merge Branch Summary\u{2026}") {
+                NotificationCenter.default.post(name: .showBranchMerge, object: nil)
+            }
+            .keyboardShortcut("m", modifiers: .command)
+        }
+    }
+
+    @ViewBuilder
+    private var newBranchMenu: some View {
+        Menu("New Branch") {
+            ForEach(BranchType.allCases.filter { $0 != .main }, id: \.self) { type in
+                Button(type.rawValue.capitalized) {
+                    guard let id = appDelegate?.sessionStore.activeSessionID else { return }
+                    Task { @MainActor in
+                        await appDelegate?.sessionStore.createBranch(from: id, type: type)
+                    }
+                }
+            }
         }
     }
 
@@ -63,4 +141,12 @@ extension Notification.Name {
     static let sessionsChanged = Notification.Name("com.termura.sessionsChanged")
     static let showSearch = Notification.Name("com.termura.showSearch")
     static let showNotes = Notification.Name("com.termura.showNotes")
+    static let showExport = Notification.Name("com.termura.showExport")
+    static let showHarness = Notification.Name("com.termura.showHarness")
+    static let showBranchMerge = Notification.Name("com.termura.showBranchMerge")
+    static let toggleTimeline = Notification.Name("com.termura.toggleTimeline")
+    static let toggleAgentDashboard = Notification.Name("com.termura.toggleAgentDashboard")
+    static let splitVertical = Notification.Name("com.termura.splitVertical")
+    static let splitHorizontal = Notification.Name("com.termura.splitHorizontal")
+    static let closeSplitPane = Notification.Name("com.termura.closeSplitPane")
 }

@@ -7,6 +7,15 @@ struct TimelineTurn: Identifiable, Sendable {
     let command: String
     let startedAt: Date
     let exitCode: Int?
+    var branchPoints: [BranchPointMarker] = []
+}
+
+/// Marks the point where a branch was created from a timeline turn.
+struct BranchPointMarker: Identifiable, Sendable {
+    let id = UUID()
+    let branchID: SessionID
+    let branchType: BranchType
+    let createdAt: Date
 }
 
 /// Maintains an ordered list of timeline turns driven by OutputChunk arrivals.
@@ -27,6 +36,11 @@ final class SessionTimeline: ObservableObject {
         if turns.count > AppConfig.Timeline.maxTurns {
             turns.removeFirst()
         }
+    }
+
+    func addBranchMarker(at turnIndex: Int, marker: BranchPointMarker) {
+        guard turns.indices.contains(turnIndex) else { return }
+        turns[turnIndex].branchPoints.append(marker)
     }
 
     func clear() {

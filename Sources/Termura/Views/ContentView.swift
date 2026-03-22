@@ -9,6 +9,7 @@ struct ContentView: View {
     let tokenCountingService: TokenCountingService
     let searchService: SearchService
     let noteRepository: any NoteRepositoryProtocol
+    var agentStateStore: AgentStateStore?
 
     var body: some View {
         MainView(
@@ -17,7 +18,8 @@ struct ContentView: View {
             themeManager: themeManager,
             tokenCountingService: tokenCountingService,
             searchService: searchService,
-            noteRepository: noteRepository
+            noteRepository: noteRepository,
+            agentStateStore: agentStateStore
         )
     }
 }

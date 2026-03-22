@@ -16,4 +16,11 @@ protocol SessionStoreProtocol: AnyObject {
     func unpinSession(id: SessionID)
     func setColorLabel(id: SessionID, label: SessionColorLabel)
     func reorderSessions(from: IndexSet, to: Int)
+
+    // MARK: - Session Tree
+
+    @discardableResult
+    func createBranch(from sessionID: SessionID, type: BranchType, title: String) async -> SessionRecord?
+    func navigateToParent(of sessionID: SessionID)
+    func mergeBranchSummary(branchID: SessionID, summary: String, messageRepo: (any SessionMessageRepositoryProtocol)?) async
 }

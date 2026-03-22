@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 
@@ -29,9 +30,17 @@ final class TerminalViewModel: ObservableObject {
     private let modeController: InputModeController
     private let chunkDetector: ChunkDetector
     private let fallbackDetector: FallbackChunkDetector
+    private let agentDetector: AgentStateDetector
+    private let interventionService: InterventionService
+    private weak var agentStateStore: AgentStateStore?
     private let sessionStartTime: Date = Date()
     private var streamTask: Task<Void, Never>?
     private var shellTask: Task<Void, Never>?
+    /// Debounced re-check for prompt detection after PTY output settles.
+    private var promptRecheckTask: Task<Void, Never>?
+
+    /// Currently pending risk alert (shown as sheet).
+    @Published var pendingRiskAlert: RiskAlert?
 
     // MARK: - Init
 
@@ -41,7 +50,8 @@ final class TerminalViewModel: ObservableObject {
         sessionStore: any SessionStoreProtocol,
         outputStore: OutputStore,
         tokenCountingService: TokenCountingService,
-        modeController: InputModeController
+        modeController: InputModeController,
+        agentStateStore: AgentStateStore? = nil
     ) {
         self.sessionID = sessionID
         self.engine = engine
@@ -49,8 +59,11 @@ final class TerminalViewModel: ObservableObject {
         self.outputStore = outputStore
         self.tokenCountingService = tokenCountingService
         self.modeController = modeController
+        self.agentStateStore = agentStateStore
         self.chunkDetector = ChunkDetector(sessionID: sessionID)
         self.fallbackDetector = FallbackChunkDetector(sessionID: sessionID)
+        self.agentDetector = AgentStateDetector(sessionID: sessionID)
+        self.interventionService = InterventionService()
 
         let workingDir = FileManager.default.homeDirectoryForCurrentUser.path
         self.currentMetadata = SessionMetadata.empty(
@@ -65,6 +78,7 @@ final class TerminalViewModel: ObservableObject {
     deinit {
         streamTask?.cancel()
         shellTask?.cancel()
+        promptRecheckTask?.cancel()
     }
 
     // MARK: - Public
@@ -99,27 +113,33 @@ final class TerminalViewModel: ObservableObject {
             let fallback = fallbackDetector
             let store = outputStore
             let service = tokenCountingService
+            let agentDet = agentDetector
+            let intervention = interventionService
             Task.detached {
                 await detector.appendRawOutput(text)
-                // Always run fallback: detects AI tool prompts (^>$) regardless of OSC 133 state.
-                // The aiToolPromptPattern only matches Claude Code's `>` line and does not overlap
-                // with OSC 133 shell events, so there is no risk of duplicate chunks.
                 let chunks = await fallback.processOutput(stripped, raw: text)
                 await MainActor.run {
                     for chunk in chunks { store.append(chunk) }
                 }
                 await service.accumulate(for: sid, text: stripped)
+                // Agent status analysis
+                let _ = await agentDet.analyzeOutput(stripped)
+                // Risk detection
+                if let risk = await intervention.detectRisk(in: stripped) {
+                    await MainActor.run { [weak self] in
+                        self?.pendingRiskAlert = risk
+                    }
+                }
             }
-            // Prompt detection via SwiftTerm screen buffer — reliable for TUI apps.
-            // Claude Code uses ANSI cursor-movement to render its `>` prompt, so the
-            // raw byte stream cannot be split on \n to find it.  Reading the rendered
-            // cursor row from SwiftTerm's buffer always gives the correct text.
             detectPromptFromScreenBuffer()
+            schedulePromptRecheck()
+            await updateAgentState()
             await refreshMetadata()
 
         case .processExited(let code):
             let sid = sessionID
             logger.info("Session \(sid) process exited code=\(code)")
+            await generateHandoffIfNeeded(exitCode: code)
 
         case .titleChanged(let title):
             sessionStore.renameSession(id: sessionID, title: title)
@@ -141,19 +161,70 @@ final class TerminalViewModel: ObservableObject {
     ///   `>` prompt — it appears embedded in a dense block of escape codes.
     ///   After `super.dataReceived(slice:)` runs, SwiftTerm's buffer holds the
     ///   *rendered* state; `getLine(row: cursorRow)` returns exactly what is shown.
-    private func detectPromptFromScreenBuffer() {
-        let cursorLine = engine.cursorLineContent()?.trimmingCharacters(in: .whitespaces) ?? ""
+    /// Characters used as AI tool prompts (Claude Code, Aider, etc.).
+    /// `>` (U+003E), `❯` (U+276F), and `›` (U+203A) are all common.
+    private static let aiPromptCharacters: Set<Character> = [">", "\u{276F}", "\u{203A}"]
 
-        if cursorLine == ">" {
-            // Claude Code (or other AI tool) is waiting for input.
-            isInteractivePrompt = true
-            modeController.switchToEditor()
-        } else if cursorLine.hasSuffix(" $") || cursorLine.hasSuffix(" %")
-                    || cursorLine.hasSuffix(" #") || cursorLine == "$"
-                    || cursorLine == "%" || cursorLine == "#" {
-            // Back at shell prompt.
+    private func detectPromptFromScreenBuffer() {
+        // Scan cursor line + up to 5 lines above. TUI apps (Claude Code) often
+        // position the cursor on hint/status lines below the actual prompt.
+        let lines = engine.linesNearCursor(above: 5)
+
+        #if DEBUG
+        if modeController.mode == .passthrough {
+            for (i, line) in lines.enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { continue }
+                let codepoints = trimmed.unicodeScalars.map { String(format: "U+%04X", $0.value) }.joined(separator: " ")
+                logger.debug("promptDetect[\(i)]: '\(trimmed)' codepoints=[\(codepoints)]")
+            }
+        }
+        #endif
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if isAIPromptLine(trimmed) {
+                isInteractivePrompt = true
+                modeController.switchToEditor()
+                return
+            }
+        }
+
+        // Fall back: check cursor line for shell prompt.
+        let cursorLine = lines.last?.trimmingCharacters(in: .whitespaces) ?? ""
+        if isShellPromptLine(cursorLine) {
             isInteractivePrompt = false
             if modeController.mode == .passthrough { modeController.switchToEditor() }
+        }
+    }
+
+    private func isShellPromptLine(_ line: String) -> Bool {
+        line.hasSuffix(" $") || line.hasSuffix(" %")
+            || line.hasSuffix(" #") || line == "$"
+            || line == "%" || line == "#"
+    }
+
+    /// Returns true if the line is an AI tool prompt: a single prompt character
+    /// optionally followed by whitespace. Handles `>`, `❯`, `›` and variations.
+    private func isAIPromptLine(_ line: String) -> Bool {
+        guard let first = line.first, Self.aiPromptCharacters.contains(first) else {
+            return false
+        }
+        // The rest (after the prompt character) must be empty or whitespace-only.
+        let rest = line.dropFirst()
+        return rest.allSatisfy(\.isWhitespace)
+    }
+
+    /// Schedules a debounced re-check of the screen buffer after PTY output settles.
+    /// Solves the race where prompt characters arrive across multiple data chunks —
+    /// the immediate `detectPromptFromScreenBuffer()` may fire before SwiftTerm has
+    /// rendered the full prompt line, and no further data event triggers a re-check.
+    private func schedulePromptRecheck() {
+        promptRecheckTask?.cancel()
+        promptRecheckTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            guard !Task.isCancelled else { return }
+            self?.detectPromptFromScreenBuffer()
         }
     }
 
@@ -188,6 +259,42 @@ final class TerminalViewModel: ObservableObject {
         await refreshMetadata()
     }
 
+    // MARK: - Session Handoff
+
+    private func generateHandoffIfNeeded(exitCode: Int32) async {
+        let agentDet = agentDetector
+        guard let agentState = await agentDet.buildState(),
+              agentState.agentType != .unknown else { return }
+
+        guard let session = sessionStore.sessions.first(where: { $0.id == sessionID }),
+              !session.workingDirectory.isEmpty else { return }
+
+        let chunks = outputStore.chunks
+
+        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
+        let handoffService = appDelegate.sessionHandoffService
+
+        Task.detached {
+            do {
+                try await handoffService.generateHandoff(
+                    session: session,
+                    chunks: chunks,
+                    agentState: agentState
+                )
+            } catch {
+                logger.error("Session handoff failed: \(error)")
+            }
+        }
+    }
+
+    // MARK: - Agent State
+
+    private func updateAgentState() async {
+        let agentDet = agentDetector
+        guard let state = await agentDet.buildState() else { return }
+        agentStateStore?.update(state: state)
+    }
+
     // MARK: - Metadata
 
     private func refreshMetadata(workingDirectory: String? = nil) async {
@@ -197,6 +304,8 @@ final class TerminalViewModel: ObservableObject {
         let elapsed = Date().timeIntervalSince(sessionStartTime)
         let cmdCount = outputStore.chunks.count
         let dir = workingDirectory ?? currentMetadata.workingDirectory
+        let agentDet = agentDetector
+        let agentState = await agentDet.buildState()
 
         currentMetadata = SessionMetadata(
             sessionID: sessionID,
@@ -204,7 +313,10 @@ final class TerminalViewModel: ObservableObject {
             totalCharacterCount: tokens * Int(AppConfig.AI.tokenEstimateDivisor),
             sessionDuration: elapsed,
             commandCount: cmdCount,
-            workingDirectory: dir
+            workingDirectory: dir,
+            activeAgentCount: agentStateStore?.activeAgentCount ?? 0,
+            currentAgentType: agentState?.agentType,
+            currentAgentStatus: agentState?.status
         )
     }
 }

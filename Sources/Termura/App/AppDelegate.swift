@@ -49,6 +49,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) lazy var menuBarService: MenuBarService = .init()
     private(set) lazy var themeImportService: ThemeImportService = .init()
 
+    // MARK: - Phase 2 (V3.1) Services
+
+    private(set) lazy var agentStateStore: AgentStateStore = .init()
+    private(set) lazy var sessionMessageRepository: SessionMessageRepository = .init(db: databaseService)
+    private(set) lazy var harnessEventRepository: HarnessEventRepository = .init(db: databaseService)
+
+    // MARK: - Session Handoff
+
+    private(set) lazy var sessionHandoffService: SessionHandoffService = .init(
+        messageRepo: sessionMessageRepository,
+        harnessEventRepo: harnessEventRepository,
+        summarizer: branchSummarizer
+    )
+
+    // MARK: - Phase 3 (V3.1) Services
+
+    private(set) lazy var ruleFileRepository: RuleFileRepository = .init(db: databaseService)
+    private(set) lazy var experienceCodifier: ExperienceCodifier = .init(
+        harnessEventRepo: harnessEventRepository
+    )
+    private(set) lazy var branchSummarizer: BranchSummarizer = .init()
+    private(set) lazy var embeddingService: EmbeddingService = .init()
+    private(set) lazy var vectorSearchService: VectorSearchService = .init(
+        embeddingService: embeddingService
+    )
+
     // MARK: - UI controllers
 
     private var visorController: VisorWindowController?

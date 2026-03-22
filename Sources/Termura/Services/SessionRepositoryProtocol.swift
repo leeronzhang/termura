@@ -9,4 +9,15 @@ protocol SessionRepositoryProtocol: Actor {
     func reorder(ids: [SessionID]) async throws
     func setColorLabel(id: SessionID, label: SessionColorLabel) async throws
     func setPinned(id: SessionID, pinned: Bool) async throws
+
+    // MARK: - Session Tree
+
+    /// Fetch direct children of a parent session.
+    func fetchChildren(of parentID: SessionID) async throws -> [SessionRecord]
+    /// Fetch the ancestor chain from a session up to the root.
+    func fetchAncestors(of sessionID: SessionID) async throws -> [SessionRecord]
+    /// Create a new branch session under a parent.
+    func createBranch(from parentID: SessionID, type: BranchType, title: String) async throws -> SessionRecord
+    /// Update the summary of a completed branch.
+    func updateSummary(_ sessionID: SessionID, summary: String) async throws
 }
