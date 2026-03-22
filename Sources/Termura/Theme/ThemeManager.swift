@@ -70,6 +70,12 @@ final class ThemeManager: ObservableObject {
         case .statusBarBackground: return current.sidebarBackground
         case .inputBackground: return current.background
         case .inputBorder: return current.foreground.opacity(0.2)
+        case .statusSuccess: return current.green
+        case .statusError: return current.red
+        case .statusWarning: return current.yellow
+        case .statusInfo: return current.blue
+        case .borderSubtle: return current.foreground.opacity(DS.Opacity.border)
+        case .surfaceOverlay: return current.background.opacity(DS.Opacity.secondary)
         default: return nil
         }
     }

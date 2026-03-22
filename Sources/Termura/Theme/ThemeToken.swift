@@ -42,4 +42,12 @@ enum ThemeToken: String, CaseIterable, Sendable {
     case number
     case function
     case type
+
+    // Semantic UI Colors
+    case statusSuccess
+    case statusError
+    case statusWarning
+    case statusInfo
+    case borderSubtle
+    case surfaceOverlay
 }
