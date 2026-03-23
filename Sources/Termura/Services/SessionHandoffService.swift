@@ -202,11 +202,17 @@ actor SessionHandoffService {
         var taskStatus = ""
         var decisions: [DecisionEntry] = []
         var currentSection = ""
+        var agentType: AgentType?
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
 
         for line in lines {
+            // Parse agent type from header: "> Last updated: ... | Agent: claudeCode | ..."
+            if line.hasPrefix("> Last updated:"), agentType == nil {
+                agentType = parseAgentTypeFromHeader(line)
+            }
+
             if line.hasPrefix("## Current Task Status") {
                 currentSection = "task"
                 continue
@@ -240,10 +246,23 @@ actor SessionHandoffService {
             taskStatus: taskStatus,
             decisions: decisions,
             errors: [],
-            agentType: nil,
+            agentType: agentType,
             sessionDuration: 0,
             lastUpdated: Date()
         )
+    }
+
+    /// Extracts agent type from a header line like "> Last updated: ... | Agent: claudeCode | ..."
+    private func parseAgentTypeFromHeader(_ line: String) -> AgentType? {
+        guard let agentRange = line.range(of: "Agent: ") else { return nil }
+        let afterAgent = line[agentRange.upperBound...]
+        let name: String
+        if let pipeRange = afterAgent.range(of: " |") {
+            name = String(afterAgent[..<pipeRange.lowerBound])
+        } else {
+            name = String(afterAgent).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return AgentType(rawValue: name)
     }
 
     private func parseDecisionLine(

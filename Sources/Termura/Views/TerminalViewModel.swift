@@ -39,6 +39,12 @@ final class TerminalViewModel: ObservableObject {
     /// Debounced re-check for prompt detection after PTY output settles.
     private var promptRecheckTask: Task<Void, Never>?
 
+    // MARK: - Context injection
+
+    private let isRestoredSession: Bool
+    private let contextInjectionService: ContextInjectionService?
+    private var hasInjectedContext = false
+
     /// Currently pending risk alert (shown as sheet).
     @Published var pendingRiskAlert: RiskAlert?
 
@@ -51,7 +57,9 @@ final class TerminalViewModel: ObservableObject {
         outputStore: OutputStore,
         tokenCountingService: TokenCountingService,
         modeController: InputModeController,
-        agentStateStore: AgentStateStore? = nil
+        agentStateStore: AgentStateStore? = nil,
+        isRestoredSession: Bool = false,
+        contextInjectionService: ContextInjectionService? = nil
     ) {
         self.sessionID = sessionID
         self.engine = engine
@@ -60,6 +68,8 @@ final class TerminalViewModel: ObservableObject {
         self.tokenCountingService = tokenCountingService
         self.modeController = modeController
         self.agentStateStore = agentStateStore
+        self.isRestoredSession = isRestoredSession
+        self.contextInjectionService = contextInjectionService
         self.chunkDetector = ChunkDetector(sessionID: sessionID)
         self.fallbackDetector = FallbackChunkDetector(sessionID: sessionID)
         self.agentDetector = AgentStateDetector(sessionID: sessionID)
@@ -186,6 +196,7 @@ final class TerminalViewModel: ObservableObject {
             if isAIPromptLine(trimmed) {
                 isInteractivePrompt = true
                 modeController.switchToEditor()
+                injectContextIfNeeded()
                 return
             }
         }
@@ -194,7 +205,10 @@ final class TerminalViewModel: ObservableObject {
         let cursorLine = lines.last?.trimmingCharacters(in: .whitespaces) ?? ""
         if isShellPromptLine(cursorLine) {
             isInteractivePrompt = false
-            if modeController.mode == .passthrough { modeController.switchToEditor() }
+            if modeController.mode == .passthrough {
+                modeController.switchToEditor()
+                injectContextIfNeeded()
+            }
         }
     }
 
@@ -228,6 +242,22 @@ final class TerminalViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Context injection
+
+    private func injectContextIfNeeded() {
+        guard isRestoredSession, !hasInjectedContext else { return }
+        hasInjectedContext = true
+        let workingDir = currentMetadata.workingDirectory
+        guard !workingDir.isEmpty else { return }
+        guard let service = contextInjectionService else { return }
+        Task { @MainActor [weak self] in
+            guard let text = await service.buildInjectionText(projectRoot: workingDir) else { return }
+            try? await Task.sleep(nanoseconds: AppConfig.SessionHandoff.injectionDelayNanoseconds)
+            guard !Task.isCancelled else { return }
+            await self?.engine.send(text)
+        }
+    }
+
     // MARK: - Shell events subscription
 
     private func subscribeToShellEvents() {
@@ -243,7 +273,11 @@ final class TerminalViewModel: ObservableObject {
     private func handleShellEvent(_ event: ShellIntegrationEvent) async {
         // Drive editor visibility: show input at prompt, hide while executing.
         switch event {
-        case .promptStarted, .executionFinished:
+        case .promptStarted:
+            isInteractivePrompt = false
+            modeController.switchToEditor()
+            injectContextIfNeeded()
+        case .executionFinished:
             isInteractivePrompt = false
             modeController.switchToEditor()
         case .executionStarted:

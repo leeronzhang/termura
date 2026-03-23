@@ -9,6 +9,7 @@ struct MainView: View {
     let searchService: SearchService
     let noteRepository: any NoteRepositoryProtocol
     var agentStateStore: AgentStateStore?
+    var contextInjectionService: ContextInjectionService?
 
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
     @State private var showSidebar = true
@@ -30,7 +31,8 @@ struct MainView: View {
         tokenCountingService: TokenCountingService,
         searchService: SearchService,
         noteRepository: any NoteRepositoryProtocol,
-        agentStateStore: AgentStateStore? = nil
+        agentStateStore: AgentStateStore? = nil,
+        contextInjectionService: ContextInjectionService? = nil
     ) {
         self.sessionStore = sessionStore
         self.engineStore = engineStore
@@ -39,6 +41,7 @@ struct MainView: View {
         self.searchService = searchService
         self.noteRepository = noteRepository
         self.agentStateStore = agentStateStore
+        self.contextInjectionService = contextInjectionService
         _notesViewModel = StateObject(wrappedValue: NotesViewModel(repository: noteRepository))
     }
 
@@ -90,7 +93,7 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: .closeSplitPane)) { _ in
             performCloseSplitPane()
         }
-        .onAppear { ensureInitialSession() }
+        .task { await ensureInitialSession() }
         .sheet(isPresented: $showShellOnboarding) {
             ShellIntegrationOnboardingView(isPresented: $showShellOnboarding)
         }
@@ -206,7 +209,9 @@ struct MainView: View {
                 theme: themeManager.current,
                 sessionStore: sessionStore,
                 tokenCountingService: tokenCountingService,
-                agentStateStore: agentStateStore
+                agentStateStore: agentStateStore,
+                isRestoredSession: sessionStore.isRestoredSession(id: activeID),
+                contextInjectionService: contextInjectionService
             )
             .id(activeID)
         } else {
@@ -223,7 +228,9 @@ struct MainView: View {
                 theme: themeManager.current,
                 sessionStore: sessionStore,
                 tokenCountingService: tokenCountingService,
-                agentStateStore: agentStateStore
+                agentStateStore: agentStateStore,
+                isRestoredSession: sessionStore.isRestoredSession(id: sessionID),
+                contextInjectionService: contextInjectionService
             )
             .id(sessionID)
         } else {
@@ -257,7 +264,14 @@ struct MainView: View {
 
     // MARK: - Helpers
 
-    private func ensureInitialSession() {
+    private func ensureInitialSession() async {
+        // Wait for persisted sessions to be loaded before deciding
+        // whether to create a fresh session.
+        if !sessionStore.hasLoadedPersistedSessions {
+            for await loaded in sessionStore.$hasLoadedPersistedSessions.values where loaded {
+                break
+            }
+        }
         if sessionStore.sessions.isEmpty {
             sessionStore.createSession(title: "Terminal")
         }

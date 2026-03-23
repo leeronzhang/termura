@@ -10,6 +10,7 @@ struct ContentView: View {
     let searchService: SearchService
     let noteRepository: any NoteRepositoryProtocol
     var agentStateStore: AgentStateStore?
+    var contextInjectionService: ContextInjectionService?
 
     var body: some View {
         MainView(
@@ -19,7 +20,8 @@ struct ContentView: View {
             tokenCountingService: tokenCountingService,
             searchService: searchService,
             noteRepository: noteRepository,
-            agentStateStore: agentStateStore
+            agentStateStore: agentStateStore,
+            contextInjectionService: contextInjectionService
         )
     }
 }

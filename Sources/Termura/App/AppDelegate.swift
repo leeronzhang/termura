@@ -63,6 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         summarizer: branchSummarizer
     )
 
+    private(set) lazy var contextInjectionService: ContextInjectionService = .init(
+        handoffService: sessionHandoffService
+    )
+
     // MARK: - Phase 3 (V3.1) Services
 
     private(set) lazy var ruleFileRepository: RuleFileRepository = .init(db: databaseService)
@@ -92,6 +96,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await self?.sessionStore.loadPersistedSessions()
         }
         logger.info("Termura launched")
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let activeSessions = sessionStore.sessions.filter { !$0.workingDirectory.isEmpty }
+        guard !activeSessions.isEmpty else { return .terminateNow }
+
+        let service = sessionHandoffService
+        Task.detached {
+            for session in activeSessions {
+                let state = AgentState(sessionID: session.id, agentType: .unknown)
+                try? await service.generateHandoff(
+                    session: session,
+                    chunks: [],
+                    agentState: state
+                )
+            }
+            await MainActor.run {
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

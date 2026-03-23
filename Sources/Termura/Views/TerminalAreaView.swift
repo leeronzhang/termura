@@ -11,6 +11,8 @@ struct TerminalAreaView: View {
     @ObservedObject var sessionStore: SessionStore
     let tokenCountingService: TokenCountingService
     var agentStateStore: AgentStateStore?
+    let isRestoredSession: Bool
+    var contextInjectionService: ContextInjectionService?
 
     @StateObject private var outputStore: OutputStore
     @StateObject private var modeController: InputModeController
@@ -22,7 +24,11 @@ struct TerminalAreaView: View {
     @State private var showMetadata = true
     @State private var showAgentDashboard = false
     @State private var showExportSheet = false
+    @State private var showContextSheet = false
+    @State private var contextFileExists = false
     @State private var metadataPanelWidth: Double = AppConfig.UI.metadataPanelWidth
+    /// Tracks the measured height of the editor overlay so the terminal can add matching bottom padding.
+    @State private var editorOverlayHeight: CGFloat = 0
 
     /// Shared handle so the key-routing monitor can find the live EditorTextView.
     private let editorHandle = EditorViewHandle()
@@ -37,7 +43,9 @@ struct TerminalAreaView: View {
         theme: ThemeColors,
         sessionStore: SessionStore,
         tokenCountingService: TokenCountingService,
-        agentStateStore: AgentStateStore? = nil
+        agentStateStore: AgentStateStore? = nil,
+        isRestoredSession: Bool = false,
+        contextInjectionService: ContextInjectionService? = nil
     ) {
         self.engine = engine
         self.sessionID = sessionID
@@ -45,6 +53,8 @@ struct TerminalAreaView: View {
         self.sessionStore = sessionStore
         self.tokenCountingService = tokenCountingService
         self.agentStateStore = agentStateStore
+        self.isRestoredSession = isRestoredSession
+        self.contextInjectionService = contextInjectionService
 
         let store = OutputStore(sessionID: sessionID)
         let modeCtrl = InputModeController()
@@ -60,7 +70,9 @@ struct TerminalAreaView: View {
             outputStore: store,
             tokenCountingService: tokenCountingService,
             modeController: modeCtrl,
-            agentStateStore: agentStateStore
+            agentStateStore: agentStateStore,
+            isRestoredSession: isRestoredSession,
+            contextInjectionService: contextInjectionService
         ))
         _editorViewModel = StateObject(wrappedValue: EditorViewModel(
             engine: engine,
@@ -72,6 +84,8 @@ struct TerminalAreaView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            projectPathBar
+
             HStack(spacing: 0) {
                 // Left panel: Timeline or Agent Dashboard (mutually exclusive)
                 if showAgentDashboard, let store = agentStateStore {
@@ -107,6 +121,7 @@ struct TerminalAreaView: View {
         }
         .onAppear {
             installKeyRouter()
+            checkContextFileExists()
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 50_000_000)
                 editorHandle.textView?.window?.makeFirstResponder(editorHandle.textView)
@@ -187,6 +202,139 @@ struct TerminalAreaView: View {
         .onReceive(NotificationCenter.default.publisher(for: .toggleAgentDashboard)) { _ in
             withAnimation { showAgentDashboard.toggle(); if showAgentDashboard { showTimeline = false } }
         }
+        .sheet(isPresented: $showContextSheet) {
+            ContextFileView(
+                projectRoot: viewModel.currentMetadata.workingDirectory,
+                isPresented: $showContextSheet
+            )
+        }
+        .onChange(of: viewModel.currentMetadata.workingDirectory) { _, _ in
+            checkContextFileExists()
+        }
+    }
+
+    private func checkContextFileExists() {
+        let dir = viewModel.currentMetadata.workingDirectory
+        guard !dir.isEmpty else {
+            contextFileExists = false
+            return
+        }
+        let path = (dir as NSString)
+            .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
+            .appending("/\(AppConfig.SessionHandoff.contextFileName)")
+        contextFileExists = FileManager.default.fileExists(atPath: path)
+    }
+
+    // MARK: - Project path bar
+
+    /// Whether an AI agent is currently running in this session.
+    private var isAgentBusy: Bool {
+        viewModel.currentMetadata.currentAgentType != nil
+    }
+
+    private var projectPathBar: some View {
+        HStack(spacing: DS.Spacing.smMd) {
+            Button {
+                openDirectoryPicker()
+            } label: {
+                Image(systemName: "folder.fill")
+                    .font(DS.Font.caption)
+                    .foregroundColor(isAgentBusy ? .secondary.opacity(DS.Opacity.dimmed) : .secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isAgentBusy)
+            .help(isAgentBusy ? "Agent is running — cannot change directory" : "Change working directory")
+
+            Button {
+                openDirectoryPicker()
+            } label: {
+                Text(abbreviatedWorkingDirectory)
+                    .font(DS.Font.labelMono)
+                    .foregroundColor(.primary.opacity(DS.Opacity.strong))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .buttonStyle(.plain)
+            .disabled(isAgentBusy)
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .help(isAgentBusy ? "Agent is running" : "Switch working directory")
+
+            Button { showContextSheet = true } label: {
+                Image(systemName: "doc.text")
+                    .font(DS.Font.caption)
+                    .foregroundColor(
+                        contextFileExists
+                            ? .accentColor
+                            : .secondary.opacity(DS.Opacity.dimmed)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!contextFileExists)
+            .help("Session context (context.md)")
+
+            if isAgentBusy {
+                Spacer()
+                HStack(spacing: DS.Spacing.sm) {
+                    Circle()
+                        .fill(.orange)
+                        .frame(width: DS.Size.dotSmall, height: DS.Size.dotSmall)
+                    Text("Agent active")
+                        .font(DS.Font.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, DS.Spacing.lg)
+        .padding(.vertical, DS.Spacing.smMd)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
+    private func revealInFinder() {
+        let path = viewModel.currentMetadata.workingDirectory
+        guard !path.isEmpty else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
+    }
+
+    private func openDirectoryPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.treatsFilePackagesAsDirectories = true
+        panel.prompt = "Select"
+        panel.title = "Choose Project Directory"
+        panel.message = "Select a directory to switch the terminal working directory"
+        panel.directoryURL = URL(fileURLWithPath: viewModel.currentMetadata.workingDirectory)
+
+        guard let window = NSApp.keyWindow else { return }
+        let eng = engine
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            // Silent directory switch: cd + clear so the user never sees the command.
+            let cdCommand = "cd \(url.path.shellEscaped) && clear\n"
+            Task { @MainActor in await eng.send(cdCommand) }
+        }
+    }
+
+    private var abbreviatedWorkingDirectory: String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let path = viewModel.currentMetadata.workingDirectory
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
     }
 
     // MARK: - Terminal / output stack
@@ -196,6 +344,8 @@ struct TerminalAreaView: View {
         ZStack(alignment: .bottom) {
             TerminalContainerView(viewModel: viewModel, engine: engine, theme: theme)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Reserve space at the bottom so terminal content is not hidden behind the overlay.
+                .padding(.bottom, modeController.mode == .editor ? editorOverlayHeight : 0)
 
             VStack(spacing: 0) {
                 Spacer()
@@ -206,8 +356,19 @@ struct TerminalAreaView: View {
                 }
                 if modeController.mode == .editor {
                     editorOverlay
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: EditorOverlayHeightKey.self,
+                                    value: geo.size.height
+                                )
+                            }
+                        )
                 }
             }
+        }
+        .onPreferenceChange(EditorOverlayHeightKey.self) { height in
+            editorOverlayHeight = height
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -301,5 +462,23 @@ struct TerminalAreaView: View {
             NSEvent.removeMonitor(monitor)
             keyEventMonitor = nil
         }
+    }
+}
+
+// MARK: - PreferenceKey for editor overlay height
+
+private struct EditorOverlayHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Shell escape helper
+
+private extension String {
+    /// Wraps the string in single quotes with proper escaping for shell use.
+    var shellEscaped: String {
+        "'" + replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

@@ -64,6 +64,10 @@ final class MockSessionStore: ObservableObject, SessionStoreProtocol {
         sessions.move(fromOffsets: source, toOffset: destination)
     }
 
+    func isRestoredSession(id: SessionID) -> Bool {
+        false
+    }
+
     // MARK: - Session Tree
 
     @discardableResult

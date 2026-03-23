@@ -161,6 +161,10 @@ enum AppConfig {
         static let maxSummaryLength = 2000
         /// Maximum number of decision entries to keep.
         static let maxDecisionEntries = 50
+        /// Maximum character length for context injection text.
+        static let injectionMaxLength = 1500
+        /// Delay before injecting context after prompt detection (nanoseconds).
+        static let injectionDelayNanoseconds: UInt64 = 200_000_000
     }
 
     enum Backend {

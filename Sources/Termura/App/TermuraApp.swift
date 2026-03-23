@@ -10,7 +10,8 @@ struct TermuraApp: App {
                 tokenCountingService: appDelegate.tokenCountingService,
                 searchService: appDelegate.searchService,
                 noteRepository: appDelegate.noteRepository,
-                agentStateStore: appDelegate.agentStateStore
+                agentStateStore: appDelegate.agentStateStore,
+                contextInjectionService: appDelegate.contextInjectionService
             )
             .environmentObject(appDelegate.sessionStore)
             .environmentObject(appDelegate.engineStore)

@@ -7,6 +7,10 @@ private let logger = Logger(subsystem: "com.termura.app", category: "SessionStor
 final class SessionStore: ObservableObject, SessionStoreProtocol {
     @Published private(set) var sessions: [SessionRecord] = []
     @Published private(set) var activeSessionID: SessionID?
+    /// Set to `true` once persisted sessions have been loaded (or skipped).
+    @Published private(set) var hasLoadedPersistedSessions = false
+    /// IDs of sessions that were loaded from persistence (restored on launch).
+    private(set) var restoredSessionIDs: Set<SessionID> = []
 
     private let engineStore: TerminalEngineStore
     private let defaultShell: String
@@ -26,11 +30,15 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     // MARK: - Persistence
 
     func loadPersistedSessions() async {
+        defer { hasLoadedPersistedSessions = true }
         guard let repo = repository else { return }
         do {
             let loaded = try await repo.fetchAll()
             sessions = loaded
-            activeSessionID = loaded.first?.id
+            restoredSessionIDs = Set(loaded.map(\.id))
+            // Restore the most recently active session, falling back to the first.
+            let sorted = loaded.sorted { $0.lastActiveAt > $1.lastActiveAt }
+            activeSessionID = sorted.first?.id ?? loaded.first?.id
             for session in loaded {
                 engineStore.createEngine(for: session.id, shell: defaultShell)
             }
@@ -38,6 +46,12 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         } catch {
             logger.error("Failed to load sessions: \(error)")
         }
+    }
+
+    // MARK: - Restored sessions
+
+    func isRestoredSession(id: SessionID) -> Bool {
+        restoredSessionIDs.contains(id)
     }
 
     // MARK: - SessionStoreProtocol
