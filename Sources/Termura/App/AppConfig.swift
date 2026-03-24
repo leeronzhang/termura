@@ -80,6 +80,8 @@ enum AppConfig {
         static let tokenProgressWarningFraction: Double = 0.8
         static let editorMinHeightPoints: Double = 72
         static let editorMaxHeightPoints: Double = 300
+        /// Delay after exiting full screen before repositioning traffic lights (100ms).
+        static let fullScreenExitDelayNanoseconds: UInt64 = 100_000_000
     }
 
     enum ShellIntegration {

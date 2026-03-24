@@ -20,8 +20,8 @@ struct MainView: View {
     @State var exportSessionID: SessionID?
     @State var showHarness = false
     @State var showBranchMerge = false
-    @State private var showCloseSessionConfirm = false
-    @State private var splitRoot: SplitNode?
+    @State var showCloseSessionConfirm = false
+    @State var splitRoot: SplitNode?
     @State var openTabs: [ContentTab] = [.terminal]
     @State var selectedContentTab: ContentTab = .terminal
     @State private var isFullScreen = false
@@ -234,89 +234,4 @@ struct MainView: View {
         }
     }
 
-    // MARK: - Tab management
-
-    func openNoteTab(noteID: NoteID, title: String) {
-        let tab = ContentTab.note(noteID, title)
-        if !openTabs.contains(tab) {
-            openTabs.append(tab)
-        }
-        selectedContentTab = tab
-    }
-
-    private func closeContentTab(_ tab: ContentTab) {
-        switch tab {
-        case .terminal:
-            // Active session requires confirmation
-            if sessionStore.activeSessionID != nil {
-                showCloseSessionConfirm = true
-            }
-        case .note:
-            openTabs.removeAll { $0 == tab }
-            if selectedContentTab == tab {
-                selectedContentTab = .terminal
-            }
-        }
-    }
-
-    private func confirmCloseActiveSession() {
-        if let activeID = sessionStore.activeSessionID {
-            sessionStore.closeSession(id: activeID)
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func ensureInitialSession() async {
-        // Wait for persisted sessions to be loaded before deciding
-        // whether to create a fresh session.
-        if !sessionStore.hasLoadedPersistedSessions {
-            for await loaded in sessionStore.$hasLoadedPersistedSessions.values where loaded {
-                break
-            }
-        }
-        if sessionStore.sessions.isEmpty {
-            sessionStore.createSession(title: "Terminal")
-        }
-    }
-
-    private func performSplit(axis: SplitAxis) {
-        guard let activeID = sessionStore.activeSessionID else { return }
-        let newSession = sessionStore.createSession(title: "Terminal")
-        if splitRoot == nil {
-            splitRoot = SplitNodeMutations.splitLeaf(
-                root: .leaf(activeID),
-                targetID: activeID,
-                newID: newSession.id,
-                axis: axis
-            )
-        } else if let root = splitRoot {
-            splitRoot = SplitNodeMutations.splitLeaf(
-                root: root,
-                targetID: activeID,
-                newID: newSession.id,
-                axis: axis
-            )
-        }
-    }
-
-    private func performCloseSplitPane() {
-        guard let activeID = sessionStore.activeSessionID,
-              let root = splitRoot else { return }
-        if let remaining = SplitNodeMutations.removeLeaf(root: root, targetID: activeID) {
-            if case .leaf = remaining {
-                splitRoot = nil
-            } else {
-                splitRoot = remaining
-            }
-        } else {
-            splitRoot = nil
-        }
-        sessionStore.closeSession(id: activeID)
-    }
-}
-
-extension Notification.Name {
-    static let toggleSidebar = Notification.Name("com.termura.toggleSidebar")
-    static let showShellIntegrationOnboarding = Notification.Name("com.termura.showShellOnboarding")
 }

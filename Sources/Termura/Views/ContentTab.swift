@@ -50,20 +50,17 @@ struct ContentTabBar: View {
         HStack(spacing: 0) {
             ForEach(tabs) { tab in
                 tabButton(tab)
-                if tab != tabs.last {
-                    Divider().frame(height: 14)
-                }
             }
             Spacer()
         }
         .padding(.top, titleBarTop)
         .frame(height: 44 + titleBarTop)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) { Divider() }
+        .background(Color.black.opacity(0.25))
     }
 
     private func tabButton(_ tab: ContentTab) -> some View {
-        Button {
+        let isSelected = selectedTab == tab
+        return Button {
             selectedTab = tab
         } label: {
             HStack(spacing: AppUI.Spacing.sm) {
@@ -72,6 +69,7 @@ struct ContentTabBar: View {
                 Text(tab.title)
                     .font(AppUI.Font.label)
                     .lineLimit(1)
+                Spacer()
                 Button {
                     onClose(tab)
                 } label: {
@@ -81,10 +79,10 @@ struct ContentTabBar: View {
                 }
                 .buttonStyle(.plain)
             }
-            .foregroundColor(selectedTab == tab ? .primary : .secondary)
-            .padding(.horizontal, AppUI.Spacing.lg)
-            .frame(maxHeight: .infinity)
-            .background(selectedTab == tab ? Color.white.opacity(AppUI.Opacity.whisper) : Color.clear)
+            .foregroundColor(isSelected ? .primary : .secondary)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: 200, maxHeight: .infinity)
+            .background(isSelected ? Color(nsColor: .windowBackgroundColor) : Color.clear)
         }
         .buttonStyle(.plain)
     }

@@ -49,6 +49,5 @@ enum MessageRole: String, Sendable, Codable, CaseIterable {
 enum MessageContentType: String, Sendable, Codable, CaseIterable {
     case model
     case metadata
-    // swiftlint:disable:next identifier_name
     case ui
 }

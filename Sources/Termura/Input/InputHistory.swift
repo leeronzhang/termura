@@ -10,10 +10,10 @@ struct InputHistory {
     /// Index where the next write will land.
     private var writeHead: Int
     /// Count of valid entries stored.
-    private var count: Int
+    private var entryCount: Int
     /// Navigation cursor; -1 means "at present" (not browsing history).
     private var cursor: Int
-    private var isEmpty: Bool { count == 0 }
+    private var isEmpty: Bool { entryCount == 0 }
 
     // MARK: - Init
 
@@ -21,7 +21,7 @@ struct InputHistory {
         self.capacity = max(1, capacity)
         buffer = Array(repeating: "", count: self.capacity)
         writeHead = 0
-        count = 0
+        entryCount = 0
         cursor = -1
     }
 
@@ -33,7 +33,7 @@ struct InputHistory {
         guard !trimmed.isEmpty else { return }
         buffer[writeHead] = trimmed
         writeHead = (writeHead + 1) % capacity
-        count = min(count + 1, capacity)
+        entryCount = min(entryCount + 1, capacity)
         cursor = -1
     }
 
@@ -42,7 +42,7 @@ struct InputHistory {
         guard !isEmpty else { return nil }
         if cursor == -1 {
             cursor = 0
-        } else if cursor < count - 1 {
+        } else if cursor < entryCount - 1 {
             cursor += 1
         }
         return entry(at: cursor)

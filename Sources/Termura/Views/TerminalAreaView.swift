@@ -189,7 +189,6 @@ struct TerminalAreaView: View {
         contextFileExists = FileManager.default.fileExists(atPath: path)
     }
 
-
     // MARK: - Key routing
 
     /// Ensures focus always lands on EditorTextView when a key is pressed.
@@ -230,4 +229,3 @@ struct EditorOverlayHeightKey: PreferenceKey {
         value = nextValue()
     }
 }
-

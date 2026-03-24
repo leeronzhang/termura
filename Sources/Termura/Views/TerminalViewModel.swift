@@ -14,7 +14,7 @@ final class TerminalViewModel: ObservableObject {
     /// True while an interactive tool (Claude Code `>`) is showing its prompt.
     /// Drives the overlay layout: EditorInputView floats over the terminal bottom,
     /// visually covering the tool's own cursor line.
-    @Published private(set) var isInteractivePrompt: Bool = false
+    @Published var isInteractivePrompt: Bool = false
 
     // MARK: - Dependencies
 
@@ -26,7 +26,7 @@ final class TerminalViewModel: ObservableObject {
 
     // MARK: - Internal state
 
-    private let modeController: InputModeController
+    let modeController: InputModeController
     private let chunkDetector: ChunkDetector
     private let fallbackDetector: FallbackChunkDetector
     let agentDetector: AgentStateDetector
@@ -37,7 +37,7 @@ final class TerminalViewModel: ObservableObject {
     private var streamTask: Task<Void, Never>?
     private var shellTask: Task<Void, Never>?
     /// Debounced re-check for prompt detection after PTY output settles.
-    private var promptRecheckTask: Task<Void, Never>?
+    var promptRecheckTask: Task<Void, Never>?
 
     // MARK: - Context injection
 
@@ -165,93 +165,9 @@ final class TerminalViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Prompt detection via screen buffer
-
-    /// Reads the rendered cursor row from SwiftTerm's screen buffer to determine
-    /// which kind of prompt (if any) is currently displayed.
-    ///
-    /// Why screen buffer instead of raw bytes:
-    ///   TUI apps like Claude Code use ANSI cursor-movement sequences to position
-    ///   text.  The raw PTY stream cannot be reliably split on newlines to find the
-    ///   `>` prompt — it appears embedded in a dense block of escape codes.
-    ///   After `super.dataReceived(slice:)` runs, SwiftTerm's buffer holds the
-    ///   *rendered* state; `getLine(row: cursorRow)` returns exactly what is shown.
-    /// Characters used as AI tool prompts (Claude Code, Aider, etc.).
-    /// `>` (U+003E), `❯` (U+276F), and `›` (U+203A) are all common.
-    private static let aiPromptCharacters: Set<Character> = [">", "\u{276F}", "\u{203A}"]
-
-    private func detectPromptFromScreenBuffer() {
-        // Scan cursor line + up to 5 lines above. TUI apps (Claude Code) often
-        // position the cursor on hint/status lines below the actual prompt.
-        let lines = engine.linesNearCursor(above: 5)
-
-        #if DEBUG
-        if modeController.mode == .passthrough {
-            for (i, line) in lines.enumerated() {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                guard !trimmed.isEmpty else { continue }
-                let codepoints = trimmed.unicodeScalars.map { String(format: "U+%04X", $0.value) }.joined(separator: " ")
-                logger.debug("promptDetect[\(i)]: '\(trimmed)' codepoints=[\(codepoints)]")
-            }
-        }
-        #endif
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if isAIPromptLine(trimmed) {
-                isInteractivePrompt = true
-                modeController.switchToEditor()
-                injectContextIfNeeded()
-                return
-            }
-        }
-
-        // Fall back: check cursor line for shell prompt.
-        let cursorLine = lines.last?.trimmingCharacters(in: .whitespaces) ?? ""
-        if isShellPromptLine(cursorLine) {
-            isInteractivePrompt = false
-            if modeController.mode == .passthrough {
-                modeController.switchToEditor()
-                injectContextIfNeeded()
-            }
-        }
-    }
-
-    private func isShellPromptLine(_ line: String) -> Bool {
-        line.hasSuffix(" $") || line.hasSuffix(" %")
-            || line.hasSuffix(" #") || line == "$"
-            || line == "%" || line == "#"
-    }
-
-    /// Returns true if the line is an AI tool prompt: a single prompt character
-    /// optionally followed by whitespace. Handles `>`, `❯`, `›` and variations.
-    private func isAIPromptLine(_ line: String) -> Bool {
-        guard let first = line.first, Self.aiPromptCharacters.contains(first) else {
-            return false
-        }
-        // The rest (after the prompt character) must be empty or whitespace-only.
-        let rest = line.dropFirst()
-        return rest.allSatisfy(\.isWhitespace)
-    }
-
-    /// Schedules a debounced re-check of the screen buffer after PTY output settles.
-    /// Solves the race where prompt characters arrive across multiple data chunks —
-    /// the immediate `detectPromptFromScreenBuffer()` may fire before SwiftTerm has
-    /// rendered the full prompt line, and no further data event triggers a re-check.
-    private func schedulePromptRecheck() {
-        promptRecheckTask?.cancel()
-        promptRecheckTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-            } catch {}
-            guard !Task.isCancelled else { return }
-            self?.detectPromptFromScreenBuffer()
-        }
-    }
-
     // MARK: - Context injection
 
-    private func injectContextIfNeeded() {
+    func injectContextIfNeeded() {
         guard isRestoredSession, !hasInjectedContext else { return }
         hasInjectedContext = true
         let workingDir = currentMetadata.workingDirectory
@@ -261,8 +177,7 @@ final class TerminalViewModel: ObservableObject {
             guard let text = await service.buildInjectionText(projectRoot: workingDir) else { return }
             do {
                 try await Task.sleep(nanoseconds: AppConfig.SessionHandoff.injectionDelayNanoseconds)
-            } catch {}
-            guard !Task.isCancelled else { return }
+            } catch { return }
             await self?.engine.send(text)
         }
     }

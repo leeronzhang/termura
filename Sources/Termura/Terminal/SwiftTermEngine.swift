@@ -108,13 +108,13 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
         let cursorRow = terminal.getCursorLocation().y
         let clampedCount = min(count, AppConfig.Terminal.maxScrollbackLines)
         let startRow = max(0, cursorRow - clampedCount)
-        var lines: [String] = []
+        var result: [String] = []
         for row in startRow ... cursorRow {
             if let line = terminal.getLine(row: row) {
-                lines.append(line.translateToString(trimRight: true))
+                result.append(line.translateToString(trimRight: true))
             }
         }
-        return lines
+        return result
     }
 
     func terminate() async {

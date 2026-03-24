@@ -10,31 +10,20 @@ extension TerminalAreaView {
     }
 
     var projectPathBar: some View {
-        HStack(spacing: AppUI.Spacing.smMd) {
+        HStack(spacing: 0) {
             Button {
                 openDirectoryPicker()
             } label: {
-                Image(systemName: "folder.fill")
-                    .font(AppUI.Font.caption)
-                    .foregroundColor(isAgentBusy ? .secondary.opacity(AppUI.Opacity.dimmed) : .secondary)
-            }
-            .buttonStyle(.plain)
-            .disabled(isAgentBusy)
-            .help(isAgentBusy ? "Agent is running — cannot change directory" : "Change working directory")
-
-            Button {
-                openDirectoryPicker()
-            } label: {
-                Text(abbreviatedWorkingDirectory)
-                    .font(AppUI.Font.labelMono)
-                    .foregroundColor(.primary.opacity(AppUI.Opacity.strong))
+                Text(viewModel.currentMetadata.workingDirectory)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundColor(.secondary.opacity(AppUI.Opacity.strong))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
             .buttonStyle(.plain)
             .disabled(isAgentBusy)
             .onHover { hovering in
-                if hovering {
+                if hovering && !isAgentBusy {
                     NSCursor.pointingHand.push()
                 } else {
                     NSCursor.pop()
@@ -42,18 +31,16 @@ extension TerminalAreaView {
             }
             .help(isAgentBusy ? "Agent is running" : "Switch working directory")
 
-            Button { showContextSheet = true } label: {
-                Image(systemName: "doc.text")
-                    .font(AppUI.Font.caption)
-                    .foregroundColor(
-                        contextFileExists
-                            ? .accentColor
-                            : .secondary.opacity(AppUI.Opacity.dimmed)
-                    )
+            if contextFileExists {
+                Button { showContextSheet = true } label: {
+                    Image(systemName: "doc.text")
+                        .font(AppUI.Font.caption)
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, AppUI.Spacing.smMd)
+                .help("Session context (context.md)")
             }
-            .buttonStyle(.plain)
-            .disabled(!contextFileExists)
-            .help("Session context (context.md)")
 
             Spacer()
 
