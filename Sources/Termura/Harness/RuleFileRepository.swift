@@ -102,11 +102,11 @@ actor RuleFileRepository: RuleFileRepositoryProtocol {
             let rows = try RuleFileRow.fetchAll(
                 database,
                 sql: """
-                    SELECT * FROM rule_files
-                    WHERE file_path = ?
-                    ORDER BY version DESC
-                    LIMIT ?
-                    """,
+                SELECT * FROM rule_files
+                WHERE file_path = ?
+                ORDER BY version DESC
+                LIMIT ?
+                """,
                 arguments: [filePath, AppConfig.Harness.maxVersionHistory]
             )
             return try rows.map { try $0.toRecord() }
@@ -118,10 +118,10 @@ actor RuleFileRepository: RuleFileRepositoryProtocol {
             let row = try RuleFileRow.fetchOne(
                 database,
                 sql: """
-                    SELECT * FROM rule_files
-                    WHERE file_path = ?
-                    ORDER BY version DESC LIMIT 1
-                    """,
+                SELECT * FROM rule_files
+                WHERE file_path = ?
+                ORDER BY version DESC LIMIT 1
+                """,
                 arguments: [filePath]
             )
             return try row?.toRecord()
@@ -133,13 +133,13 @@ actor RuleFileRepository: RuleFileRepositoryProtocol {
             let rows = try RuleFileRow.fetchAll(
                 database,
                 sql: """
-                    SELECT r1.* FROM rule_files r1
-                    INNER JOIN (
-                        SELECT file_path, MAX(version) as max_ver
-                        FROM rule_files GROUP BY file_path
-                    ) r2 ON r1.file_path = r2.file_path AND r1.version = r2.max_ver
-                    ORDER BY r1.file_path
-                    """
+                SELECT r1.* FROM rule_files r1
+                INNER JOIN (
+                    SELECT file_path, MAX(version) as max_ver
+                    FROM rule_files GROUP BY file_path
+                ) r2 ON r1.file_path = r2.file_path AND r1.version = r2.max_ver
+                ORDER BY r1.file_path
+                """
             )
             return try rows.map { try $0.toRecord() }
         }

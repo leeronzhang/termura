@@ -19,7 +19,6 @@ enum OSC777Event: Sendable, Equatable {
 /// Stateless parsers for OSC 9, 99, and 777 payloads.
 /// Follows the same pattern as `OSC133Parser`.
 enum OSCExtendedParser {
-
     // MARK: - OSC 9: Growl-style notification
 
     static func parseOSC9(_ payload: ArraySlice<UInt8>) -> OSC9Event? {

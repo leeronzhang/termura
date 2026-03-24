@@ -11,20 +11,20 @@ enum RepositoryError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidID(let id):
-            return "Invalid record ID: \(id)"
-        case .invalidColorLabel(let label):
-            return "Invalid color label: \(label)"
-        case .invalidBranchType(let type):
-            return "Invalid branch type: \(type)"
-        case .notFound(let id):
-            return "Record not found: \(id)"
+        case let .invalidID(id):
+            "Invalid record ID: \(id)"
+        case let .invalidColorLabel(label):
+            "Invalid color label: \(label)"
+        case let .invalidBranchType(type):
+            "Invalid branch type: \(type)"
+        case let .notFound(id):
+            "Record not found: \(id)"
         case .compressionFailed:
-            return "Data compression/decompression failed."
-        case .migrationFailed(let detail):
-            return "Database migration failed: \(detail)"
+            "Data compression/decompression failed."
+        case let .migrationFailed(detail):
+            "Database migration failed: \(detail)"
         case .branchDepthExceeded:
-            return "Session tree depth exceeds maximum (\(AppConfig.SessionTree.maxDepth))."
+            "Session tree depth exceeds maximum (\(AppConfig.SessionTree.maxDepth))."
         }
     }
 }

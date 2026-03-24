@@ -9,7 +9,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "LibghosttyE
 /// native API is available.
 @MainActor
 final class LibghosttyEngine: TerminalEngine {
-
     // MARK: - TerminalEngine conformance
 
     let outputStream: AsyncStream<TerminalOutputEvent>
@@ -29,16 +28,16 @@ final class LibghosttyEngine: TerminalEngine {
         guard let outCap else {
             preconditionFailure("AsyncStream continuation must be set synchronously")
         }
-        self.outputStream = outStream
-        self.outputContinuation = outCap
+        outputStream = outStream
+        outputContinuation = outCap
 
         var shellCap: AsyncStream<ShellIntegrationEvent>.Continuation?
         let shellStream = AsyncStream<ShellIntegrationEvent> { shellCap = $0 }
         guard let shellCap else {
             preconditionFailure("AsyncStream shell continuation must be set synchronously")
         }
-        self.shellEventsStream = shellStream
-        self.shellContinuation = shellCap
+        shellEventsStream = shellStream
+        shellContinuation = shellCap
 
         logger.debug("LibghosttyEngine stub created for session \(sessionID.rawValue)")
     }
@@ -46,15 +45,15 @@ final class LibghosttyEngine: TerminalEngine {
     // MARK: - TerminalEngine methods (stubs)
 
     func send(_ text: String) async {
-        // TODO: libghostty API
+        // libghostty API stub
     }
 
     func sendBytes(_ data: Data) async {
-        // TODO: libghostty API
+        // libghostty API stub
     }
 
     func resize(columns: UInt16, rows: UInt16) async {
-        // TODO: libghostty API
+        // libghostty API stub
     }
 
     func terminate() async {
@@ -64,12 +63,12 @@ final class LibghosttyEngine: TerminalEngine {
     }
 
     func cursorLineContent() -> String? {
-        // TODO: libghostty API
+        // libghostty API stub
         nil
     }
 
     func linesNearCursor(above count: Int) -> [String] {
-        // TODO: libghostty API
+        // libghostty API stub
         []
     }
 }

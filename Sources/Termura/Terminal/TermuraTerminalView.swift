@@ -10,7 +10,6 @@ import SwiftTerm
 /// This is the only public hook SwiftTerm exposes for raw output interception
 /// without reimplementing PTY management from scratch.
 final class TermuraTerminalView: LocalProcessTerminalView {
-
     /// Called synchronously on the main queue for every PTY read batch.
     /// Captures only `Sendable` types so it is safe to hold across actor boundaries.
     var onDataReceived: ((ArraySlice<UInt8>) -> Void)?

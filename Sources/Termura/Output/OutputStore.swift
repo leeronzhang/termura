@@ -4,7 +4,6 @@ import Foundation
 /// Maintains a sliding window of the most recent `capacity` chunks.
 @MainActor
 final class OutputStore: ObservableObject {
-
     // MARK: - Published state
 
     @Published private(set) var chunks: [OutputChunk] = []

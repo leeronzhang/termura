@@ -6,7 +6,7 @@ actor MockDatabaseService: DatabaseServiceProtocol {
     private let queue: DatabaseQueue
 
     init() throws {
-        queue = try DatabaseQueue()   // in-memory
+        queue = try DatabaseQueue() // in-memory
         var migrator = DatabaseMigrator()
         DatabaseMigrations.register(into: &migrator)
         try migrator.migrate(queue)

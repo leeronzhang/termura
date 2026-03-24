@@ -6,7 +6,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "RuleFilePar
 /// Parses Markdown-based harness rule files into structured sections.
 /// Supports AGENTS.md, CLAUDE.md, .cursorrules, CONVENTIONS.md.
 enum RuleFileParser {
-
     /// Parse a rule file's content into sections.
     static func parse(_ content: String) -> [RuleSection] {
         let lines = content.components(separatedBy: "\n")
@@ -22,7 +21,7 @@ enum RuleFileParser {
                 // Emit previous section
                 if let prevHeading = currentHeading {
                     let body = currentBody.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-                    let range = sectionStartLine...max(sectionStartLine, lineNum - 1)
+                    let range = sectionStartLine ... max(sectionStartLine, lineNum - 1)
                     sections.append(RuleSection(
                         heading: prevHeading, level: currentLevel,
                         body: body, lineRange: range
@@ -40,7 +39,7 @@ enum RuleFileParser {
         // Emit last section
         if let heading = currentHeading {
             let body = currentBody.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            let range = sectionStartLine...max(sectionStartLine, lines.count)
+            let range = sectionStartLine ... max(sectionStartLine, lines.count)
             sections.append(RuleSection(
                 heading: heading, level: currentLevel,
                 body: body, lineRange: range

@@ -3,7 +3,6 @@ import Foundation
 /// Test double for TerminalEngine. Captures all interactions for assertion.
 @MainActor
 final class MockTerminalEngine: TerminalEngine {
-
     // MARK: - Streams
 
     let outputStream: AsyncStream<TerminalOutputEvent>

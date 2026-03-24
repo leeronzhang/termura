@@ -90,10 +90,10 @@ actor HarnessEventRepository: HarnessEventRepositoryProtocol {
             let rows = try HarnessEventRow.fetchAll(
                 database,
                 sql: """
-                    SELECT * FROM harness_events
-                    WHERE session_id = ?
-                    ORDER BY created_at ASC
-                    """,
+                SELECT * FROM harness_events
+                WHERE session_id = ?
+                ORDER BY created_at ASC
+                """,
                 arguments: [idStr]
             )
             return try rows.map { try $0.toEvent() }
@@ -117,10 +117,10 @@ actor HarnessEventRepository: HarnessEventRepositoryProtocol {
             let rows = try HarnessEventRow.fetchAll(
                 database,
                 sql: """
-                    SELECT * FROM harness_events
-                    WHERE session_id = ? AND event_type = ?
-                    ORDER BY created_at ASC
-                    """,
+                SELECT * FROM harness_events
+                WHERE session_id = ? AND event_type = ?
+                ORDER BY created_at ASC
+                """,
                 arguments: [idStr, type.rawValue]
             )
             return try rows.map { try $0.toEvent() }

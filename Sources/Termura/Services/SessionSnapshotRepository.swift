@@ -18,10 +18,10 @@ actor SessionSnapshotRepository {
         try await db.write { database in
             try database.execute(
                 sql: """
-                    INSERT OR REPLACE INTO session_snapshots
-                        (session_id, compressed_data, line_count, saved_at)
-                    VALUES (?, ?, ?, ?)
-                    """,
+                INSERT OR REPLACE INTO session_snapshots
+                    (session_id, compressed_data, line_count, saved_at)
+                VALUES (?, ?, ?, ?)
+                """,
                 arguments: [idStr, compressed, count, now]
             )
         }
@@ -34,9 +34,9 @@ actor SessionSnapshotRepository {
             guard let row = try Row.fetchOne(
                 database,
                 sql: """
-                    SELECT compressed_data, line_count
-                    FROM session_snapshots WHERE session_id = ?
-                    """,
+                SELECT compressed_data, line_count
+                FROM session_snapshots WHERE session_id = ?
+                """,
                 arguments: [idStr]
             ) else { return nil }
             let data: Data = row["compressed_data"]

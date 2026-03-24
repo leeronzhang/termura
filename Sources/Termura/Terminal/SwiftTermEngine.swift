@@ -9,7 +9,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "SwiftTermEn
 /// @MainActor: SwiftTerm callbacks fire on main thread.
 @MainActor
 final class SwiftTermEngine: NSObject, TerminalEngine {
-
     // MARK: - Public interface
 
     let outputStream: AsyncStream<TerminalOutputEvent>
@@ -107,9 +106,10 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
     func linesNearCursor(above count: Int) -> [String] {
         let terminal = terminalView.getTerminal()
         let cursorRow = terminal.getCursorLocation().y
-        let startRow = max(0, cursorRow - count)
+        let clampedCount = min(count, AppConfig.Terminal.maxScrollbackLines)
+        let startRow = max(0, cursorRow - clampedCount)
         var lines: [String] = []
-        for row in startRow...cursorRow {
+        for row in startRow ... cursorRow {
             if let line = terminal.getLine(row: row) {
                 lines.append(line.translateToString(trimRight: true))
             }

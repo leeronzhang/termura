@@ -6,7 +6,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ContextInje
 /// Builds context injection text from a project's `.termura/context.md` for
 /// auto-sending into a restored terminal session.
 actor ContextInjectionService {
-
     private let handoffService: SessionHandoffService
 
     init(handoffService: SessionHandoffService) {
@@ -21,14 +20,13 @@ actor ContextInjectionService {
             return nil
         }
 
-        let text: String
-        switch context.agentType {
+        let text: String = switch context.agentType {
         case .claudeCode:
-            text = formatForClaudeCode(context)
+            formatForClaudeCode(context)
         case .aider:
-            text = formatForAider(context)
+            formatForAider(context)
         default:
-            text = formatForShell(context)
+            formatForShell(context)
         }
 
         guard !text.isEmpty else { return nil }

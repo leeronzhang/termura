@@ -3,7 +3,6 @@ import Foundation
 /// Controls whether the input area is in editor mode (NSTextView) or raw passthrough.
 @MainActor
 final class InputModeController: ObservableObject {
-
     enum Mode: Sendable {
         case editor
         case passthrough

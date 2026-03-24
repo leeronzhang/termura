@@ -6,12 +6,12 @@ private let logger = Logger(subsystem: "com.termura.app", category: "Notificatio
 
 protocol NotificationServiceProtocol: Sendable {
     func notifyIfLong(_ chunk: OutputChunk) async
+    func notifyContextWindow(_ alert: ContextWindowAlert) async
 }
 
 /// Requests UNUserNotification permission and fires a system alert when
 /// a command runs longer than `AppConfig.Runtime.longCommandThresholdSeconds`.
 actor NotificationService: NotificationServiceProtocol {
-
     init() {
         Task { await requestAuthorization() }
     }
@@ -36,6 +36,30 @@ actor NotificationService: NotificationServiceProtocol {
             try await UNUserNotificationCenter.current().add(request)
         } catch {
             logger.error("Failed to schedule notification: \(error)")
+        }
+    }
+
+    func notifyContextWindow(_ alert: ContextWindowAlert) async {
+        let isCritical = alert.level == .critical
+        let content = UNMutableNotificationContent()
+        content.title = "\(alert.agentType.rawValue) context \(isCritical ? "nearly full" : "getting full")"
+        content.body = String(
+            format: "%.0f%% used (%dk / %dk tokens)",
+            alert.usageFraction * 100,
+            alert.estimatedTokens / 1000,
+            alert.contextLimit / 1000
+        )
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "ctx-\(alert.sessionID)",
+            content: content,
+            trigger: nil
+        )
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            logger.error("Failed to schedule context window notification: \(error)")
         }
     }
 
@@ -64,8 +88,13 @@ actor NotificationService: NotificationServiceProtocol {
 
 actor MockNotificationService: NotificationServiceProtocol {
     private(set) var notifiedChunks: [OutputChunk] = []
+    private(set) var notifiedContextAlerts: [ContextWindowAlert] = []
 
     func notifyIfLong(_ chunk: OutputChunk) async {
         notifiedChunks.append(chunk)
+    }
+
+    func notifyContextWindow(_ alert: ContextWindowAlert) async {
+        notifiedContextAlerts.append(alert)
     }
 }

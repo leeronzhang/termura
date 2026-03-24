@@ -6,13 +6,12 @@ private let logger = Logger(subsystem: "com.termura.app", category: "BranchSumma
 /// Generates a summary of a completed branch session.
 /// Currently uses a heuristic extractor; can be extended to call local/remote LLM.
 actor BranchSummarizer {
-
     /// Generate a summary from the session's output chunks.
     func summarize(chunks: [OutputChunk], branchType: BranchType) -> String {
         guard !chunks.isEmpty else { return "Empty branch session." }
 
         let commandCount = chunks.count
-        let errorCount = chunks.filter { $0.exitCode != nil && $0.exitCode != 0 }.count
+        let errorCount = chunks.count(where: { $0.exitCode != nil && $0.exitCode != 0 })
         let commands = chunks.compactMap { $0.commandText.isEmpty ? nil : $0.commandText }
         let topCommands = Array(commands.prefix(5))
 

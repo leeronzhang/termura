@@ -7,7 +7,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "EmbeddingSe
 /// Uses a lightweight heuristic (TF-IDF-style) as a placeholder;
 /// can be replaced with Core ML + MiniLM-L6 when the model is bundled.
 actor EmbeddingService {
-
     private let dimension = AppConfig.SemanticSearch.embeddingDimension
 
     /// Generate an embedding vector for a text chunk.
@@ -26,7 +25,9 @@ actor EmbeddingService {
         // L2 normalize
         let norm = sqrt(vector.reduce(0) { $0 + $1 * $1 })
         if norm > 0 {
-            for i in vector.indices { vector[i] /= norm }
+            for i in vector.indices {
+                vector[i] /= norm
+            }
         }
 
         return vector
@@ -57,7 +58,7 @@ actor EmbeddingService {
 
         while start < words.count {
             let end = min(start + maxTokens, words.count)
-            let slice = words[start..<end].joined(separator: " ")
+            let slice = words[start ..< end].joined(separator: " ")
             chunks.append(TextChunk(text: slice, offset: start))
             start += maxTokens - overlap
             if start >= words.count { break }
@@ -75,12 +76,12 @@ actor EmbeddingService {
     }
 
     private func fnvHash(_ string: String) -> UInt64 {
-        var h: UInt64 = 14_695_981_039_346_656_037
+        var hashValue: UInt64 = 14_695_981_039_346_656_037
         for byte in string.utf8 {
-            h ^= UInt64(byte)
-            h &*= 1_099_511_628_211
+            hashValue ^= UInt64(byte)
+            hashValue &*= 1_099_511_628_211
         }
-        return h
+        return hashValue
     }
 }
 

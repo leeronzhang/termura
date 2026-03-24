@@ -17,7 +17,7 @@ struct TermuraApp: App {
             .environmentObject(appDelegate.engineStore)
             .environmentObject(appDelegate.themeManager)
         }
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
             AppCommands()
         }

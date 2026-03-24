@@ -2,8 +2,7 @@ import SwiftUI
 
 /// Centralized design tokens for consistent spacing, typography, radii, and opacity.
 /// All magic numbers in views must reference `DS` instead of inline literals.
-enum DS {
-
+enum AppUI {
     // MARK: - Spacing Scale
 
     enum Spacing {
@@ -36,16 +35,16 @@ enum DS {
     // MARK: - Corner Radius
 
     enum Radius {
-        /// 2pt — color swatches, tiny elements
-        static let xs: CGFloat = 2
-        /// 4pt — badges, inline tags, timeline rows, progress bars
-        static let sm: CGFloat = 4
-        /// 6pt — list rows, session cards
-        static let md: CGFloat = 6
-        /// 8pt — panels, sheets, cards
-        static let lg: CGFloat = 8
-        /// 10pt — floating overlays, search dialogs
-        static let xl: CGFloat = 10
+        /// 0pt — sharp corners for all internal UI elements
+        static let xs: CGFloat = 0
+        /// 0pt — sharp corners for all internal UI elements
+        static let sm: CGFloat = 0
+        /// 0pt — sharp corners for all internal UI elements
+        static let md: CGFloat = 0
+        /// 0pt — sharp corners for all internal UI elements
+        static let lg: CGFloat = 0
+        /// 0pt — sharp corners for all internal UI elements
+        static let xl: CGFloat = 0
     }
 
     // MARK: - Typography
@@ -135,11 +134,11 @@ enum DS {
 
     enum Shadow {
         /// Floating card shadow radius
-        static let cardRadius: CGFloat = 8
+        static let cardRadius: CGFloat = 20
         /// Floating card shadow Y offset
-        static let cardY: CGFloat = 2
+        static let cardY: CGFloat = 10
         /// Floating card shadow opacity
-        static let cardOpacity: Double = 0.15
+        static let cardOpacity: Double = 0.1
     }
 
     // MARK: - Animation

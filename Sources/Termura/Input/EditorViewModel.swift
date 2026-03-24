@@ -7,7 +7,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "EditorViewM
 /// Manages text state, history navigation, and command submission.
 @MainActor
 final class EditorViewModel: ObservableObject {
-
     // MARK: - Published state
 
     @Published private(set) var currentText: String = ""
@@ -23,7 +22,7 @@ final class EditorViewModel: ObservableObject {
     init(engine: any TerminalEngine, modeController: InputModeController) {
         self.engine = engine
         self.modeController = modeController
-        self.history = InputHistory()
+        history = InputHistory()
     }
 
     // MARK: - Actions

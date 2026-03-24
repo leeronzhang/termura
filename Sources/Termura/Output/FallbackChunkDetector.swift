@@ -7,13 +7,12 @@ private let logger = Logger(subsystem: "com.termura.app", category: "FallbackChu
 /// Detects chunk boundaries by matching shell prompt patterns ($, %, #, >) in ANSI-stripped output.
 /// Used as a fallback when `hasReceivedShellEvents` is false.
 actor FallbackChunkDetector {
-
     // MARK: - State
 
     private var pendingLines: [String] = []
     private var pendingRawANSI: String = ""
     private var currentCommand: String = ""
-    private var chunkStart: Date = Date()
+    private var chunkStart: Date = .init()
     private let sessionID: SessionID
 
     // MARK: - Instance regex
@@ -29,10 +28,11 @@ actor FallbackChunkDetector {
     ///     which matches Claude Code's `>` prompt without overlapping OSC 133 shell events.
     init(sessionID: SessionID, pattern: String = AppConfig.Output.aiToolPromptPattern) {
         self.sessionID = sessionID
-        guard let regex = try? NSRegularExpression(pattern: pattern) else {
-            preconditionFailure("FallbackChunkDetector: invalid pattern '\(pattern)'")
+        do {
+            promptRegex = try NSRegularExpression(pattern: pattern)
+        } catch {
+            preconditionFailure("FallbackChunkDetector: invalid pattern '\(pattern)': \(error)")
         }
-        self.promptRegex = regex
     }
 
     // MARK: - Public API

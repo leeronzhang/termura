@@ -53,9 +53,9 @@ struct OutputChunk: Identifiable, Sendable {
         self.finishedAt = finishedAt
         self.isCollapsed = isCollapsed
         let charCount = outputLines.joined().count
-        self.estimatedTokens = max(1, charCount / Int(AppConfig.AI.tokenEstimateDivisor))
+        estimatedTokens = max(1, charCount / Int(AppConfig.AI.tokenEstimateDivisor))
         self.contentType = contentType
-        self.modelContent = rawANSI
+        modelContent = rawANSI
         self.uiContent = uiContent ?? UIContentBlock(
             type: contentType,
             exitCode: exitCode,

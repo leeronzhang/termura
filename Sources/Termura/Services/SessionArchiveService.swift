@@ -18,6 +18,6 @@ actor SessionArchiveService {
     /// Returns archived sessions.
     /// Phase 3: returns empty — archive browser is Phase 4.
     func fetchArchived() async throws -> [SessionRecord] {
-        return []
+        []
     }
 }

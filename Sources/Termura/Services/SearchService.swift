@@ -9,12 +9,6 @@ struct SearchResults: Sendable {
     let query: String
 
     static let empty = SearchResults(sessions: [], notes: [], query: "")
-
-    init(sessions: [SessionRecord], notes: [NoteRecord], query: String) {
-        self.sessions = sessions
-        self.notes = notes
-        self.query = query
-    }
 }
 
 actor SearchService {
@@ -35,7 +29,7 @@ actor SearchService {
         }
         async let sessions = sessionRepository.search(query: query)
         async let notes = noteRepository.search(query: query)
-        let (s, n) = try await (sessions, notes)
-        return SearchResults(sessions: s, notes: n, query: query)
+        let (foundSessions, foundNotes) = try await (sessions, notes)
+        return SearchResults(sessions: foundSessions, notes: foundNotes, query: query)
     }
 }

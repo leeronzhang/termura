@@ -3,7 +3,6 @@ import Foundation
 /// Stateless parser that classifies raw PTY output into semantic content types.
 /// Used by `ChunkDetector` to populate dual-track `OutputChunk` fields.
 enum SemanticParser {
-
     /// Analyze output text and return its semantic classification + optional metadata.
     static func classify(_ text: String, command: String = "") -> Classification {
         if isDiff(text) {
@@ -53,10 +52,8 @@ enum SemanticParser {
     }
 
     private static func extractDiffPath(_ text: String) -> String? {
-        for line in text.components(separatedBy: "\n") {
-            if line.hasPrefix("+++ b/") {
-                return String(line.dropFirst(6))
-            }
+        for line in text.components(separatedBy: "\n") where line.hasPrefix("+++ b/") {
+            return String(line.dropFirst(6))
         }
         return nil
     }

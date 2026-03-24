@@ -35,7 +35,9 @@ final class MenuBarService: NSObject {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem?.button else { return }
-        button.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "Termura")
+        let icon = NSImage(named: "MenuBarIcon") ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Termura")
+        icon?.isTemplate = true
+        button.image = icon
         button.target = self
         button.action = #selector(handleClick)
     }

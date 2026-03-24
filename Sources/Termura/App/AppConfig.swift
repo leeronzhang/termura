@@ -51,14 +51,28 @@ enum AppConfig {
     enum AI {
         /// Heuristic: chars / 4 ≈ tokens
         static let tokenEstimateDivisor: Double = 4.0
-        static let contextWarningThreshold = 100_000
+    }
+
+    enum ContextWindow {
+        static let claudeCodeLimit = 200_000
+        static let codexLimit = 128_000
+        static let aiderLimit = 128_000
+        static let openCodeLimit = 128_000
+        static let piLimit = 128_000
+        static let unknownLimit = 100_000
+        /// Fraction of context window at which to show a warning.
+        static let warningThreshold: Double = 0.8
+        /// Fraction of context window at which to show a critical alert.
+        static let criticalThreshold: Double = 0.95
+        /// Minimum interval between context window notifications (seconds).
+        static let notificationCooldownSeconds: Double = 60.0
     }
 
     // swiftlint:disable:next type_name
     enum UI {
         static let sidebarMinWidth: Double = 180
-        static let sidebarMaxWidth: Double = 280
-        static let sidebarDefaultWidth: Double = 220
+        static let sidebarMaxWidth: Double = 480
+        static let sidebarDefaultWidth: Double = 280
         static let metadataBarHeight: Double = 28
         static let metadataPanelWidth: Double = 160
         static let metadataPanelMinWidth: Double = 120
@@ -78,7 +92,7 @@ enum AppConfig {
     enum Output {
         static let maxChunksPerSession = 500
         static let maxChunkOutputChars = 200_000
-        static let ansiStripBatchSize = 4_096
+        static let ansiStripBatchSize = 4096
         /// Regex pattern matching shell prompt line endings (zsh/bash/fish/sh).
         /// Matches lines ending with $, %, #, or > optionally followed by whitespace.
         static let fallbackPromptPattern = ".*[$%#>]\\s*$"
@@ -122,7 +136,7 @@ enum AppConfig {
         /// Built-in HTML template name (without extension).
         static let htmlTemplateName = "session_export"
         /// Maximum messages per export operation.
-        static let maxExportMessages = 10_000
+        static let maxExportMessages = 10000
     }
 
     enum SplitPane {
@@ -167,11 +181,12 @@ enum AppConfig {
         static let injectionDelayNanoseconds: UInt64 = 200_000_000
     }
 
+    enum TerminalBackend: String, Sendable {
+        case swiftTerm
+        case libghostty
+    }
+
     enum Backend {
-        enum TerminalBackend: String, Sendable {
-            case swiftTerm
-            case libghostty
-        }
         static let activeBackend: TerminalBackend = .swiftTerm
     }
 

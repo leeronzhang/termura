@@ -6,7 +6,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ExperienceC
 /// Converts agent error context into a rule draft and appends it to a harness file.
 /// The append is also recorded as a `HarnessEvent` in the session metadata layer.
 actor ExperienceCodifier {
-
     private let harnessEventRepo: any HarnessEventRepositoryProtocol
 
     init(harnessEventRepo: any HarnessEventRepositoryProtocol) {
@@ -17,13 +16,13 @@ actor ExperienceCodifier {
     func generateDraft(from chunk: OutputChunk) -> RuleDraft {
         let errorSummary = extractErrorSummary(chunk)
         let ruleText = """
-            ## Avoid: \(errorSummary.title)
+        ## Avoid: \(errorSummary.title)
 
-            When \(errorSummary.context), do not \(errorSummary.antiPattern).
-            Instead, \(errorSummary.suggestion).
+        When \(errorSummary.context), do not \(errorSummary.antiPattern).
+        Instead, \(errorSummary.suggestion).
 
-            <!-- Codified from session error on \(ISO8601DateFormatter().string(from: Date())) -->
-            """
+        <!-- Codified from session error on \(ISO8601DateFormatter().string(from: Date())) -->
+        """
         return RuleDraft(
             errorChunkID: chunk.id,
             sessionID: chunk.sessionID,
@@ -50,7 +49,11 @@ actor ExperienceCodifier {
         try newContent.write(toFile: filePath, atomically: true, encoding: .utf8)
 
         // Clean up backup
-        try? FileManager.default.removeItem(atPath: backupPath)
+        do {
+            try FileManager.default.removeItem(atPath: backupPath)
+        } catch {
+            logger.error("Failed to remove backup rule file: \(error)")
+        }
 
         // Record harness event
         let event = HarnessEvent(

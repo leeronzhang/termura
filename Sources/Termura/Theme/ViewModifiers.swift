@@ -6,7 +6,7 @@ import SwiftUI
 struct PanelHeaderModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .font(DS.Font.panelHeader)
+            .font(AppUI.Font.panelHeader)
             .foregroundColor(.secondary)
             .textCase(.uppercase)
     }
@@ -24,7 +24,7 @@ extension View {
 struct SectionLabelModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .font(DS.Font.sectionHeader)
+            .font(AppUI.Font.sectionHeader)
             .foregroundColor(.secondary)
             .textCase(.uppercase)
     }
@@ -49,7 +49,7 @@ struct HoverRowModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(
                         isHovered
-                            ? Color(nsColor: .selectedContentBackgroundColor).opacity(DS.Opacity.highlight)
+                            ? Color(nsColor: .selectedContentBackgroundColor).opacity(AppUI.Opacity.highlight)
                             : Color.clear
                     )
             )
@@ -57,7 +57,7 @@ struct HoverRowModifier: ViewModifier {
 }
 
 extension View {
-    func hoverRow(isHovered: Bool, cornerRadius: CGFloat = DS.Radius.sm) -> some View {
+    func hoverRow(isHovered: Bool, cornerRadius: CGFloat = AppUI.Radius.sm) -> some View {
         modifier(HoverRowModifier(isHovered: isHovered, cornerRadius: cornerRadius))
     }
 }
@@ -69,9 +69,9 @@ struct FloatingCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .shadow(
-                color: .black.opacity(DS.Shadow.cardOpacity),
-                radius: DS.Shadow.cardRadius,
-                y: DS.Shadow.cardY
+                color: .black.opacity(AppUI.Shadow.cardOpacity),
+                radius: AppUI.Shadow.cardRadius,
+                y: AppUI.Shadow.cardY
             )
     }
 }
@@ -87,9 +87,9 @@ extension View {
 extension View {
     /// Applies a modifier only when the condition is true.
     @ViewBuilder
-    func `if`<Transform: View>(
+    func `if`(
         _ condition: Bool,
-        transform: (Self) -> Transform
+        transform: (Self) -> some View
     ) -> some View {
         if condition {
             transform(self)

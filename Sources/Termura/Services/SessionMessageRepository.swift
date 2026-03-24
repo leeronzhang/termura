@@ -107,25 +107,24 @@ actor SessionMessageRepository: SessionMessageRepositoryProtocol {
     ) async throws -> [SessionMessage] {
         let idStr = sessionID.rawValue.uuidString
         return try await db.read { database in
-            let rows: [MessageRow]
-            if let ct = contentType {
-                rows = try MessageRow.fetchAll(
+            let rows: [MessageRow] = if let ct = contentType {
+                try MessageRow.fetchAll(
                     database,
                     sql: """
-                        SELECT * FROM session_messages
-                        WHERE session_id = ? AND content_type = ?
-                        ORDER BY created_at ASC
-                        """,
+                    SELECT * FROM session_messages
+                    WHERE session_id = ? AND content_type = ?
+                    ORDER BY created_at ASC
+                    """,
                     arguments: [idStr, ct.rawValue]
                 )
             } else {
-                rows = try MessageRow.fetchAll(
+                try MessageRow.fetchAll(
                     database,
                     sql: """
-                        SELECT * FROM session_messages
-                        WHERE session_id = ?
-                        ORDER BY created_at ASC
-                        """,
+                    SELECT * FROM session_messages
+                    WHERE session_id = ?
+                    ORDER BY created_at ASC
+                    """,
                     arguments: [idStr]
                 )
             }
@@ -169,10 +168,10 @@ actor SessionMessageRepository: SessionMessageRepositoryProtocol {
             let count = try Int.fetchOne(
                 database,
                 sql: """
-                    SELECT COALESCE(SUM(token_count), 0)
-                    FROM session_messages
-                    WHERE session_id = ? AND content_type = ?
-                    """,
+                SELECT COALESCE(SUM(token_count), 0)
+                FROM session_messages
+                WHERE session_id = ? AND content_type = ?
+                """,
                 arguments: [idStr, contentType.rawValue]
             )
             return count ?? 0

@@ -11,8 +11,8 @@ enum ShellType: String, CaseIterable, Sendable {
 
     var rcFileName: String {
         switch self {
-        case .zsh: return ".zshrc"
-        case .bash: return ".bashrc"
+        case .zsh: ".zshrc"
+        case .bash: ".bashrc"
         }
     }
 }
@@ -22,7 +22,6 @@ enum ShellType: String, CaseIterable, Sendable {
 /// Installs OSC 133 shell integration hooks into the user's shell RC file.
 /// Runs all file I/O off-MainActor as a Swift actor.
 actor ShellHookInstaller {
-
     // MARK: - Public API
 
     /// Append the Termura shell hook to the given shell's RC file if not already present.
@@ -30,11 +29,10 @@ actor ShellHookInstaller {
         let rcPath = rcFilePath(for: shell)
         let script = hookScript(for: shell)
 
-        let alreadyInstalled: Bool
-        if fileExists(at: rcPath) {
-            alreadyInstalled = try isHookPresent(in: rcPath)
+        let alreadyInstalled: Bool = if fileExists(at: rcPath) {
+            try isHookPresent(in: rcPath)
         } else {
-            alreadyInstalled = false
+            false
         }
         guard !alreadyInstalled else {
             logger.info("Shell hook already installed for \(shell.rawValue)")
@@ -49,7 +47,13 @@ actor ShellHookInstaller {
         if fileExists(at: rcPath) {
             let handle = try FileHandle(forWritingAtPath: rcPath)
                 .orThrow(ShellHookError.fileOpenFailed(rcPath))
-            defer { try? handle.close() }
+            defer {
+                do {
+                    try handle.close()
+                } catch {
+                    logger.error("Failed to close RC file handle: \(error)")
+                }
+            }
             try handle.seekToEnd()
             try handle.write(contentsOf: data)
         } else {
@@ -61,7 +65,11 @@ actor ShellHookInstaller {
     /// Returns true if the Termura hook sentinel comment is already in the RC file.
     func isInstalled(for shell: ShellType) async -> Bool {
         let rcPath = rcFilePath(for: shell)
-        return (try? isHookPresent(in: rcPath)) ?? false
+        do {
+            return try isHookPresent(in: rcPath)
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Private helpers
@@ -72,7 +80,10 @@ actor ShellHookInstaller {
     }
 
     private func isHookPresent(in path: String) throws -> Bool {
-        guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
+        let contents: String
+        do {
+            contents = try String(contentsOfFile: path, encoding: .utf8)
+        } catch {
             return false
         }
         return contents.contains(AppConfig.ShellIntegration.hookSentinelComment)
@@ -85,9 +96,9 @@ actor ShellHookInstaller {
     private func hookScript(for shell: ShellType) -> String {
         switch shell {
         case .zsh:
-            return zshHookScript
+            zshHookScript
         case .bash:
-            return bashHookScript
+            bashHookScript
         }
     }
 }
@@ -136,9 +147,9 @@ enum ShellHookError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .encodingFailed:
-            return "Failed to encode shell hook script as UTF-8."
-        case .fileOpenFailed(let path):
-            return "Failed to open file for writing at: \(path)"
+            "Failed to encode shell hook script as UTF-8."
+        case let .fileOpenFailed(path):
+            "Failed to open file for writing at: \(path)"
         }
     }
 }

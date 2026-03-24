@@ -19,6 +19,10 @@ struct SessionMetadata: Sendable {
     var currentAgentType: AgentType?
     /// Current agent status for this session, if any.
     var currentAgentStatus: AgentStatus?
+    /// Agent-specific context window limit (0 if no agent detected).
+    var contextWindowLimit: Int
+    /// Context usage as a fraction of the context window (0.0–1.0).
+    var contextUsageFraction: Double
 
     // MARK: - Factory
 
@@ -32,7 +36,9 @@ struct SessionMetadata: Sendable {
             workingDirectory: workingDirectory,
             activeAgentCount: 0,
             currentAgentType: nil,
-            currentAgentStatus: nil
+            currentAgentStatus: nil,
+            contextWindowLimit: 0,
+            contextUsageFraction: 0
         )
     }
 }

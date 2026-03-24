@@ -3,7 +3,6 @@ import Foundation
 /// Background actor that accumulates character counts per session
 /// and provides heuristic token estimates (chars / divisor).
 actor TokenCountingService {
-
     // MARK: - State
 
     private var charCounts: [SessionID: Int] = [:]
@@ -13,7 +12,7 @@ actor TokenCountingService {
 
     init() {
         let rawDivisor = Int(AppConfig.AI.tokenEstimateDivisor)
-        self.divisor = max(1, rawDivisor)
+        divisor = max(1, rawDivisor)
     }
 
     // MARK: - Public API

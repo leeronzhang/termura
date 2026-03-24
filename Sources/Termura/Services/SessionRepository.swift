@@ -164,12 +164,12 @@ actor SessionRepository: SessionRepositoryProtocol {
             let rows = try SessionRow.fetchAll(
                 database,
                 sql: """
-                    SELECT s.* FROM sessions s
-                    JOIN sessions_fts fts ON s.rowid = fts.rowid
-                    WHERE sessions_fts MATCH ? AND s.archived_at IS NULL
-                    ORDER BY rank
-                    LIMIT ?
-                    """,
+                SELECT s.* FROM sessions s
+                JOIN sessions_fts fts ON s.rowid = fts.rowid
+                WHERE sessions_fts MATCH ? AND s.archived_at IS NULL
+                ORDER BY rank
+                LIMIT ?
+                """,
                 arguments: [ftsQuery, AppConfig.Search.maxResults]
             )
             return try rows.map { try $0.toRecord() }
@@ -219,10 +219,10 @@ actor SessionRepository: SessionRepositoryProtocol {
             let rows = try SessionRow.fetchAll(
                 database,
                 sql: """
-                    SELECT * FROM sessions
-                    WHERE parent_id = ? AND archived_at IS NULL
-                    ORDER BY created_at ASC
-                    """,
+                SELECT * FROM sessions
+                WHERE parent_id = ? AND archived_at IS NULL
+                ORDER BY created_at ASC
+                """,
                 arguments: [idStr]
             )
             return try rows.map { try $0.toRecord() }
@@ -235,17 +235,17 @@ actor SessionRepository: SessionRepositoryProtocol {
             let rows = try SessionRow.fetchAll(
                 database,
                 sql: """
-                    WITH RECURSIVE ancestors(id) AS (
-                        SELECT parent_id FROM sessions WHERE id = ?
-                        UNION ALL
-                        SELECT s.parent_id FROM sessions s
-                        JOIN ancestors a ON s.id = a.id
-                        WHERE s.parent_id IS NOT NULL
-                    )
-                    SELECT s.* FROM sessions s
+                WITH RECURSIVE ancestors(id) AS (
+                    SELECT parent_id FROM sessions WHERE id = ?
+                    UNION ALL
+                    SELECT s.parent_id FROM sessions s
                     JOIN ancestors a ON s.id = a.id
-                    ORDER BY s.created_at ASC
-                    """,
+                    WHERE s.parent_id IS NOT NULL
+                )
+                SELECT s.* FROM sessions s
+                JOIN ancestors a ON s.id = a.id
+                ORDER BY s.created_at ASC
+                """,
                 arguments: [idStr]
             )
             return try rows.map { try $0.toRecord() }

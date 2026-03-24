@@ -3,7 +3,6 @@ import AppKit
 /// NSTextView subclass providing editor-grade input for the terminal.
 /// Handles submit, newline insertion, and history navigation keys.
 final class EditorTextView: NSTextView {
-
     // MARK: - Callbacks (wired by Coordinator)
 
     /// Called when the user submits the current text (Enter / Cmd+Enter).

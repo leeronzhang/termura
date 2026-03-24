@@ -41,11 +41,11 @@ struct RuleFileRecord: Identifiable, Sendable {
     private static func hash(_ string: String) -> String {
         let data = Data(string.utf8)
         // FNV-1a hash as hex string (no CryptoKit dependency)
-        var h: UInt64 = 14_695_981_039_346_656_037
+        var hashValue: UInt64 = 14_695_981_039_346_656_037
         for byte in data {
-            h ^= UInt64(byte)
-            h &*= 1_099_511_628_211
+            hashValue ^= UInt64(byte)
+            hashValue &*= 1_099_511_628_211
         }
-        return String(format: "%016llx", h)
+        return String(format: "%016llx", hashValue)
     }
 }

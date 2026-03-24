@@ -59,36 +59,47 @@ final class ThemeManager: ObservableObject {
     // MARK: - Private — Color helpers
 
     private func uiColor(for token: ThemeToken) -> SwiftUI.Color? {
+        if let core = uiCoreColor(for: token) { return core }
+        return uiStatusColor(for: token)
+    }
+
+    private func uiCoreColor(for token: ThemeToken) -> SwiftUI.Color? {
         switch token {
-        case .background: return current.background
-        case .foreground: return current.foreground
-        case .selectionBackground: return current.selectionBackground
-        case .cursor: return current.cursorColor
-        case .sidebarBackground: return current.sidebarBackground
-        case .sidebarText: return current.sidebarText
-        case .activeSessionHighlight: return current.activeSessionHighlight
-        case .statusBarBackground: return current.sidebarBackground
-        case .inputBackground: return current.background
-        case .inputBorder: return current.foreground.opacity(0.2)
-        case .statusSuccess: return current.green
-        case .statusError: return current.red
-        case .statusWarning: return current.yellow
-        case .statusInfo: return current.blue
-        case .borderSubtle: return current.foreground.opacity(DS.Opacity.border)
-        case .surfaceOverlay: return current.background.opacity(DS.Opacity.secondary)
-        default: return nil
+        case .background: current.background
+        case .foreground: current.foreground
+        case .selectionBackground: current.selectionBackground
+        case .cursor: current.cursorColor
+        case .sidebarBackground: current.sidebarBackground
+        case .sidebarText: current.sidebarText
+        case .activeSessionHighlight: current.activeSessionHighlight
+        case .statusBarBackground: current.sidebarBackground
+        case .inputBackground: current.background
+        case .inputBorder: current.foreground.opacity(0.2)
+        default: nil
+        }
+    }
+
+    private func uiStatusColor(for token: ThemeToken) -> SwiftUI.Color? {
+        switch token {
+        case .statusSuccess: current.green
+        case .statusError: current.red
+        case .statusWarning: current.yellow
+        case .statusInfo: current.blue
+        case .borderSubtle: current.foreground.opacity(AppUI.Opacity.border)
+        case .surfaceOverlay: current.background.opacity(AppUI.Opacity.secondary)
+        default: nil
         }
     }
 
     private func syntaxColor(for token: ThemeToken) -> SwiftUI.Color? {
         switch token {
-        case .keyword: return current.blue
-        case .string: return current.green
-        case .comment: return current.brightBlack
-        case .number: return current.magenta
-        case .function: return current.yellow
-        case .type: return current.cyan
-        default: return nil
+        case .keyword: current.blue
+        case .string: current.green
+        case .comment: current.brightBlack
+        case .number: current.magenta
+        case .function: current.yellow
+        case .type: current.cyan
+        default: nil
         }
     }
 
@@ -173,7 +184,7 @@ final class ThemeManager: ObservableObject {
         }
     }
 
-    nonisolated private static var themesDirectory: URL {
+    private nonisolated static var themesDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(AppConfig.Persistence.directoryName)
             .appendingPathComponent(AppConfig.Theme.themesDirectoryName)
@@ -187,8 +198,8 @@ final class ThemeManager: ObservableObject {
             options: [.new]
         ) { [weak self] _, _ in
             Task { @MainActor [weak self] in
-                guard let self, self.selectedThemeID == nil else { return }
-                self.current = ThemeManager.themeForCurrentAppearance()
+                guard let self, selectedThemeID == nil else { return }
+                current = ThemeManager.themeForCurrentAppearance()
             }
         }
     }

@@ -8,7 +8,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "AppDelegate
 /// Dependency injection root. Owns all top-level singletons.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-
     // MARK: - DI root — all singletons constructed here
 
     let engineFactory: any TerminalEngineFactory = LiveTerminalEngineFactory()
@@ -22,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return try DatabaseService(pool: pool)
         } catch {
             logger.error("DatabaseService init failed: \(error)")
-            fatalError("Cannot initialize database: \(error)")
+            preconditionFailure("Cannot initialize database: \(error)")
         }
     }()
 
@@ -92,25 +91,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkShellIntegrationOnboarding()
         setupMenuBarActivation()
         setupChunkObserver()
+        configureMainWindow()
         Task { @MainActor [weak self] in
             await self?.sessionStore.loadPersistedSessions()
         }
         logger.info("Termura launched")
     }
 
+    /// Makes the main window title bar transparent and extends content into the toolbar area,
+    /// so non-fullscreen appearance matches fullscreen.
+    private func configureMainWindow() {
+        Task { @MainActor in
+            do { try await Task.sleep(nanoseconds: 50_000_000) } catch { return }
+            guard let window = NSApp.windows.first(where: { $0.className.contains("AppKitWindow") })
+                    ?? NSApp.windows.first else { return }
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+
+            adjustTrafficLights(in: window)
+
+            // Re-apply after exiting fullscreen (macOS resets titlebar layout)
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.didExitFullScreenNotification,
+                object: window,
+                queue: .main
+            ) { [weak window] _ in
+                guard let window else { return }
+                // Delay slightly — macOS animates the titlebar back
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.adjustTrafficLights(in: window)
+                }
+            }
+        }
+    }
+
+    private func adjustTrafficLights(in window: NSWindow) {
+        guard let closeBtn = window.standardWindowButton(.closeButton),
+              let container = closeBtn.superview else { return }
+        var frame = container.frame
+        frame.origin.x = 12
+        if let parent = container.superview {
+            frame.origin.y = parent.frame.height - frame.height - 8
+        }
+        container.frame = frame
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let activeSessions = sessionStore.sessions.filter { !$0.workingDirectory.isEmpty }
-        guard !activeSessions.isEmpty else { return .terminateNow }
+        guard let activeID = sessionStore.activeSessionID,
+              let session = sessionStore.sessions.first(where: { $0.id == activeID }),
+              !session.workingDirectory.isEmpty else {
+            return .terminateNow
+        }
 
         let service = sessionHandoffService
         Task.detached {
-            for session in activeSessions {
-                let state = AgentState(sessionID: session.id, agentType: .unknown)
-                try? await service.generateHandoff(
+            let state = AgentState(sessionID: session.id, agentType: .unknown)
+            do {
+                try await service.generateHandoff(
                     session: session,
                     chunks: [],
                     agentState: state
                 )
+            } catch {
+                logger.error("generateHandoff failed on termination: \(error)")
             }
             await MainActor.run {
                 NSApp.reply(toApplicationShouldTerminate: true)
@@ -180,9 +223,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let code = chunk.exitCode, code != 0 {
-                    self.menuBarService.recordFailure()
+                    menuBarService.recordFailure()
                 }
-                let service = self.notificationService
+                let service = notificationService
                 Task { await service.notifyIfLong(chunk) }
             }
         }

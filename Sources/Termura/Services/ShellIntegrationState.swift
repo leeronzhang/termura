@@ -28,7 +28,7 @@ struct ShellIntegrationState: Sendable {
         case (.promptActive, .commandStarted):
             phase = .commandInput("")
 
-        case (.commandInput(let cmd), .executionStarted):
+        case let (.commandInput(cmd), .executionStarted):
             phase = .executing(command: cmd, startedAt: Date())
 
         case (.executing, .executionFinished):
@@ -47,13 +47,13 @@ struct ShellIntegrationState: Sendable {
     // MARK: - Accessors
 
     var currentCommand: String? {
-        if case .commandInput(let cmd) = phase { return cmd }
-        if case .executing(let cmd, _) = phase { return cmd }
+        if case let .commandInput(cmd) = phase { return cmd }
+        if case let .executing(cmd, _) = phase { return cmd }
         return nil
     }
 
     var executionStartTime: Date? {
-        if case .executing(_, let startedAt) = phase { return startedAt }
+        if case let .executing(_, startedAt) = phase { return startedAt }
         return nil
     }
 }

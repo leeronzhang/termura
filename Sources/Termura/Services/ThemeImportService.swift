@@ -16,15 +16,14 @@ enum ThemeImportError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .fileReadError(let msg): "Failed to read file: \(msg)"
-        case .invalidFormat(let msg): "Invalid theme format: \(msg)"
+        case let .fileReadError(msg): "Failed to read file: \(msg)"
+        case let .invalidFormat(msg): "Invalid theme format: \(msg)"
         }
     }
 }
 
 /// Imports ThemeDefinitions from .json and .itermcolors files.
 actor ThemeImportService: ThemeImportServiceProtocol {
-
     func importJSON(from url: URL) async throws -> ThemeDefinition {
         let data: Data
         do { data = try Data(contentsOf: url) } catch {

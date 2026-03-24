@@ -6,7 +6,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "AgentStateD
 /// Detects AI agent type and operational status from PTY output.
 /// Uses startup command matching and ongoing output pattern analysis.
 actor AgentStateDetector {
-
     private var detectedType: AgentType?
     private var currentStatus: AgentStatus = .idle
     private let sessionID: SessionID

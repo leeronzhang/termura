@@ -55,7 +55,6 @@ struct ThemeDefinition: Codable, Sendable, Identifiable {
 // MARK: - Built-in Presets
 
 extension ThemeDefinition {
-
     private enum BuiltinID {
         static let termuraDark = UUID(uuidString: "A1000001-0000-0000-0000-000000000001") ?? UUID()
         static let termuraLight = UUID(uuidString: "A1000001-0000-0000-0000-000000000002") ?? UUID()

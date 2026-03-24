@@ -37,11 +37,14 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
             sessions = loaded
             restoredSessionIDs = Set(loaded.map(\.id))
             // Restore the most recently active session, falling back to the first.
+            // Only create an engine for the active session — others are created
+            // lazily on activation to avoid forking dozens of shells at startup.
             let sorted = loaded.sorted { $0.lastActiveAt > $1.lastActiveAt }
             activeSessionID = sorted.first?.id ?? loaded.first?.id
-            for session in loaded {
+            if let activeID = activeSessionID,
+               let session = loaded.first(where: { $0.id == activeID }) {
                 let dir = session.workingDirectory.isEmpty ? nil : session.workingDirectory
-                engineStore.createEngine(for: session.id, shell: defaultShell, currentDirectory: dir)
+                engineStore.createEngine(for: activeID, shell: defaultShell, currentDirectory: dir)
             }
             logger.info("Loaded \(loaded.count) persisted sessions")
         } catch {
@@ -87,8 +90,13 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     }
 
     func activateSession(id: SessionID) {
-        guard sessions.contains(where: { $0.id == id }) else { return }
+        guard let session = sessions.first(where: { $0.id == id }) else { return }
         activeSessionID = id
+        // Lazy engine creation for restored sessions that haven't been activated yet.
+        if engineStore.engine(for: id) == nil {
+            let dir = session.workingDirectory.isEmpty ? nil : session.workingDirectory
+            engineStore.createEngine(for: id, shell: defaultShell, currentDirectory: dir)
+        }
     }
 
     func renameSession(id: SessionID, title: String) {
@@ -134,7 +142,9 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
 
     func reorderSessions(from source: IndexSet, to destination: Int) {
         sessions.move(fromOffsets: source, toOffset: destination)
-        for index in sessions.indices { sessions[index].orderIndex = index }
+        for index in sessions.indices {
+            sessions[index].orderIndex = index
+        }
         let ids = sessions.map(\.id)
         persistAsync { try await $0.reorder(ids: ids) }
     }

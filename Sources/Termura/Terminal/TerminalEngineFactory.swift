@@ -13,9 +13,9 @@ struct LiveTerminalEngineFactory: TerminalEngineFactory {
     func makeEngine(for sessionID: SessionID, shell: String, currentDirectory: String? = nil) -> any TerminalEngine {
         switch AppConfig.Backend.activeBackend {
         case .swiftTerm:
-            return SwiftTermEngine(sessionID: sessionID, shell: shell, currentDirectory: currentDirectory)
+            SwiftTermEngine(sessionID: sessionID, shell: shell, currentDirectory: currentDirectory)
         case .libghostty:
-            return LibghosttyEngine(sessionID: sessionID)
+            LibghosttyEngine(sessionID: sessionID)
         }
     }
 }

@@ -7,7 +7,6 @@ import Foundation
 /// Call `handleShellEvent(_:)` for every OSC 133 event.
 /// Returns a finished chunk when `executionFinished` is received.
 actor ChunkDetector {
-
     // MARK: - State
 
     private var state: ShellIntegrationState = .init()
@@ -36,7 +35,7 @@ actor ChunkDetector {
         let previousPhase = state.phase
         state.apply(event)
 
-        if case .executionFinished(let exitCode) = event {
+        if case let .executionFinished(exitCode) = event {
             return buildChunk(from: previousPhase, exitCode: exitCode)
         }
         return nil
@@ -70,10 +69,10 @@ actor ChunkDetector {
         let startedAt: Date
 
         switch phase {
-        case .executing(let cmd, let start):
+        case let .executing(cmd, start):
             command = cmd
             startedAt = start
-        case .commandInput(let cmd):
+        case let .commandInput(cmd):
             command = cmd
             startedAt = Date()
         default:

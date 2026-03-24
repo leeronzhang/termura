@@ -3,7 +3,6 @@ import Foundation
 /// Utility for stripping ANSI escape sequences from terminal output.
 /// Covers CSI sequences (ESC[...m), OSC sequences, and other common escapes.
 enum ANSIStripper {
-
     // MARK: - Public API
 
     /// Strip all ANSI escape sequences from `text`.
@@ -63,11 +62,11 @@ enum ANSIStripper {
     private static func skipOSC(in text: String, from start: String.Index) -> String.Index {
         var i = start
         while i < text.endIndex {
-            let c = text[i]
-            if c == "\u{07}" {
+            let char = text[i]
+            if char == "\u{07}" {
                 return text.index(after: i)
             }
-            if c == "\u{1B}" {
+            if char == "\u{1B}" {
                 let next = text.index(after: i)
                 if next < text.endIndex && text[next] == "\\" {
                     return text.index(after: next)

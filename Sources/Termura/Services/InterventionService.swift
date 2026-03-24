@@ -5,18 +5,15 @@ private let logger = Logger(subsystem: "com.termura.app", category: "Interventio
 
 /// Detects high-risk operations in agent output and triggers confirmation.
 actor InterventionService {
-
     // MARK: - Detection
 
     /// Check if output text contains high-risk patterns.
     /// Returns the matched risk description, or nil if safe.
     func detectRisk(in text: String) -> RiskAlert? {
         let lowered = text.lowercased()
-        for pattern in Self.riskPatterns {
-            if lowered.contains(pattern.trigger) {
-                logger.warning("Risk detected: \(pattern.description)")
-                return pattern
-            }
+        for pattern in Self.riskPatterns where lowered.contains(pattern.trigger) {
+            logger.warning("Risk detected: \(pattern.description)")
+            return pattern
         }
         return nil
     }

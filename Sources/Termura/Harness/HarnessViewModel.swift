@@ -7,7 +7,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "HarnessView
 /// Drives rule file browsing, version history, and corruption alerts.
 @MainActor
 final class HarnessViewModel: ObservableObject {
-
     // MARK: - Published
 
     @Published private(set) var ruleFiles: [RuleFileRecord] = []
@@ -28,7 +27,7 @@ final class HarnessViewModel: ObservableObject {
         projectRoot: String
     ) {
         self.repository = repository
-        self.corruptionDetector = CorruptionDetector()
+        corruptionDetector = CorruptionDetector()
         self.projectRoot = projectRoot
     }
 

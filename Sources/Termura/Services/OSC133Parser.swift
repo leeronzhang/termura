@@ -4,7 +4,6 @@ import Foundation
 /// Input: the payload bytes after "133;" in the OSC escape.
 /// Returns nil for unknown or malformed payloads.
 enum OSC133Parser {
-
     // MARK: - Public API
 
     static func parse(_ payload: ArraySlice<UInt8>) -> ShellIntegrationEvent? {

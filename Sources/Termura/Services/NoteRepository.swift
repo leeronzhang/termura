@@ -81,7 +81,7 @@ actor NoteRepository: NoteRepositoryProtocol {
     func save(_ note: NoteRecord) async throws {
         var mutable = NoteRow(note: note)
         mutable.updatedAt = Date().timeIntervalSince1970
-        let row = mutable   // immutable copy safe for @Sendable closure
+        let row = mutable // immutable copy safe for @Sendable closure
         try await db.write { database in
             try row.save(database)
         }
@@ -105,11 +105,11 @@ actor NoteRepository: NoteRepositoryProtocol {
             let rows = try NoteRow.fetchAll(
                 database,
                 sql: """
-                    SELECT n.* FROM notes n
-                    JOIN notes_fts fts ON n.rowid = fts.rowid
-                    WHERE notes_fts MATCH ? AND n.archived_at IS NULL
-                    ORDER BY rank LIMIT ?
-                    """,
+                SELECT n.* FROM notes n
+                JOIN notes_fts fts ON n.rowid = fts.rowid
+                WHERE notes_fts MATCH ? AND n.archived_at IS NULL
+                ORDER BY rank LIMIT ?
+                """,
                 arguments: [ftsQuery, AppConfig.Search.maxResults]
             )
             return try rows.map { try $0.toNote() }

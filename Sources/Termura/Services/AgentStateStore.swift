@@ -7,7 +7,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "AgentStateS
 /// Provides the data layer for the multi-agent dashboard and notification system.
 @MainActor
 final class AgentStateStore: ObservableObject {
-
     // MARK: - Published state
 
     /// All detected agent states, keyed by session ID.
@@ -17,13 +16,13 @@ final class AgentStateStore: ObservableObject {
 
     /// Number of sessions with an active agent.
     var activeAgentCount: Int {
-        agents.values.filter { $0.status != .completed }.count
+        agents.values.count(where: { $0.status != .completed })
     }
 
     /// Sessions that need user attention (waiting input or error).
     var sessionsNeedingAttention: [SessionID] {
         agents.values
-            .filter { $0.needsAttention }
+            .filter(\.needsAttention)
             .sorted { lhs, rhs in
                 Self.attentionPriority(lhs.status) < Self.attentionPriority(rhs.status)
             }
@@ -33,6 +32,16 @@ final class AgentStateStore: ObservableObject {
     /// The next session to jump to via Cmd+Shift+U.
     var nextAttentionSessionID: SessionID? {
         sessionsNeedingAttention.first
+    }
+
+    /// Agents approaching their context window limit.
+    var agentsNearingContextLimit: [AgentState] {
+        agents.values.filter(\.isContextWarning)
+    }
+
+    /// Total estimated tokens across all active agents.
+    var totalEstimatedTokens: Int {
+        agents.values.reduce(0) { $0 + $1.tokenCount }
     }
 
     // MARK: - Updates
@@ -60,12 +69,12 @@ final class AgentStateStore: ObservableObject {
 
     private static func attentionPriority(_ status: AgentStatus) -> Int {
         switch status {
-        case .waitingInput: return 0
-        case .error: return 1
-        case .completed: return 2
-        case .thinking: return 3
-        case .toolRunning: return 4
-        case .idle: return 5
+        case .waitingInput: 0
+        case .error: 1
+        case .completed: 2
+        case .thinking: 3
+        case .toolRunning: 4
+        case .idle: 5
         }
     }
 }

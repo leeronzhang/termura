@@ -3,7 +3,6 @@ import Foundation
 /// Pure value type command history with circular buffer and bidirectional navigation.
 /// No AppKit or UI imports — fully testable in isolation.
 struct InputHistory {
-
     // MARK: - Storage
 
     private let capacity: Int
@@ -14,15 +13,16 @@ struct InputHistory {
     private var count: Int
     /// Navigation cursor; -1 means "at present" (not browsing history).
     private var cursor: Int
+    private var isEmpty: Bool { count == 0 }
 
     // MARK: - Init
 
     init(capacity: Int = AppConfig.Input.historyCapacity) {
         self.capacity = max(1, capacity)
-        self.buffer = Array(repeating: "", count: self.capacity)
-        self.writeHead = 0
-        self.count = 0
-        self.cursor = -1
+        buffer = Array(repeating: "", count: self.capacity)
+        writeHead = 0
+        count = 0
+        cursor = -1
     }
 
     // MARK: - Public API
@@ -39,7 +39,7 @@ struct InputHistory {
 
     /// Navigate to older entries. Returns the entry or nil if history is empty.
     mutating func navigatePrevious() -> String? {
-        guard count > 0 else { return nil }
+        guard !isEmpty else { return nil }
         if cursor == -1 {
             cursor = 0
         } else if cursor < count - 1 {

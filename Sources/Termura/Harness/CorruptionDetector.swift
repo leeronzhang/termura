@@ -6,7 +6,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "CorruptionD
 /// Scans harness rule files for potential issues: contradictions,
 /// stale references, and redundancies.
 actor CorruptionDetector {
-
     /// Run all checks against parsed sections.
     func scan(sections: [RuleSection], projectRoot: String) -> [CorruptionResult] {
         var results: [CorruptionResult] = []
@@ -21,7 +20,13 @@ actor CorruptionDetector {
     private func detectStaleFilePaths(_ sections: [RuleSection], root: String) -> [CorruptionResult] {
         let fm = FileManager.default
         var results: [CorruptionResult] = []
-        let pathPattern = try? NSRegularExpression(pattern: "`([^`]+\\.[a-zA-Z]{1,10})`")
+        let pathPattern: NSRegularExpression?
+        do {
+            pathPattern = try NSRegularExpression(pattern: "`([^`]+\\.[a-zA-Z]{1,10})`")
+        } catch {
+            logger.error("Failed to create corruption detector regex: \(error)")
+            pathPattern = nil
+        }
 
         for section in sections {
             guard let regex = pathPattern else { continue }
