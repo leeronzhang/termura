@@ -28,5 +28,8 @@ scripts/
 project.yml
 *.xcodeproj/
 
+# Landing page (separate repo)
+landing/
+
 # macOS
 .DS_Store

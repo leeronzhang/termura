@@ -38,37 +38,14 @@ actor ContextInjectionService {
 
     // MARK: - Formatting per agent type
 
+    /// Claude Code: launch `claude --continue` to resume the previous conversation.
     private func formatForClaudeCode(_ context: HandoffContext) -> String {
-        var parts: [String] = []
-        parts.append("Continuing from previous session.")
-
-        if !context.taskStatus.isEmpty {
-            parts.append("Task status: \(context.taskStatus)")
-        }
-
-        let recentDecisions = context.decisions.suffix(3)
-        if !recentDecisions.isEmpty {
-            let items = recentDecisions.map { "- \($0.summary)" }.joined(separator: "\n")
-            parts.append("Key decisions:\n\(items)")
-        }
-
-        if !context.errors.isEmpty {
-            let items = context.errors.prefix(3).map { "- \($0)" }.joined(separator: "\n")
-            parts.append("Recent errors:\n\(items)")
-        }
-
-        return parts.joined(separator: "\n\n")
+        "claude --continue\n"
     }
 
+    /// Aider: launch `aider` to resume (aider auto-loads .aider.chat.history).
     private func formatForAider(_ context: HandoffContext) -> String {
-        var parts: [String] = []
-        parts.append("/chat Continuing from previous session.")
-
-        if !context.taskStatus.isEmpty {
-            parts.append("Previous task: \(context.taskStatus)")
-        }
-
-        return parts.joined(separator: " ")
+        "aider\n"
     }
 
     private func formatForShell(_ context: HandoffContext) -> String {

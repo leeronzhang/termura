@@ -30,6 +30,7 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
     init(
         sessionID: SessionID,
         shell: String,
+        currentDirectory: String? = nil,
         columns: UInt16 = AppConfig.Terminal.ptyColumns,
         rows: UInt16 = AppConfig.Terminal.ptyRows
     ) {
@@ -66,7 +67,14 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
 
         terminalView.processDelegate = self
         registerOSC133Handler()
-        startProcess(shell: shell)
+
+        // Defer fork to the next run-loop tick. forkpty() inside a multi-threaded
+        // process can corrupt os_unfair_locks if called during init (while SwiftUI
+        // is still setting up). Dispatching asynchronously ensures all init-time
+        // locks are released before the fork happens.
+        Task { @MainActor [weak self] in
+            self?.startProcess(shell: shell, currentDirectory: currentDirectory)
+        }
     }
 
     deinit {

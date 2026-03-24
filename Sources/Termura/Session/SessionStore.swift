@@ -40,7 +40,8 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
             let sorted = loaded.sorted { $0.lastActiveAt > $1.lastActiveAt }
             activeSessionID = sorted.first?.id ?? loaded.first?.id
             for session in loaded {
-                engineStore.createEngine(for: session.id, shell: defaultShell)
+                let dir = session.workingDirectory.isEmpty ? nil : session.workingDirectory
+                engineStore.createEngine(for: session.id, shell: defaultShell, currentDirectory: dir)
             }
             logger.info("Loaded \(loaded.count) persisted sessions")
         } catch {

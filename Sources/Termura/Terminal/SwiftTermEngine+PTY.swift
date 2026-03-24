@@ -8,12 +8,16 @@ private let logger = Logger(subsystem: "com.termura.app", category: "SwiftTermEn
 // MARK: - PTY Lifecycle
 
 extension SwiftTermEngine {
-    func startProcess(shell: String) {
+    func startProcess(shell: String, currentDirectory: String? = nil) {
         let resolvedShell = resolveShell(shell)
         let sid = sessionID
-        logger.info("Starting PTY shell=\(resolvedShell) session=\(sid)")
+        logger.info("Starting PTY shell=\(resolvedShell) session=\(sid) dir=\(currentDirectory ?? "~")")
 
-        terminalView.startProcess(executable: resolvedShell, args: [])
+        terminalView.startProcess(
+            executable: resolvedShell,
+            args: [],
+            currentDirectory: currentDirectory
+        )
         isRunning = true
     }
 
