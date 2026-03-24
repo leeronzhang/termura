@@ -39,7 +39,12 @@ enum ContentTab: Identifiable, Hashable {
 struct ContentTabBar: View {
     let tabs: [ContentTab]
     @Binding var selectedTab: ContentTab
+    var isFullScreen: Bool = false
     let onClose: (ContentTab) -> Void
+
+    /// Extra top space so the tab content aligns with the sidebar icons,
+    /// sitting just below the traffic-light buttons in non-fullscreen.
+    private var titleBarTop: CGFloat { isFullScreen ? 0 : 6 }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -51,7 +56,8 @@ struct ContentTabBar: View {
             }
             Spacer()
         }
-        .frame(height: 28)
+        .padding(.top, titleBarTop)
+        .frame(height: 44 + titleBarTop)
         .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) { Divider() }
     }
@@ -66,16 +72,14 @@ struct ContentTabBar: View {
                 Text(tab.title)
                     .font(AppUI.Font.label)
                     .lineLimit(1)
-                if tab.isClosable {
-                    Button {
-                        onClose(tab)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(AppUI.Font.micro)
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    onClose(tab)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(AppUI.Font.micro)
+                        .foregroundColor(.secondary)
                 }
+                .buttonStyle(.plain)
             }
             .foregroundColor(selectedTab == tab ? .primary : .secondary)
             .padding(.horizontal, AppUI.Spacing.lg)

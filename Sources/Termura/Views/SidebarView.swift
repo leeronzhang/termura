@@ -8,6 +8,7 @@ struct SidebarView: View {
     var searchService: SearchService?
     var noteRepository: (any NoteRepositoryProtocol)?
     var notesViewModel: NotesViewModel?
+    var isFullScreen: Bool = false
     /// Called when a note title is tapped in the sidebar to open it as a content tab.
     var onOpenNote: ((NoteID, String) -> Void)?
 
@@ -15,7 +16,7 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SidebarTabBar(selectedTab: $selectedTab)
+            SidebarTabBar(selectedTab: $selectedTab, isFullScreen: isFullScreen)
             tabContent
         }
         .frame(minWidth: AppConfig.UI.sidebarMinWidth, maxWidth: AppConfig.UI.sidebarMaxWidth)

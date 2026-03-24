@@ -92,12 +92,9 @@ extension TerminalAreaView {
             .help(showMetadata ? "Hide Session Info" : "Show Session Info")
         }
         .frame(height: 32)
-        .padding(.horizontal, AppUI.Spacing.lg)
-        .padding(.vertical, AppUI.Spacing.smMd)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
+        .padding(.horizontal, AppUI.Spacing.xxl)
+        .padding(.top, AppUI.Spacing.md)
+        .padding(.bottom, AppUI.Spacing.smMd)
     }
 
     func revealInFinder() {
@@ -156,13 +153,17 @@ extension TerminalAreaView {
 
     @ViewBuilder
     var terminalAndOutputArea: some View {
-        ZStack(alignment: .bottom) {
-            TerminalContainerView(viewModel: viewModel, engine: engine, theme: theme)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.top, AppUI.Spacing.xl)
-                .padding(.horizontal, AppUI.Spacing.xxl)
-                // Reserve space at the bottom so terminal content is not hidden behind the overlay.
-                .padding(.bottom, modeController.mode == .editor ? editorOverlayHeight : 0)
+        ZStack {
+            VStack(spacing: 0) {
+                if !isCompact {
+                    projectPathBar
+                }
+                TerminalContainerView(viewModel: viewModel, engine: engine, theme: theme)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, AppUI.Spacing.xxl)
+                    // Reserve space at the bottom so terminal content is not hidden behind the overlay.
+                    .padding(.bottom, modeController.mode == .editor ? editorOverlayHeight : 0)
+            }
 
             VStack(spacing: 0) {
                 Spacer()

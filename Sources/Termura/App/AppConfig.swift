@@ -70,9 +70,9 @@ enum AppConfig {
 
     // swiftlint:disable:next type_name
     enum UI {
-        static let sidebarMinWidth: Double = 180
+        static let sidebarMinWidth: Double = 220
         static let sidebarMaxWidth: Double = 480
-        static let sidebarDefaultWidth: Double = 280
+        static let sidebarDefaultWidth: Double = 360
         static let metadataBarHeight: Double = 28
         static let metadataPanelWidth: Double = 280
         static let metadataPanelMinWidth: Double = 120

@@ -107,27 +107,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ?? NSApp.windows.first else { return }
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
+            window.backgroundColor = NSColor(self.themeManager.current.background)
 
+            // Disable the system's own visual effect in the toolbar area.
+            // .unifiedCompact places an NSVisualEffectView to the right of the
+            // traffic lights which creates a lighter strip that clashes with our
+            // content material background.
+            disableTitlebarEffect(in: window)
             adjustTrafficLights(in: window)
 
-            // Re-apply after exiting fullscreen (macOS resets titlebar layout)
+            // Hide traffic-light container BEFORE the exit animation starts,
+            // so the user never sees them at the macOS-default position.
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.willExitFullScreenNotification,
+                object: window,
+                queue: .main
+            ) { [weak self, weak window] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let window else { return }
+                    self.trafficLightContainer(in: window)?.alphaValue = 0
+                }
+            }
+
+            // After the exit animation finishes, reposition and fade in.
             NotificationCenter.default.addObserver(
                 forName: NSWindow.didExitFullScreenNotification,
                 object: window,
                 queue: .main
-            ) { [weak window] _ in
-                guard let window else { return }
-                // Delay slightly — macOS animates the titlebar back
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    self.adjustTrafficLights(in: window)
+            ) { [weak self, weak window] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let window else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self.disableTitlebarEffect(in: window)
+                        self.adjustTrafficLights(in: window)
+                        NSAnimationContext.runAnimationGroup { ctx in
+                            ctx.duration = 0.2
+                            self.trafficLightContainer(in: window)?.animator().alphaValue = 1
+                        }
+                    }
                 }
             }
         }
     }
 
+    /// Finds and deactivates every NSVisualEffectView inside the titlebar
+    /// container so the system toolbar background doesn't paint over our content.
+    private func disableTitlebarEffect(in window: NSWindow) {
+        guard let themebarParent = window.contentView?.superview else { return }
+        for container in themebarParent.subviews {
+            let name = String(describing: type(of: container))
+            guard name.contains("NSTitlebarContainerView") else { continue }
+            deactivateEffectViews(in: container)
+        }
+    }
+
+    private func deactivateEffectViews(in view: NSView) {
+        if let effectView = view as? NSVisualEffectView {
+            effectView.state = .inactive
+        }
+        for child in view.subviews {
+            deactivateEffectViews(in: child)
+        }
+    }
+
+    private func trafficLightContainer(in window: NSWindow) -> NSView? {
+        window.standardWindowButton(.closeButton)?.superview
+    }
+
     private func adjustTrafficLights(in window: NSWindow) {
-        guard let closeBtn = window.standardWindowButton(.closeButton),
-              let container = closeBtn.superview else { return }
+        guard let container = trafficLightContainer(in: window) else { return }
         var frame = container.frame
         frame.origin.x = 12
         if let parent = container.superview {

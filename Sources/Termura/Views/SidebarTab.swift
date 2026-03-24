@@ -44,6 +44,10 @@ enum SidebarTab: String, CaseIterable, Identifiable {
 /// Xcode-style icon tab bar for sidebar navigation.
 struct SidebarTabBar: View {
     @Binding var selectedTab: SidebarTab
+    var isFullScreen: Bool = false
+
+    /// Extra leading space to clear the traffic-light buttons in non-fullscreen.
+    private var trafficLightLeading: CGFloat { isFullScreen ? 0 : 80 }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -52,7 +56,10 @@ struct SidebarTabBar: View {
             }
         }
         .padding(.horizontal, AppUI.Spacing.md)
-        .padding(.vertical, AppUI.Spacing.smMd)
+        .padding(.top, isFullScreen ? AppUI.Spacing.smMd : 8)
+        .padding(.bottom, AppUI.Spacing.smMd)
+        .padding(.leading, trafficLightLeading)
+        .animation(.easeInOut(duration: 0.25), value: isFullScreen)
     }
 
     private func tabButton(_ tab: SidebarTab) -> some View {

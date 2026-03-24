@@ -89,10 +89,6 @@ struct TerminalAreaView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !isCompact {
-                projectPathBar
-            }
-
             HStack(spacing: 0) {
                 if !isCompact {
                     // Left panel: Timeline

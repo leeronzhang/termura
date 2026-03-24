@@ -23,5 +23,7 @@ struct ContentView: View {
             agentStateStore: agentStateStore,
             contextInjectionService: contextInjectionService
         )
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        .ignoresSafeArea(edges: .top)
     }
 }

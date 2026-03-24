@@ -20,9 +20,11 @@ struct MainView: View {
     @State var exportSessionID: SessionID?
     @State var showHarness = false
     @State var showBranchMerge = false
+    @State private var showCloseSessionConfirm = false
     @State private var splitRoot: SplitNode?
     @State var openTabs: [ContentTab] = [.terminal]
     @State var selectedContentTab: ContentTab = .terminal
+    @State private var isFullScreen = false
 
     @StateObject private var notesViewModel: NotesViewModel
 
@@ -56,6 +58,7 @@ struct MainView: View {
                     searchService: searchService,
                     noteRepository: noteRepository,
                     notesViewModel: notesViewModel,
+                    isFullScreen: isFullScreen,
                     onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) }
                 )
                 .frame(width: sidebarWidth)
@@ -102,6 +105,12 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: .closeSplitPane)) { _ in
             performCloseSplitPane()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
+            isFullScreen = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
+            isFullScreen = false
+        }
         .task { await ensureInitialSession() }
         .sheet(isPresented: $showShellOnboarding) {
             ShellIntegrationOnboardingView(isPresented: $showShellOnboarding)
@@ -127,6 +136,12 @@ struct MainView: View {
         .sheet(isPresented: $showBranchMerge) {
             branchMergeSheet
         }
+        .alert("Close Session", isPresented: $showCloseSessionConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Close", role: .destructive) { confirmCloseActiveSession() }
+        } message: {
+            Text("Are you sure you want to close the active session?")
+        }
     }
 
     // MARK: - Content area with tabs
@@ -134,10 +149,12 @@ struct MainView: View {
     @ViewBuilder
     private var contentArea: some View {
         VStack(spacing: 0) {
-            if openTabs.count > 1 {
-                ContentTabBar(tabs: openTabs, selectedTab: $selectedContentTab) { tab in
-                    closeContentTab(tab)
-                }
+            ContentTabBar(
+                tabs: openTabs,
+                selectedTab: $selectedContentTab,
+                isFullScreen: isFullScreen
+            ) { tab in
+                closeContentTab(tab)
             }
             selectedContentView
         }
@@ -228,10 +245,23 @@ struct MainView: View {
     }
 
     private func closeContentTab(_ tab: ContentTab) {
-        guard tab.isClosable else { return }
-        openTabs.removeAll { $0 == tab }
-        if selectedContentTab == tab {
-            selectedContentTab = .terminal
+        switch tab {
+        case .terminal:
+            // Active session requires confirmation
+            if sessionStore.activeSessionID != nil {
+                showCloseSessionConfirm = true
+            }
+        case .note:
+            openTabs.removeAll { $0 == tab }
+            if selectedContentTab == tab {
+                selectedContentTab = .terminal
+            }
+        }
+    }
+
+    private func confirmCloseActiveSession() {
+        if let activeID = sessionStore.activeSessionID {
+            sessionStore.closeSession(id: activeID)
         }
     }
 
