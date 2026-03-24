@@ -116,6 +116,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             disableTitlebarEffect(in: window)
             adjustTrafficLights(in: window)
 
+            // Add invisible view to contentView — its layout() fires on every
+            // window layout pass, keeping traffic lights pinned.
+            if let contentView = window.contentView {
+                let adjuster = TrafficLightAdjuster(window: window)
+                adjuster.frame = .zero
+                contentView.addSubview(adjuster)
+            }
+
             // Hide traffic-light container BEFORE the exit animation starts,
             // so the user never sees them at the macOS-default position.
             NotificationCenter.default.addObserver(
@@ -175,12 +183,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func adjustTrafficLights(in window: NSWindow) {
-        guard let container = trafficLightContainer(in: window) else { return }
+        guard let container = trafficLightContainer(in: window),
+              let parent = container.superview else { return }
         var frame = container.frame
         frame.origin.x = 12
-        if let parent = container.superview {
-            frame.origin.y = parent.frame.height - frame.height - 8
-        }
+        frame.origin.y = parent.frame.height - frame.height - 8
         container.frame = frame
     }
 
@@ -287,6 +294,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.onKeyUp(for: .toggleVisor) { [weak self] in
             self?.toggleVisor()
         }
+    }
+}
+
+// MARK: - Traffic-light position keeper
+
+/// Zero-size view added to the window's contentView. Its `layout()` is called
+/// on every window layout pass (including live resize), so we can synchronously
+/// reposition the traffic-light buttons before the frame is rendered.
+private final class TrafficLightAdjuster: NSView {
+    private weak var targetWindow: NSWindow?
+
+    init(window: NSWindow) {
+        self.targetWindow = window
+        super.init(frame: .zero)
+        autoresizingMask = [.width, .height]
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        guard let window = targetWindow,
+              let closeBtn = window.standardWindowButton(.closeButton),
+              let container = closeBtn.superview,
+              let parent = container.superview else { return }
+        var frame = container.frame
+        frame.origin.x = 12
+        frame.origin.y = parent.frame.height - frame.height - 8
+        container.frame = frame
     }
 }
 
