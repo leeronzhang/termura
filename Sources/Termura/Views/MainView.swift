@@ -16,11 +16,13 @@ struct MainView: View {
     @State private var showShellOnboarding = false
     @State private var showSearch = false
     @State private var showNotes = false
-    @State private var showExport = false
-    @State private var exportSessionID: SessionID?
-    @State private var showHarness = false
-    @State private var showBranchMerge = false
+    @State var showExport = false
+    @State var exportSessionID: SessionID?
+    @State var showHarness = false
+    @State var showBranchMerge = false
     @State private var splitRoot: SplitNode?
+    @State var openTabs: [ContentTab] = [.terminal]
+    @State var selectedContentTab: ContentTab = .terminal
 
     @StateObject private var notesViewModel: NotesViewModel
 
@@ -48,9 +50,16 @@ struct MainView: View {
     var body: some View {
         HStack(spacing: 0) {
             if showSidebar {
-                SidebarView(sessionStore: sessionStore)
-                    .frame(width: sidebarWidth)
-                    .environmentObject(themeManager)
+                SidebarView(
+                    sessionStore: sessionStore,
+                    agentStateStore: agentStateStore,
+                    searchService: searchService,
+                    noteRepository: noteRepository,
+                    notesViewModel: notesViewModel,
+                    onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) }
+                )
+                .frame(width: sidebarWidth)
+                .environmentObject(themeManager)
 
                 ResizableDivider(
                     width: $sidebarWidth,
@@ -59,7 +68,7 @@ struct MainView: View {
                 )
             }
 
-            terminalArea
+            contentArea
         }
         .background(themeManager.current.background)
         .onReceive(NotificationCenter.default.publisher(for: .toggleSidebar)) { _ in
@@ -120,76 +129,29 @@ struct MainView: View {
         }
     }
 
-    @ViewBuilder
-    private var exportSheet: some View {
-        // Export is handled by TerminalAreaView which has access to OutputStore chunks.
-        // This sheet is a fallback for sessions without an active terminal.
-        if let sid = exportSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == sid }) {
-            ExportOptionsView(
-                session: session,
-                chunks: [],
-                isPresented: $showExport
-            )
-        }
-    }
+    // MARK: - Content area with tabs
 
     @ViewBuilder
-    private var harnessSheet: some View {
-        let appDel = NSApp.delegate as? AppDelegate
-        if let repo = appDel?.ruleFileRepository {
-            let projectRoot = activeSessionWorkingDirectory
-            let vm = HarnessViewModel(repository: repo, projectRoot: projectRoot)
-            HarnessSidebarView(viewModel: vm, isPresented: $showHarness)
-                .frame(minWidth: 300, idealHeight: 500)
-        } else {
-            VStack(spacing: DS.Spacing.lg) {
-                Text("Harness Rules")
-                    .font(.headline)
-                Text("Database not available.")
-                    .foregroundColor(.secondary)
-                Button("Close") { showHarness = false }
+    private var contentArea: some View {
+        VStack(spacing: 0) {
+            if openTabs.count > 1 {
+                ContentTabBar(tabs: openTabs, selectedTab: $selectedContentTab) { tab in
+                    closeContentTab(tab)
+                }
             }
-            .frame(minWidth: 300, minHeight: 200)
-            .padding(DS.Spacing.xxl)
+            selectedContentView
         }
-    }
-
-    /// Working directory of the active session, falling back to home directory.
-    private var activeSessionWorkingDirectory: String {
-        if let activeID = sessionStore.activeSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == activeID }) {
-            let dir = session.workingDirectory
-            if !dir.isEmpty { return dir }
-        }
-        return FileManager.default.homeDirectoryForCurrentUser.path
     }
 
     @ViewBuilder
-    private var branchMergeSheet: some View {
-        if let activeID = sessionStore.activeSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == activeID }),
-           session.parentID != nil {
-            BranchMergeSheet(
-                branchSession: session,
-                chunks: [],
-                onMerge: { summary in
-                    let msgRepo = (NSApp.delegate as? AppDelegate)?.sessionMessageRepository
-                    Task {
-                        await sessionStore.mergeBranchSummary(
-                            branchID: activeID,
-                            summary: summary,
-                            messageRepo: msgRepo
-                        )
-                    }
-                    showBranchMerge = false
-                },
-                onCancel: { showBranchMerge = false }
-            )
+    private var selectedContentView: some View {
+        switch selectedContentTab {
+        case .terminal:
+            terminalArea
+        case .note(let noteID, _):
+            noteEditorView(noteID: noteID)
         }
     }
-
-    // MARK: - Terminal area
 
     @ViewBuilder
     private var terminalArea: some View {
@@ -219,6 +181,21 @@ struct MainView: View {
         }
     }
 
+    private func noteEditorView(noteID: NoteID) -> some View {
+        VStack(spacing: 0) {
+            TextField("Title", text: $notesViewModel.editingTitle)
+                .font(.system(size: 16, weight: .semibold))
+                .textFieldStyle(.plain)
+                .padding(.horizontal, AppUI.Spacing.xl)
+                .padding(.top, AppUI.Spacing.xl)
+                .padding(.bottom, AppUI.Spacing.md)
+            Divider()
+            MarkdownEditorView(text: $notesViewModel.editingBody)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { notesViewModel.selectNote(id: noteID) }
+    }
+
     @ViewBuilder
     private func renderLeaf(sessionID: SessionID) -> some View {
         if let engine = engineStore.engine(for: sessionID) as? SwiftTermEngine {
@@ -230,7 +207,8 @@ struct MainView: View {
                 tokenCountingService: tokenCountingService,
                 agentStateStore: agentStateStore,
                 isRestoredSession: sessionStore.isRestoredSession(id: sessionID),
-                contextInjectionService: contextInjectionService
+                contextInjectionService: contextInjectionService,
+                isCompact: true
             )
             .id(sessionID)
         } else {
@@ -239,27 +217,22 @@ struct MainView: View {
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: DS.Spacing.lg) {
-            Image(systemName: "terminal")
-                .font(DS.Font.hero)
-                .foregroundColor(themeManager.current.foreground.opacity(DS.Opacity.muted))
-            Text("No Active Session")
-                .font(DS.Font.title1)
-                .foregroundColor(themeManager.current.foreground.opacity(DS.Opacity.dimmed))
-            Text("Press \u{2318}T to create a new session")
-                .font(DS.Font.label)
-                .foregroundColor(themeManager.current.foreground.opacity(DS.Opacity.tertiary))
-            Button("New Session") {
-                sessionStore.createSession(title: "Terminal")
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .keyboardShortcut("t", modifiers: .command)
-            .padding(.top, DS.Spacing.sm)
+    // MARK: - Tab management
+
+    func openNoteTab(noteID: NoteID, title: String) {
+        let tab = ContentTab.note(noteID, title)
+        if !openTabs.contains(tab) {
+            openTabs.append(tab)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(themeManager.current.background)
+        selectedContentTab = tab
+    }
+
+    private func closeContentTab(_ tab: ContentTab) {
+        guard tab.isClosable else { return }
+        openTabs.removeAll { $0 == tab }
+        if selectedContentTab == tab {
+            selectedContentTab = .terminal
+        }
     }
 
     // MARK: - Helpers

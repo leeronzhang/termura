@@ -14,7 +14,22 @@ struct TerminalContainerView: NSViewRepresentable {
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         let view = engine.terminalView
         applyTheme(theme, to: view)
+        // Hide scrollbar entirely — scrolling still works via trackpad / mouse wheel.
+        // This avoids a visible track strip regardless of the system "Show scroll bars" setting.
+        if let scrollView = view.enclosingScrollView ?? findScrollView(in: view) {
+            scrollView.hasVerticalScroller = false
+            scrollView.hasHorizontalScroller = false
+        }
         return view
+    }
+
+    /// Searches subviews for an embedded NSScrollView (SwiftTerm nests one internally).
+    private func findScrollView(in view: NSView) -> NSScrollView? {
+        for sub in view.subviews {
+            if let sv = sub as? NSScrollView { return sv }
+            if let sv = findScrollView(in: sub) { return sv }
+        }
+        return nil
     }
 
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {

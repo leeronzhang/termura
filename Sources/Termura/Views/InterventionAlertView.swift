@@ -8,12 +8,12 @@ struct InterventionAlertView: View {
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(spacing: DS.Spacing.xl) {
+        VStack(spacing: AppUI.Spacing.xl) {
             icon
             title
             description
 
-            HStack(spacing: DS.Spacing.lg) {
+            HStack(spacing: AppUI.Spacing.lg) {
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
 
@@ -21,7 +21,7 @@ struct InterventionAlertView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(DS.Spacing.xxxl)
+        .padding(AppUI.Spacing.xxxl)
         .frame(width: 340)
     }
 
@@ -37,7 +37,7 @@ struct InterventionAlertView: View {
     }
 
     private var description: some View {
-        VStack(spacing: DS.Spacing.sm) {
+        VStack(spacing: AppUI.Spacing.sm) {
             Text(alert.description)
                 .font(.subheadline)
                 .foregroundColor(.primary)

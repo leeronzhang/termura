@@ -13,10 +13,10 @@ struct InterventionToolbarView: View {
     @State private var directiveText = ""
 
     var body: some View {
-        HStack(spacing: DS.Spacing.md) {
+        HStack(spacing: AppUI.Spacing.md) {
             agentLabel
 
-            Divider().frame(height: DS.Size.toolbarDivider)
+            Divider().frame(height: AppUI.Size.toolbarDivider)
 
             if status == .thinking || status == .toolRunning {
                 pauseButton
@@ -26,13 +26,13 @@ struct InterventionToolbarView: View {
 
             insertButton
         }
-        .padding(.horizontal, DS.Spacing.lg)
-        .padding(.vertical, DS.Spacing.smMd)
+        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.vertical, AppUI.Spacing.smMd)
         .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.lg))
+        .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.lg))
         .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.lg)
-                .stroke(Color.secondary.opacity(DS.Opacity.softBorder), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: AppUI.Radius.lg)
+                .stroke(Color.secondary.opacity(AppUI.Opacity.softBorder), lineWidth: 0.5)
         )
         .popover(isPresented: $showDirectiveInput) {
             directivePopover
@@ -40,17 +40,17 @@ struct InterventionToolbarView: View {
     }
 
     private var agentLabel: some View {
-        HStack(spacing: DS.Spacing.sm) {
+        HStack(spacing: AppUI.Spacing.sm) {
             AgentStatusBadgeView(status: status, agentType: agentType)
             Text(agentType.rawValue)
-                .font(DS.Font.labelMedium)
+                .font(AppUI.Font.labelMedium)
         }
     }
 
     private var pauseButton: some View {
         Button(action: onPause) {
             Image(systemName: "pause.fill")
-                .font(DS.Font.body)
+                .font(AppUI.Font.body)
         }
         .buttonStyle(.plain)
         .help("Pause agent (Ctrl+C)")
@@ -59,7 +59,7 @@ struct InterventionToolbarView: View {
     private var resumeButton: some View {
         Button(action: onResume) {
             Image(systemName: "play.fill")
-                .font(DS.Font.body)
+                .font(AppUI.Font.body)
         }
         .buttonStyle(.plain)
         .help("Resume agent")
@@ -70,14 +70,14 @@ struct InterventionToolbarView: View {
             showDirectiveInput.toggle()
         } label: {
             Image(systemName: "text.insert")
-                .font(DS.Font.body)
+                .font(AppUI.Font.body)
         }
         .buttonStyle(.plain)
         .help("Insert directive")
     }
 
     private var directivePopover: some View {
-        VStack(spacing: DS.Spacing.md) {
+        VStack(spacing: AppUI.Spacing.md) {
             Text("Insert Directive")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -92,6 +92,6 @@ struct InterventionToolbarView: View {
                     showDirectiveInput = false
                 }
         }
-        .padding(DS.Spacing.lg)
+        .padding(AppUI.Spacing.lg)
     }
 }

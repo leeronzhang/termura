@@ -9,7 +9,6 @@ struct AgentDashboardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider()
             ScrollView(.vertical, showsIndicators: false) {
                 if agentStore.agents.isEmpty {
                     emptyState
@@ -18,7 +17,6 @@ struct AgentDashboardView: View {
                 }
             }
         }
-        .frame(width: AppConfig.Timeline.panelWidth)
         .background(.ultraThinMaterial)
     }
 
@@ -30,23 +28,23 @@ struct AgentDashboardView: View {
                 .panelHeaderStyle()
             Spacer()
             Text("\(agentStore.activeAgentCount) active")
-                .font(DS.Font.caption)
+                .font(AppUI.Font.caption)
                 .foregroundColor(.secondary)
         }
-        .padding(.horizontal, DS.Spacing.lg)
-        .padding(.vertical, DS.Spacing.mdLg)
+        .padding(.horizontal, AppUI.Spacing.md)
+        .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
     // MARK: - List
 
     private var agentList: some View {
-        LazyVStack(spacing: DS.Spacing.xs) {
+        LazyVStack(spacing: AppUI.Spacing.xs) {
             ForEach(sortedAgents) { agent in
                 agentRow(agent)
             }
         }
-        .padding(.vertical, DS.Spacing.smMd)
-        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, AppUI.Spacing.smMd)
+        .padding(.horizontal, AppUI.Spacing.sm)
     }
 
     private var sortedAgents: [AgentState] {
@@ -58,33 +56,35 @@ struct AgentDashboardView: View {
         Button {
             onJumpToSession(agent.sessionID)
         } label: {
-            HStack(spacing: DS.Spacing.md) {
+            HStack(spacing: AppUI.Spacing.md) {
                 AgentStatusBadgeView(status: agent.status, agentType: agent.agentType)
-                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
                     Text(agent.agentType.rawValue)
-                        .font(DS.Font.bodyMedium)
+                        .font(AppUI.Font.bodyMedium)
                     if let task = agent.currentTask {
                         Text(task)
-                            .font(DS.Font.caption)
+                            .font(AppUI.Font.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
                 }
                 Spacer()
                 if agent.tokenCount > 0 {
-                    Text(formattedTokens(agent.tokenCount))
-                        .font(DS.Font.captionMono)
-                        .foregroundColor(.secondary)
+                    TokenProgressView(
+                        estimatedTokens: agent.tokenCount,
+                        contextLimit: agent.contextWindowLimit
+                    )
+                    .frame(width: 60)
                 }
             }
-            .padding(.horizontal, DS.Spacing.md)
-            .padding(.vertical, DS.Spacing.md)
+            .padding(.horizontal, AppUI.Spacing.md)
+            .padding(.vertical, AppUI.Spacing.md)
             .background(
                 agent.needsAttention
-                    ? Color.yellow.opacity(DS.Opacity.highlight)
+                    ? Color.yellow.opacity(AppUI.Opacity.highlight)
                     : Color.clear
             )
-            .cornerRadius(DS.Radius.md)
+            .cornerRadius(AppUI.Radius.md)
         }
         .buttonStyle(.plain)
     }
@@ -92,21 +92,15 @@ struct AgentDashboardView: View {
     // MARK: - Empty
 
     private var emptyState: some View {
-        VStack(spacing: DS.Spacing.smMd) {
+        VStack(spacing: AppUI.Spacing.smMd) {
             Image(systemName: "cpu")
-                .font(DS.Font.hero)
-                .foregroundColor(.secondary.opacity(DS.Opacity.muted))
+                .font(AppUI.Font.hero)
+                .foregroundColor(.secondary.opacity(AppUI.Opacity.muted))
             Text("No agents detected")
-                .font(DS.Font.label)
+                .font(AppUI.Font.label)
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, DS.Spacing.xxxxl)
-    }
-
-    // MARK: - Helpers
-
-    private func formattedTokens(_ count: Int) -> String {
-        count >= 1000 ? String(format: "%.1fk", Double(count) / 1000) : "\(count)"
+        .padding(.top, AppUI.Spacing.xxxxl)
     }
 }

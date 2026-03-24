@@ -10,9 +10,9 @@ struct ThemePickerView: View {
     @State private var importError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.xl) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.xl) {
             Text("Themes")
-                .font(DS.Font.title1)
+                .font(AppUI.Font.title1)
 
             themeGrid
 
@@ -20,18 +20,18 @@ struct ThemePickerView: View {
 
             if let error = importError {
                 Text(error)
-                    .font(DS.Font.body)
+                    .font(AppUI.Font.body)
                     .foregroundColor(.red)
             }
         }
-        .padding(DS.Spacing.xxl)
+        .padding(AppUI.Spacing.xxl)
         .frame(minWidth: 480)
     }
 
     // MARK: - Theme Grid
 
     private var themeGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: DS.Spacing.lg) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))], spacing: AppUI.Spacing.lg) {
             ForEach(themeManager.availableDefinitions) { definition in
                 ThemeCard(
                     definition: definition,
@@ -48,11 +48,11 @@ struct ThemePickerView: View {
     private var importSection: some View {
         HStack {
             Text("Custom Themes")
-                .font(DS.Font.title3Medium)
+                .font(AppUI.Font.title3Medium)
             Spacer()
             Button("Import Theme…") { openImportPanel() }
         }
-        .padding(.top, DS.Spacing.md)
+        .padding(.top, AppUI.Spacing.md)
     }
 
     private func openImportPanel() {
@@ -69,11 +69,10 @@ struct ThemePickerView: View {
         let service = themeImportService
         Task { @MainActor in
             do {
-                let definition: ThemeDefinition
-                if url.pathExtension.lowercased() == "itermcolors" {
-                    definition = try await service.importItermColors(from: url)
+                let definition: ThemeDefinition = if url.pathExtension.lowercased() == "itermcolors" {
+                    try await service.importItermColors(from: url)
                 } else {
-                    definition = try await service.importJSON(from: url)
+                    try await service.importJSON(from: url)
                 }
                 themeManager.addCustomTheme(definition)
                 importError = nil
@@ -92,22 +91,22 @@ private struct ThemeCard: View {
     let onSelect: () -> Void
 
     var body: some View {
-        VStack(spacing: DS.Spacing.md) {
+        VStack(spacing: AppUI.Spacing.md) {
             colorSwatches
             Text(definition.name)
-                .font(DS.Font.label)
+                .font(AppUI.Font.label)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .padding(DS.Spacing.md)
+        .padding(AppUI.Spacing.md)
         .background(
-            RoundedRectangle(cornerRadius: DS.Radius.lg)
+            RoundedRectangle(cornerRadius: AppUI.Radius.lg)
                 .fill(isSelected
-                    ? Color.accentColor.opacity(DS.Opacity.selected)
+                    ? Color.accentColor.opacity(AppUI.Opacity.selected)
                     : Color(nsColor: .windowBackgroundColor))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: DS.Radius.lg)
+            RoundedRectangle(cornerRadius: AppUI.Radius.lg)
                 .stroke(
                     isSelected ? Color.accentColor : Color(nsColor: .separatorColor),
                     lineWidth: 1
@@ -124,7 +123,7 @@ private struct ThemeCard: View {
                 Rectangle()
                     .fill(ThemeDefinition.color(fromHex: definition.colors[key]) ?? .gray)
                     .frame(width: 14, height: 14)
-                    .cornerRadius(DS.Radius.xs)
+                    .cornerRadius(AppUI.Radius.xs)
             }
         }
     }

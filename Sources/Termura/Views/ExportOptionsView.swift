@@ -12,7 +12,7 @@ struct ExportOptionsView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(spacing: DS.Spacing.xl) {
+        VStack(spacing: AppUI.Spacing.xl) {
             Text("Export Session")
                 .font(.headline)
 
@@ -38,7 +38,7 @@ struct ExportOptionsView: View {
                     .foregroundColor(.red)
             }
 
-            HStack(spacing: DS.Spacing.lg) {
+            HStack(spacing: AppUI.Spacing.lg) {
                 Button("Cancel") { isPresented = false }
                     .keyboardShortcut(.cancelAction)
 
@@ -47,7 +47,7 @@ struct ExportOptionsView: View {
                     .disabled(isExporting || chunks.isEmpty)
             }
         }
-        .padding(DS.Spacing.xxxl)
+        .padding(AppUI.Spacing.xxxl)
         .frame(width: 320)
     }
 
@@ -59,12 +59,11 @@ struct ExportOptionsView: View {
         Task { @MainActor in
             defer { isExporting = false }
             do {
-                let url: URL
-                switch selectedFormat {
+                let url: URL = switch selectedFormat {
                 case .html:
-                    url = try await exportService.exportHTML(session: session, chunks: chunks)
+                    try await exportService.exportHTML(session: session, chunks: chunks)
                 case .json:
-                    url = try await exportService.exportJSON(session: session, chunks: chunks)
+                    try await exportService.exportJSON(session: session, chunks: chunks)
                 }
                 isPresented = false
                 revealInFinder(url)

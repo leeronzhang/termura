@@ -26,10 +26,10 @@ final class SearchViewModel: ObservableObject {
                 scheduler: RunLoop.main
             )
             .removeDuplicates()
-            .sink { [weak self] q in
+            .sink { [weak self] queryText in
                 guard let self else { return }
                 searchTask?.cancel()
-                guard q.count >= AppConfig.Search.minQueryLength else {
+                guard queryText.count >= AppConfig.Search.minQueryLength else {
                     results = .empty
                     isSearching = false
                     return
@@ -38,7 +38,7 @@ final class SearchViewModel: ObservableObject {
                 searchTask = Task { @MainActor [weak self] in
                     guard let self else { return }
                     do {
-                        let found = try await searchService.search(query: q)
+                        let found = try await searchService.search(query: queryText)
                         guard !Task.isCancelled else { return }
                         results = found
                     } catch {

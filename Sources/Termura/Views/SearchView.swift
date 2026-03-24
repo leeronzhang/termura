@@ -47,19 +47,19 @@ struct SearchView: View {
         }
         .pickerStyle(.segmented)
         .frame(width: 200)
-        .padding(DS.Spacing.md)
+        .padding(AppUI.Spacing.md)
     }
 
     // MARK: - Search field
 
     private var searchField: some View {
-        HStack(spacing: DS.Spacing.md) {
+        HStack(spacing: AppUI.Spacing.md) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
-                .frame(width: DS.Size.iconFrame)
+                .frame(width: AppUI.Size.iconFrame)
             TextField("Search sessions and notes\u{2026}", text: $viewModel.query)
                 .textFieldStyle(.plain)
-                .font(DS.Font.searchField)
+                .font(AppUI.Font.searchField)
             if viewModel.isSearching {
                 ProgressView().scaleEffect(0.7)
             }
@@ -67,10 +67,10 @@ struct SearchView: View {
                 .keyboardShortcut(.escape, modifiers: [])
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
-                .font(DS.Font.label)
+                .font(AppUI.Font.label)
         }
-        .padding(.horizontal, DS.Spacing.lg)
-        .padding(.vertical, DS.Spacing.mdLg)
+        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
     // MARK: - Results list
@@ -88,7 +88,7 @@ struct SearchView: View {
                 SearchResultRowView(result: result)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if case .session(let s) = result {
+                        if case let .session(s) = result {
                             onSelectSession(s.id)
                             isPresented = false
                         }

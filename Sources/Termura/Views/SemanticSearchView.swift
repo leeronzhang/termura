@@ -23,12 +23,12 @@ struct SemanticSearchView: View {
     // MARK: - Search field
 
     private var searchField: some View {
-        HStack(spacing: DS.Spacing.md) {
+        HStack(spacing: AppUI.Spacing.md) {
             Image(systemName: "sparkle.magnifyingglass")
                 .foregroundColor(.secondary)
             TextField("Semantic search\u{2026}", text: $query)
                 .textFieldStyle(.plain)
-                .font(DS.Font.searchField)
+                .font(AppUI.Font.searchField)
                 .onSubmit { performSearch() }
             if isSearching {
                 ProgressView().scaleEffect(0.7)
@@ -38,7 +38,7 @@ struct SemanticSearchView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
         }
-        .padding(DS.Spacing.lg)
+        .padding(AppUI.Spacing.lg)
     }
 
     // MARK: - Results
@@ -65,36 +65,36 @@ struct SemanticSearchView: View {
     }
 
     private func hitRow(_ hit: SearchHit) -> some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
             HStack {
                 Image(systemName: hit.isRuleResult ? "doc.text" : "terminal")
                     .foregroundColor(hit.isRuleResult ? .orange : .blue)
-                    .font(DS.Font.label)
+                    .font(AppUI.Font.label)
                 if let heading = hit.sectionHeading {
-                    Text(heading).font(DS.Font.bodyMedium)
+                    Text(heading).font(AppUI.Font.bodyMedium)
                 } else {
-                    Text("Session output").font(DS.Font.bodyMedium)
+                    Text("Session output").font(AppUI.Font.bodyMedium)
                 }
                 Spacer()
                 Text(String(format: "%.0f%%", hit.score * 100))
-                    .font(DS.Font.captionMono)
+                    .font(AppUI.Font.captionMono)
                     .foregroundColor(.secondary)
             }
             Text(hit.text.prefix(120) + (hit.text.count > 120 ? "\u{2026}" : ""))
-                .font(DS.Font.label)
+                .font(AppUI.Font.label)
                 .foregroundColor(.secondary)
                 .lineLimit(2)
         }
-        .padding(.vertical, DS.Spacing.sm)
+        .padding(.vertical, AppUI.Spacing.sm)
     }
 
     private func performSearch() {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard q.count >= AppConfig.Search.minQueryLength else { return }
+        let queryText = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard queryText.count >= AppConfig.Search.minQueryLength else { return }
         isSearching = true
         let service = vectorService
         Task {
-            let hits = await service.search(query: q)
+            let hits = await service.search(query: queryText)
             await MainActor.run {
                 results = hits
                 isSearching = false

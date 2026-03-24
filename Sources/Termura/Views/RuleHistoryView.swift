@@ -12,18 +12,18 @@ struct RuleHistoryView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Version History")
                 .panelHeaderStyle()
-                .padding(.horizontal, DS.Spacing.lg)
-                .padding(.vertical, DS.Spacing.md)
+                .padding(.horizontal, AppUI.Spacing.lg)
+                .padding(.vertical, AppUI.Spacing.md)
 
             Divider()
 
             ScrollView {
-                LazyVStack(spacing: DS.Spacing.xs) {
+                LazyVStack(spacing: AppUI.Spacing.xs) {
                     ForEach(Array(history.enumerated()), id: \.element.id) { index, record in
                         historyRow(record, index: index)
                     }
                 }
-                .padding(DS.Spacing.sm)
+                .padding(AppUI.Spacing.sm)
             }
         }
         .frame(minWidth: 200)
@@ -35,11 +35,11 @@ struct RuleHistoryView: View {
             onSelectVersion(record)
         } label: {
             HStack {
-                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
                     Text("Version \(record.version)")
-                        .font(DS.Font.bodyMedium)
+                        .font(AppUI.Font.bodyMedium)
                     Text(formattedDate(record.createdAt))
-                        .font(DS.Font.caption)
+                        .font(AppUI.Font.caption)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
@@ -47,15 +47,15 @@ struct RuleHistoryView: View {
                     Button("Diff") {
                         onCompare(history[index + 1], record)
                     }
-                    .font(DS.Font.caption)
+                    .font(AppUI.Font.caption)
                     .buttonStyle(.plain)
                     .foregroundColor(.accentColor)
                 }
             }
-            .padding(.horizontal, DS.Spacing.md)
-            .padding(.vertical, DS.Spacing.md)
-            .background(selectedIndex == index ? Color.accentColor.opacity(DS.Opacity.highlight) : Color.clear)
-            .cornerRadius(DS.Radius.sm)
+            .padding(.horizontal, AppUI.Spacing.md)
+            .padding(.vertical, AppUI.Spacing.md)
+            .background(selectedIndex == index ? Color.accentColor.opacity(AppUI.Opacity.highlight) : Color.clear)
+            .cornerRadius(AppUI.Radius.sm)
         }
         .buttonStyle(.plain)
     }

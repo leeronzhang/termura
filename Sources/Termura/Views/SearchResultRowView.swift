@@ -6,8 +6,8 @@ enum SearchResult: Identifiable {
 
     var id: String {
         switch self {
-        case .session(let s): return "session-\(s.id.rawValue)"
-        case .note(let n): return "note-\(n.id.rawValue)"
+        case let .session(s): "session-\(s.id.rawValue)"
+        case let .note(n): "note-\(n.id.rawValue)"
         }
     }
 }
@@ -16,42 +16,42 @@ struct SearchResultRowView: View {
     let result: SearchResult
 
     var body: some View {
-        HStack(spacing: DS.Spacing.lg) {
+        HStack(spacing: AppUI.Spacing.lg) {
             Image(systemName: iconName)
-                .frame(width: DS.Size.iconFrame)
+                .frame(width: AppUI.Size.iconFrame)
                 .foregroundColor(.secondary)
-            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
                 Text(title)
-                    .font(DS.Font.title3)
+                    .font(AppUI.Font.title3)
                     .lineLimit(1)
                 Text(subtitle)
-                    .font(DS.Font.label)
+                    .font(AppUI.Font.label)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, DS.Spacing.sm)
+        .padding(.vertical, AppUI.Spacing.sm)
     }
 
     private var iconName: String {
         switch result {
-        case .session: return "terminal"
-        case .note: return "note.text"
+        case .session: "terminal"
+        case .note: "note.text"
         }
     }
 
     private var title: String {
         switch result {
-        case .session(let s): return s.title
-        case .note(let n): return n.title.isEmpty ? "Untitled Note" : n.title
+        case let .session(s): s.title
+        case let .note(n): n.title.isEmpty ? "Untitled Note" : n.title
         }
     }
 
     private var subtitle: String {
         switch result {
-        case .session(let s):
+        case let .session(s):
             return s.workingDirectory.isEmpty ? "No directory" : s.workingDirectory
-        case .note(let n):
+        case let .note(n):
             let preview = n.body.prefix(AppConfig.Search.snippetLength)
             return preview.isEmpty ? "Empty note" : String(preview)
         }

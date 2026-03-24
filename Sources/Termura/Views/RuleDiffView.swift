@@ -26,22 +26,22 @@ struct RuleDiffView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }
-        .padding(DS.Spacing.lg)
+        .padding(AppUI.Spacing.lg)
     }
 
     private func diffPane(title: String, content: String, isOld: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title)
-                .font(DS.Font.panelHeader)
+                .font(AppUI.Font.panelHeader)
                 .foregroundColor(isOld ? .red : .green)
-                .padding(.horizontal, DS.Spacing.md)
-                .padding(.vertical, DS.Spacing.sm)
+                .padding(.horizontal, AppUI.Spacing.md)
+                .padding(.vertical, AppUI.Spacing.sm)
             Divider()
             ScrollView {
                 Text(content)
-                    .font(DS.Font.bodyMono)
+                    .font(AppUI.Font.bodyMono)
                     .textSelection(.enabled)
-                    .padding(DS.Spacing.md)
+                    .padding(AppUI.Spacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }

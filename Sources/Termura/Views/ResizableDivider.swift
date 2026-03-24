@@ -1,24 +1,29 @@
 import AppKit
 import SwiftUI
 
-/// A 1pt visual divider with an 8pt drag hit zone for resizing adjacent panels.
-///
-/// - `dragFactor`:  +1.0 → dragging right widens the bound panel (left-side divider)
-///                  -1.0 → dragging left widens the bound panel (right-side divider)
+/// A thin visual divider with an invisible wider drag hit zone for resizing adjacent panels.
 struct ResizableDivider: View {
     @Binding var width: Double
     let minWidth: Double
     let maxWidth: Double
     var dragFactor: Double = 1.0
+    var showLine: Bool = true
 
     @State private var startWidth: Double?
 
     var body: some View {
-        ZStack {
-            Color(nsColor: .separatorColor)
-                .frame(width: 1)
+        Group {
+            if showLine {
+                Color(nsColor: .separatorColor)
+                    .frame(width: 1)
+            }
+        }
+        // Zero layout width when hidden, 1pt when visible.
+        // Hit-testing extends 4pt on each side via the overlay.
+        .frame(maxHeight: .infinity)
+        .overlay {
             Color.clear
-                .frame(width: 8)
+                .frame(width: 9)
                 .contentShape(Rectangle())
                 .gesture(resizeGesture)
                 .onHover { hovering in
@@ -29,15 +34,19 @@ struct ResizableDivider: View {
                     }
                 }
         }
-        .frame(maxHeight: .infinity)
     }
 
     private var resizeGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
             .onChanged { value in
                 if startWidth == nil { startWidth = width }
                 let proposed = (startWidth ?? width) + dragFactor * value.translation.width
-                width = Swift.min(Swift.max(proposed, minWidth), maxWidth)
+                let clamped = Swift.min(Swift.max(proposed, minWidth), maxWidth)
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    width = clamped
+                }
             }
             .onEnded { _ in startWidth = nil }
     }

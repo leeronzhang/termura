@@ -8,9 +8,9 @@ struct SplitPaneView: View {
 
     var body: some View {
         switch node {
-        case .leaf(let sessionID):
+        case let .leaf(sessionID):
             renderLeaf(sessionID)
-        case .split(let axis, _, _):
+        case let .split(axis, _, _):
             splitView(axis: axis)
         }
     }
@@ -54,9 +54,9 @@ indirect enum SplitNode: Sendable {
     var depth: Int {
         switch self {
         case .leaf:
-            return 0
-        case .split(_, let first, let second):
-            return 1 + max(first.depth, second.depth)
+            0
+        case let .split(_, first, second):
+            1 + max(first.depth, second.depth)
         }
     }
 
@@ -68,10 +68,10 @@ indirect enum SplitNode: Sendable {
     /// All session IDs in this tree.
     var allSessionIDs: [SessionID] {
         switch self {
-        case .leaf(let id):
-            return [id]
-        case .split(_, let first, let second):
-            return first.allSessionIDs + second.allSessionIDs
+        case let .leaf(id):
+            [id]
+        case let .split(_, first, second):
+            first.allSessionIDs + second.allSessionIDs
         }
     }
 }
@@ -82,12 +82,12 @@ extension Binding where Value == SplitNode {
     var first: Binding<SplitNode> {
         Binding<SplitNode>(
             get: {
-                if case .split(_, let f, _) = wrappedValue { return f }
+                if case let .split(_, firstNode, _) = wrappedValue { return firstNode }
                 return wrappedValue
             },
             set: { newValue in
-                if case .split(let axis, _, let second) = wrappedValue {
-                    wrappedValue = .split(axis, newValue, second)
+                if case let .split(axis, _, secondNode) = wrappedValue {
+                    wrappedValue = .split(axis, newValue, secondNode)
                 }
             }
         )
@@ -96,12 +96,12 @@ extension Binding where Value == SplitNode {
     var second: Binding<SplitNode> {
         Binding<SplitNode>(
             get: {
-                if case .split(_, _, let s) = wrappedValue { return s }
+                if case let .split(_, _, secondNode) = wrappedValue { return secondNode }
                 return wrappedValue
             },
             set: { newValue in
-                if case .split(let axis, let first, _) = wrappedValue {
-                    wrappedValue = .split(axis, first, newValue)
+                if case let .split(axis, firstNode, _) = wrappedValue {
+                    wrappedValue = .split(axis, firstNode, newValue)
                 }
             }
         )

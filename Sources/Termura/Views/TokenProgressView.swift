@@ -16,19 +16,19 @@ struct TokenProgressView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
             ProgressView(value: fraction, total: 1.0)
                 .progressViewStyle(.linear)
                 .tint(progressColor)
-                .clipShape(Capsule())
+                .clipShape(Rectangle())
 
             HStack {
                 Text(formattedTokens)
-                    .font(DS.Font.captionMono)
+                    .font(AppUI.Font.captionMono)
                     .foregroundColor(.secondary)
                 Spacer()
                 Text(percentageText)
-                    .font(DS.Font.captionMono)
+                    .font(AppUI.Font.captionMono)
                     .foregroundColor(isWarning ? .orange : .secondary)
             }
         }
@@ -41,8 +41,8 @@ struct TokenProgressView: View {
     }
 
     private var formattedTokens: String {
-        if estimatedTokens >= 1_000 {
-            return String(format: "%.1fk", Double(estimatedTokens) / 1_000)
+        if estimatedTokens >= 1000 {
+            return String(format: "%.1fk", Double(estimatedTokens) / 1000)
         }
         return "\(estimatedTokens)"
     }

@@ -11,7 +11,7 @@ struct TimelineView: View {
             headerBar
             Divider()
             ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: DS.Spacing.xxs) {
+                LazyVStack(alignment: .leading, spacing: AppUI.Spacing.xxs) {
                     ForEach(timeline.turns) { turn in
                         TimelineTurnRow(turn: turn) {
                             onSelectChunkID(turn.chunkID)
@@ -21,8 +21,8 @@ struct TimelineView: View {
                         }
                     }
                 }
-                .padding(.vertical, DS.Spacing.smMd)
-                .padding(.horizontal, DS.Spacing.sm)
+                .padding(.vertical, AppUI.Spacing.smMd)
+                .padding(.horizontal, AppUI.Spacing.sm)
             }
         }
         .frame(width: AppConfig.Timeline.panelWidth)
@@ -33,8 +33,8 @@ struct TimelineView: View {
         Text("Timeline")
             .panelHeaderStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, DS.Spacing.lg)
-            .padding(.vertical, DS.Spacing.mdLg)
+            .padding(.horizontal, AppUI.Spacing.lg)
+            .padding(.vertical, AppUI.Spacing.mdLg)
     }
 }
 
@@ -48,18 +48,18 @@ private struct TimelineTurnRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: DS.Spacing.smMd) {
+            HStack(spacing: AppUI.Spacing.smMd) {
                 exitIndicator
-                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
                     commandLabel
                     Text(turn.startedAt, style: .time)
-                        .font(DS.Font.caption)
+                        .font(AppUI.Font.caption)
                         .foregroundColor(.secondary)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, DS.Spacing.md)
-            .padding(.vertical, DS.Spacing.sm)
+            .padding(.horizontal, AppUI.Spacing.md)
+            .padding(.vertical, AppUI.Spacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .hoverRow(isHovered: isHovered)
         }
@@ -70,12 +70,12 @@ private struct TimelineTurnRow: View {
     private var exitIndicator: some View {
         Circle()
             .fill(indicatorColor)
-            .frame(width: DS.Size.dotMediumSmall, height: DS.Size.dotMediumSmall)
+            .frame(width: AppUI.Size.dotMediumSmall, height: AppUI.Size.dotMediumSmall)
     }
 
     private var commandLabel: some View {
         Text(turn.command.isEmpty ? "(no command)" : turn.command)
-            .font(DS.Font.labelMono)
+            .font(AppUI.Font.labelMono)
             .foregroundColor(labelColor)
             .lineLimit(1)
             .truncationMode(.tail)
@@ -98,15 +98,15 @@ private struct BranchPointIndicator: View {
     let marker: BranchPointMarker
 
     var body: some View {
-        HStack(spacing: DS.Spacing.sm) {
+        HStack(spacing: AppUI.Spacing.sm) {
             Image(systemName: "arrow.triangle.branch")
                 .font(.system(size: 9))
                 .foregroundColor(.secondary)
             Text(marker.branchType.rawValue.capitalized)
-                .font(DS.Font.caption)
+                .font(AppUI.Font.caption)
                 .foregroundColor(.secondary)
         }
-        .padding(.leading, DS.Spacing.xxxl)
-        .padding(.vertical, DS.Spacing.xxs)
+        .padding(.leading, AppUI.Spacing.xxxl)
+        .padding(.vertical, AppUI.Spacing.xxs)
     }
 }

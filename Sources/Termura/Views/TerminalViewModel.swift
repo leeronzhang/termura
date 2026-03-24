@@ -8,7 +8,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalVie
 /// and session metadata for the terminal area view hierarchy.
 @MainActor
 final class TerminalViewModel: ObservableObject {
-
     // MARK: - Published state
 
     @Published var currentMetadata: SessionMetadata
@@ -19,21 +18,22 @@ final class TerminalViewModel: ObservableObject {
 
     // MARK: - Dependencies
 
-    private let sessionID: SessionID
-    private let engine: any TerminalEngine
-    private let sessionStore: any SessionStoreProtocol
-    private let outputStore: OutputStore
-    private let tokenCountingService: TokenCountingService
+    let sessionID: SessionID
+    let engine: any TerminalEngine
+    let sessionStore: any SessionStoreProtocol
+    let outputStore: OutputStore
+    let tokenCountingService: TokenCountingService
 
     // MARK: - Internal state
 
     private let modeController: InputModeController
     private let chunkDetector: ChunkDetector
     private let fallbackDetector: FallbackChunkDetector
-    private let agentDetector: AgentStateDetector
+    let agentDetector: AgentStateDetector
     private let interventionService: InterventionService
-    private weak var agentStateStore: AgentStateStore?
-    private let sessionStartTime: Date = Date()
+    let contextWindowMonitor: ContextWindowMonitor
+    weak var agentStateStore: AgentStateStore?
+    let sessionStartTime: Date = .init()
     private var streamTask: Task<Void, Never>?
     private var shellTask: Task<Void, Never>?
     /// Debounced re-check for prompt detection after PTY output settles.
@@ -47,6 +47,8 @@ final class TerminalViewModel: ObservableObject {
 
     /// Currently pending risk alert (shown as sheet).
     @Published var pendingRiskAlert: RiskAlert?
+    /// Context window warning alert (shown as sheet).
+    @Published var contextWindowAlert: ContextWindowAlert?
 
     // MARK: - Init
 
@@ -70,13 +72,14 @@ final class TerminalViewModel: ObservableObject {
         self.agentStateStore = agentStateStore
         self.isRestoredSession = isRestoredSession
         self.contextInjectionService = contextInjectionService
-        self.chunkDetector = ChunkDetector(sessionID: sessionID)
-        self.fallbackDetector = FallbackChunkDetector(sessionID: sessionID)
-        self.agentDetector = AgentStateDetector(sessionID: sessionID)
-        self.interventionService = InterventionService()
+        chunkDetector = ChunkDetector(sessionID: sessionID)
+        fallbackDetector = FallbackChunkDetector(sessionID: sessionID)
+        agentDetector = AgentStateDetector(sessionID: sessionID)
+        interventionService = InterventionService()
+        contextWindowMonitor = ContextWindowMonitor()
 
         let workingDir = FileManager.default.homeDirectoryForCurrentUser.path
-        self.currentMetadata = SessionMetadata.empty(
+        currentMetadata = SessionMetadata.empty(
             sessionID: sessionID,
             workingDirectory: workingDir
         )
@@ -115,7 +118,7 @@ final class TerminalViewModel: ObservableObject {
 
     private func handleOutputEvent(_ event: TerminalOutputEvent) async {
         switch event {
-        case .data(let data):
+        case let .data(data):
             guard let text = String(data: data, encoding: .utf8) else { return }
             let stripped = ANSIStripper.strip(text)
             let sid = sessionID
@@ -129,11 +132,13 @@ final class TerminalViewModel: ObservableObject {
                 await detector.appendRawOutput(text)
                 let chunks = await fallback.processOutput(stripped, raw: text)
                 await MainActor.run {
-                    for chunk in chunks { store.append(chunk) }
+                    for chunk in chunks {
+                        store.append(chunk)
+                    }
                 }
                 await service.accumulate(for: sid, text: stripped)
                 // Agent status analysis
-                let _ = await agentDet.analyzeOutput(stripped)
+                _ = await agentDet.analyzeOutput(stripped)
                 // Risk detection
                 if let risk = await intervention.detectRisk(in: stripped) {
                     await MainActor.run { [weak self] in
@@ -146,15 +151,15 @@ final class TerminalViewModel: ObservableObject {
             await updateAgentState()
             await refreshMetadata()
 
-        case .processExited(let code):
+        case let .processExited(code):
             let sid = sessionID
             logger.info("Session \(sid) process exited code=\(code)")
             await generateHandoffIfNeeded(exitCode: code)
 
-        case .titleChanged(let title):
+        case let .titleChanged(title):
             sessionStore.renameSession(id: sessionID, title: title)
 
-        case .workingDirectoryChanged(let path):
+        case let .workingDirectoryChanged(path):
             sessionStore.updateWorkingDirectory(id: sessionID, path: path)
             await refreshMetadata(workingDirectory: path)
         }
@@ -236,7 +241,9 @@ final class TerminalViewModel: ObservableObject {
     private func schedulePromptRecheck() {
         promptRecheckTask?.cancel()
         promptRecheckTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            do {
+                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            } catch {}
             guard !Task.isCancelled else { return }
             self?.detectPromptFromScreenBuffer()
         }
@@ -252,7 +259,9 @@ final class TerminalViewModel: ObservableObject {
         guard let service = contextInjectionService else { return }
         Task { @MainActor [weak self] in
             guard let text = await service.buildInjectionText(projectRoot: workingDir) else { return }
-            try? await Task.sleep(nanoseconds: AppConfig.SessionHandoff.injectionDelayNanoseconds)
+            do {
+                try await Task.sleep(nanoseconds: AppConfig.SessionHandoff.injectionDelayNanoseconds)
+            } catch {}
             guard !Task.isCancelled else { return }
             await self?.engine.send(text)
         }
@@ -291,66 +300,5 @@ final class TerminalViewModel: ObservableObject {
         guard let chunk = await detector.handleShellEvent(event) else { return }
         outputStore.append(chunk)
         await refreshMetadata()
-    }
-
-    // MARK: - Session Handoff
-
-    private func generateHandoffIfNeeded(exitCode: Int32) async {
-        let agentDet = agentDetector
-        guard let agentState = await agentDet.buildState(),
-              agentState.agentType != .unknown else { return }
-
-        guard let session = sessionStore.sessions.first(where: { $0.id == sessionID }),
-              !session.workingDirectory.isEmpty else { return }
-
-        let chunks = outputStore.chunks
-
-        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
-        let handoffService = appDelegate.sessionHandoffService
-
-        Task.detached {
-            do {
-                try await handoffService.generateHandoff(
-                    session: session,
-                    chunks: chunks,
-                    agentState: agentState
-                )
-            } catch {
-                logger.error("Session handoff failed: \(error)")
-            }
-        }
-    }
-
-    // MARK: - Agent State
-
-    private func updateAgentState() async {
-        let agentDet = agentDetector
-        guard let state = await agentDet.buildState() else { return }
-        agentStateStore?.update(state: state)
-    }
-
-    // MARK: - Metadata
-
-    private func refreshMetadata(workingDirectory: String? = nil) async {
-        let service = tokenCountingService
-        let sid = sessionID
-        let tokens = await service.estimatedTokens(for: sid)
-        let elapsed = Date().timeIntervalSince(sessionStartTime)
-        let cmdCount = outputStore.chunks.count
-        let dir = workingDirectory ?? currentMetadata.workingDirectory
-        let agentDet = agentDetector
-        let agentState = await agentDet.buildState()
-
-        currentMetadata = SessionMetadata(
-            sessionID: sessionID,
-            estimatedTokenCount: tokens,
-            totalCharacterCount: tokens * Int(AppConfig.AI.tokenEstimateDivisor),
-            sessionDuration: elapsed,
-            commandCount: cmdCount,
-            workingDirectory: dir,
-            activeAgentCount: agentStateStore?.activeAgentCount ?? 0,
-            currentAgentType: agentState?.agentType,
-            currentAgentStatus: agentState?.status
-        )
     }
 }

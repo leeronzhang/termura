@@ -25,7 +25,7 @@ struct CodifyRuleSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.xl) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.xl) {
             Text("Codify Rule from Error")
                 .font(.headline)
 
@@ -48,17 +48,17 @@ struct CodifyRuleSheet: View {
                 .disabled(editedRule.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(DS.Spacing.xxl)
+        .padding(AppUI.Spacing.xxl)
         .frame(width: 500)
         .frame(minHeight: 400)
     }
 
     private var errorContext: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
             Text("Error")
                 .sectionLabelStyle()
             Text(draft.errorSummary.title)
-                .font(DS.Font.body)
+                .font(AppUI.Font.body)
                 .foregroundColor(.red)
                 .lineLimit(3)
         }
@@ -74,13 +74,13 @@ struct CodifyRuleSheet: View {
     }
 
     private var ruleEditor: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
             Text("Rule (editable)")
                 .sectionLabelStyle()
             TextEditor(text: $editedRule)
-                .font(DS.Font.bodyMono)
+                .font(AppUI.Font.bodyMono)
                 .frame(minHeight: 150)
-                .border(Color.secondary.opacity(DS.Opacity.muted))
+                .border(Color.secondary.opacity(AppUI.Opacity.muted))
         }
     }
 }

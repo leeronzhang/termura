@@ -28,12 +28,12 @@ struct HarnessSidebarView: View {
                 .panelHeaderStyle()
             Spacer()
             Button { isPresented = false } label: {
-                Image(systemName: "xmark").font(DS.Font.caption)
+                Image(systemName: "xmark").font(AppUI.Font.caption)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, DS.Spacing.lg)
-        .padding(.vertical, DS.Spacing.md)
+        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.vertical, AppUI.Spacing.md)
     }
 
     private var fileList: some View {
@@ -44,10 +44,10 @@ struct HarnessSidebarView: View {
                 HStack {
                     Image(systemName: "doc.text")
                     Text(file.fileName)
-                        .font(DS.Font.body)
+                        .font(AppUI.Font.body)
                     Spacer()
                     Text("v\(file.version)")
-                        .font(DS.Font.caption)
+                        .font(AppUI.Font.caption)
                         .foregroundColor(.secondary)
                 }
             }
@@ -57,27 +57,27 @@ struct HarnessSidebarView: View {
     }
 
     private var corruptionSection: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
             Text("Issues (\(viewModel.corruptionResults.count))")
-                .font(DS.Font.sectionHeader)
+                .font(AppUI.Font.sectionHeader)
                 .foregroundColor(.orange)
-                .padding(.horizontal, DS.Spacing.lg)
-                .padding(.top, DS.Spacing.md)
+                .padding(.horizontal, AppUI.Spacing.lg)
+                .padding(.top, AppUI.Spacing.md)
 
             ForEach(viewModel.corruptionResults) { result in
-                HStack(spacing: DS.Spacing.md) {
+                HStack(spacing: AppUI.Spacing.md) {
                     Image(systemName: severityIcon(result.severity))
                         .foregroundColor(severityColor(result.severity))
-                        .font(DS.Font.caption)
+                        .font(AppUI.Font.caption)
                     Text(result.message)
-                        .font(DS.Font.label)
+                        .font(AppUI.Font.label)
                         .lineLimit(2)
                 }
-                .padding(.horizontal, DS.Spacing.lg)
-                .padding(.vertical, DS.Spacing.xs)
+                .padding(.horizontal, AppUI.Spacing.lg)
+                .padding(.vertical, AppUI.Spacing.xs)
             }
         }
-        .padding(.bottom, DS.Spacing.md)
+        .padding(.bottom, AppUI.Spacing.md)
     }
 
     private var footer: some View {
@@ -86,25 +86,25 @@ struct HarnessSidebarView: View {
                 Task { await viewModel.runCorruptionScan() }
             }
             .disabled(viewModel.selectedFilePath == nil || viewModel.isScanning)
-            .font(DS.Font.label)
+            .font(AppUI.Font.label)
             Spacer()
         }
-        .padding(DS.Spacing.md)
+        .padding(AppUI.Spacing.md)
     }
 
     private func severityIcon(_ severity: CorruptionSeverity) -> String {
         switch severity {
-        case .error: return "xmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .info: return "info.circle.fill"
+        case .error: "xmark.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .info: "info.circle.fill"
         }
     }
 
     private func severityColor(_ severity: CorruptionSeverity) -> Color {
         switch severity {
-        case .error: return .red
-        case .warning: return .orange
-        case .info: return .blue
+        case .error: .red
+        case .warning: .orange
+        case .info: .blue
         }
     }
 }

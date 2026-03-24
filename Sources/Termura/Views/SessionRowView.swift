@@ -10,50 +10,66 @@ struct SessionRowView: View {
     let onActivate: () -> Void
     let onRename: (String) -> Void
     let onClose: () -> Void
+    /// Optional toggle for expand/collapse. When set, a chevron is shown.
+    var onToggleExpand: (() -> Void)?
+    var isExpanded: Bool = true
 
     @State private var isEditing = false
     @State private var editTitle = ""
     @State private var isHovered = false
     @State private var glowOpacity: Double = 0.0
+    @State private var showCloseConfirm = false
     @EnvironmentObject private var themeManager: ThemeManager
 
     private var isWaiting: Bool { agentStatus == .waitingInput }
 
     var body: some View {
-        HStack(spacing: DS.Spacing.smMd) {
+        HStack(spacing: AppUI.Spacing.smMd) {
             colorDot
             sessionTitle
-            Spacer(minLength: DS.Spacing.sm)
+            Spacer(minLength: AppUI.Spacing.sm)
             if let status = agentStatus, let type = agentType {
                 AgentStatusBadgeView(status: status, agentType: type)
             }
             if hasUnreadFailure {
                 Circle()
                     .fill(Color.red)
-                    .frame(width: DS.Size.dotMedium, height: DS.Size.dotMedium)
+                    .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
+            }
+            if let toggle = onToggleExpand {
+                Button {
+                    toggle()
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(AppUI.Font.micro)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
             closeButton
         }
-        .padding(.horizontal, DS.Spacing.mdLg)
-        .padding(.vertical, DS.Spacing.smMd)
+        .padding(.horizontal, AppUI.Spacing.xxxl)
+        .padding(.vertical, AppUI.Spacing.smMd)
         .background(rowBackground)
-        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
+        .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
         .overlay(glowBorder)
         .onTapGesture(count: 2) { beginEditing() }
         .onTapGesture(count: 1) { onActivate() }
         .onHover { isHovered = $0 }
         .contextMenu { contextMenuItems }
-        .animation(.easeOut(duration: DS.Animation.quick), value: isHovered)
+        .animation(.easeOut(duration: AppUI.Animation.quick), value: isHovered)
         .onChange(of: isWaiting) { _, waiting in
             if waiting {
                 withAnimation(
                     .easeInOut(duration: AppConfig.Agent.glowAnimationDuration)
-                    .repeatForever(autoreverses: true)
+                        .repeatForever(autoreverses: true)
                 ) {
-                    glowOpacity = DS.Opacity.secondary
+                    glowOpacity = AppUI.Opacity.secondary
                 }
             } else {
-                withAnimation(.easeOut(duration: DS.Animation.fadeOut)) {
+                withAnimation(.easeOut(duration: AppUI.Animation.fadeOut)) {
                     glowOpacity = 0.0
                 }
             }
@@ -67,7 +83,7 @@ struct SessionRowView: View {
         if session.colorLabel != .none {
             Circle()
                 .fill(colorForLabel(session.colorLabel))
-                .frame(width: DS.Size.dotMedium, height: DS.Size.dotMedium)
+                .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
         }
     }
 
@@ -76,19 +92,19 @@ struct SessionRowView: View {
         if isEditing {
             TextField("Session name", text: $editTitle, onCommit: commitEdit)
                 .textFieldStyle(.plain)
-                .font(DS.Font.title3)
+                .font(AppUI.Font.title3)
                 .foregroundColor(themeManager.current.sidebarText)
                 .onExitCommand { cancelEdit() }
         } else {
-            VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
                 Text(session.title)
-                    .font(DS.Font.title3)
-                    .foregroundColor(themeManager.current.sidebarText)
+                    .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
+                    .foregroundColor(isActive ? .primary : themeManager.current.sidebarText)
                     .lineLimit(1)
                 if let dir = workingDirectorySubtitle {
                     Text(dir)
-                        .font(DS.Font.caption)
-                        .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.tertiary))
+                        .font(AppUI.Font.caption)
+                        .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
                         .lineLimit(1)
                 }
             }
@@ -102,32 +118,44 @@ struct SessionRowView: View {
     }
 
     private var closeButton: some View {
-        Button(action: onClose) {
+        Button {
+            if isActive {
+                showCloseConfirm = true
+            } else {
+                onClose()
+            }
+        } label: {
             Image(systemName: "xmark")
-                .font(DS.Font.micro)
-                .foregroundColor(themeManager.current.sidebarText.opacity(DS.Opacity.tertiary))
+                .font(AppUI.Font.micro)
+                .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
         }
         .buttonStyle(.plain)
-        .opacity(isActive || isHovered ? 1 : 0)
+        .opacity(isHovered ? 1 : 0)
+        .alert("Close Active Session?", isPresented: $showCloseConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Stop & Close", role: .destructive) { onClose() }
+        } message: {
+            Text("This session is currently active. The running process will be terminated.")
+        }
     }
 
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: DS.Radius.md)
+        RoundedRectangle(cornerRadius: AppUI.Radius.md)
             .fill(rowFillColor)
     }
 
     private var rowFillColor: Color {
         if isActive {
-            return themeManager.current.activeSessionHighlight.opacity(DS.Opacity.selected)
+            return Color.accentColor.opacity(AppUI.Opacity.selected)
         } else if isHovered {
-            return themeManager.current.sidebarText.opacity(DS.Opacity.whisper)
+            return themeManager.current.sidebarText.opacity(AppUI.Opacity.whisper)
         }
         return .clear
     }
 
     private var glowBorder: some View {
-        RoundedRectangle(cornerRadius: DS.Radius.md)
-            .stroke(Color.accentColor.opacity(glowOpacity), lineWidth: 1)
+        RoundedRectangle(cornerRadius: AppUI.Radius.md)
+            .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : Color.accentColor.opacity(glowOpacity), lineWidth: 1)
     }
 
     @ViewBuilder

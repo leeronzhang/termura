@@ -3,7 +3,6 @@ import SwiftUI
 /// Sheet shown on first launch to guide the user through shell integration installation.
 /// Writes `UserDefaults` key `AppConfig.ShellIntegration.installedDefaultsKey` on success.
 struct ShellIntegrationOnboardingView: View {
-
     @Binding var isPresented: Bool
 
     // MARK: - State
@@ -17,20 +16,20 @@ struct ShellIntegrationOnboardingView: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.xxl) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.xxl) {
             headerSection
             infoSection
             shellPickerSection
             actionSection
         }
-        .padding(DS.Spacing.xxxl)
+        .padding(AppUI.Spacing.xxxl)
         .frame(width: 480)
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
             Text("Shell Integration")
                 .font(.title2.bold())
             Text("Enable smart output chunking and accurate command tracking.")
@@ -42,18 +41,18 @@ struct ShellIntegrationOnboardingView: View {
     // MARK: - Info
 
     private var infoSection: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.md) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
             featureRow(icon: "rectangle.split.3x1", text: "Structured output blocks per command")
             featureRow(icon: "clock", text: "Execution time and exit code per command")
             featureRow(icon: "doc.text.magnifyingglass", text: "Accurate token counting")
         }
-        .padding(DS.Spacing.lg)
-        .background(Color.accentColor.opacity(DS.Opacity.tint))
-        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.lg))
+        .padding(AppUI.Spacing.lg)
+        .background(Color.accentColor.opacity(AppUI.Opacity.tint))
+        .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.lg))
     }
 
     private func featureRow(icon: String, text: String) -> some View {
-        HStack(spacing: DS.Spacing.md) {
+        HStack(spacing: AppUI.Spacing.md) {
             Image(systemName: icon)
                 .foregroundColor(.accentColor)
                 .frame(width: 18)
@@ -82,7 +81,7 @@ struct ShellIntegrationOnboardingView: View {
             Text(errorMsg)
                 .font(.caption)
                 .foregroundColor(.red)
-                .padding(.bottom, DS.Spacing.sm)
+                .padding(.bottom, AppUI.Spacing.sm)
         }
 
         HStack {

@@ -3,7 +3,6 @@ import SwiftUI
 /// Narrow right-side panel displaying session metadata: directory, token usage,
 /// command count, and duration. Toggled via toolbar button in TerminalAreaView.
 struct SessionMetadataBarView: View {
-
     let metadata: SessionMetadata
 
     var body: some View {
@@ -11,7 +10,7 @@ struct SessionMetadataBarView: View {
             panelHeader
             Divider()
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: DS.Spacing.lgXl) {
+                VStack(alignment: .leading, spacing: AppUI.Spacing.lgXl) {
                     if metadata.currentAgentType != nil {
                         agentSection
                     }
@@ -20,8 +19,8 @@ struct SessionMetadataBarView: View {
                     commandSection
                     durationSection
                 }
-                .padding(.horizontal, DS.Spacing.lg)
-                .padding(.vertical, DS.Spacing.lgXl)
+                .padding(.horizontal, AppUI.Spacing.lg)
+                .padding(.vertical, AppUI.Spacing.lgXl)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -34,8 +33,8 @@ struct SessionMetadataBarView: View {
         Text("Session")
             .panelHeaderStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, DS.Spacing.lg)
-            .padding(.vertical, DS.Spacing.mdLg)
+            .padding(.horizontal, AppUI.Spacing.lg)
+            .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
     // MARK: - Agent
@@ -45,14 +44,14 @@ struct SessionMetadataBarView: View {
         if let agentType = metadata.currentAgentType,
            let agentStatus = metadata.currentAgentStatus {
             metadataItem(label: "Agent") {
-                HStack(spacing: DS.Spacing.smMd) {
+                HStack(spacing: AppUI.Spacing.smMd) {
                     AgentStatusBadgeView(status: agentStatus, agentType: agentType)
                     Text(agentType.rawValue)
-                        .font(DS.Font.bodyMedium)
+                        .font(AppUI.Font.bodyMedium)
                 }
                 if metadata.activeAgentCount > 1 {
                     Text("\(metadata.activeAgentCount) agents active")
-                        .font(DS.Font.caption)
+                        .font(AppUI.Font.caption)
                         .foregroundColor(.secondary)
                 }
             }
@@ -64,7 +63,7 @@ struct SessionMetadataBarView: View {
     private var directorySection: some View {
         metadataItem(label: "Directory") {
             Text(abbreviatedDirectory)
-                .font(DS.Font.labelMono)
+                .font(AppUI.Font.labelMono)
                 .foregroundColor(.primary)
                 .lineLimit(3)
                 .truncationMode(.middle)
@@ -76,16 +75,15 @@ struct SessionMetadataBarView: View {
 
     private var tokenSection: some View {
         metadataItem(label: "Tokens") {
-            VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                ProgressView(value: tokenFraction, total: 1.0)
-                    .progressViewStyle(.linear)
-                    .tint(tokenFraction >= AppConfig.UI.tokenProgressWarningFraction ? .orange : .accentColor)
-                    .clipShape(Capsule())
+            if metadata.contextWindowLimit > 0 {
+                TokenProgressView(
+                    estimatedTokens: metadata.estimatedTokenCount,
+                    contextLimit: metadata.contextWindowLimit
+                )
+            } else {
                 Text(formattedTokenCount)
-                    .font(DS.Font.label)
-                    .foregroundColor(
-                        tokenFraction >= AppConfig.UI.tokenProgressWarningFraction ? .orange : .secondary
-                    )
+                    .font(AppUI.Font.label)
+                    .foregroundColor(.secondary)
                     .monospacedDigit()
             }
         }
@@ -96,7 +94,7 @@ struct SessionMetadataBarView: View {
     private var commandSection: some View {
         metadataItem(label: "Commands") {
             Text("\(metadata.commandCount)")
-                .font(DS.Font.title3Medium)
+                .font(AppUI.Font.title3Medium)
                 .monospacedDigit()
         }
     }
@@ -106,7 +104,7 @@ struct SessionMetadataBarView: View {
     private var durationSection: some View {
         metadataItem(label: "Duration") {
             Text(formattedDuration)
-                .font(DS.Font.title3Medium)
+                .font(AppUI.Font.title3Medium)
                 .monospacedDigit()
         }
     }
@@ -114,11 +112,11 @@ struct SessionMetadataBarView: View {
     // MARK: - Reusable item layout
 
     @ViewBuilder
-    private func metadataItem<Content: View>(
+    private func metadataItem(
         label: String,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: () -> some View
     ) -> some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
             Text(label)
                 .sectionLabelStyle()
             content()
@@ -127,16 +125,10 @@ struct SessionMetadataBarView: View {
 
     // MARK: - Computed
 
-    private var tokenFraction: Double {
-        guard AppConfig.AI.contextWarningThreshold > 0 else { return 0 }
-        let fraction = Double(metadata.estimatedTokenCount) / Double(AppConfig.AI.contextWarningThreshold)
-        return min(fraction, 1.0)
-    }
-
     private var formattedTokenCount: String {
         let tokens = metadata.estimatedTokenCount
-        if tokens >= 1_000 {
-            return String(format: "%.1fk", Double(tokens) / 1_000)
+        if tokens >= 1000 {
+            return String(format: "%.1fk", Double(tokens) / 1000)
         }
         return "\(tokens)"
     }

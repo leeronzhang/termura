@@ -45,7 +45,7 @@ struct ContextFileView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
-        .padding(DS.Spacing.md)
+        .padding(AppUI.Spacing.md)
     }
 
     private var footer: some View {
@@ -59,11 +59,11 @@ struct ContextFileView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(isSaving || errorMessage != nil)
         }
-        .padding(DS.Spacing.md)
+        .padding(AppUI.Spacing.md)
     }
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: DS.Spacing.md) {
+        VStack(spacing: AppUI.Spacing.md) {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)

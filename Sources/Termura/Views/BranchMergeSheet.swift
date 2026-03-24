@@ -14,14 +14,14 @@ struct BranchMergeSheet: View {
     private let summarizer = BranchSummarizer()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.xl) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.xl) {
             header
             Divider()
             branchInfo
             summaryEditor
             actionBar
         }
-        .padding(DS.Spacing.xxl)
+        .padding(AppUI.Spacing.xxl)
         .frame(width: 480)
         .frame(minHeight: 350)
         .onAppear { generateSummary() }
@@ -38,25 +38,25 @@ struct BranchMergeSheet: View {
     }
 
     private var branchInfo: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
             Text(branchSession.title)
-                .font(DS.Font.title3Medium)
-            HStack(spacing: DS.Spacing.md) {
+                .font(AppUI.Font.title3Medium)
+            HStack(spacing: AppUI.Spacing.md) {
                 Text(branchSession.branchType.rawValue.capitalized)
-                    .font(DS.Font.label)
-                    .padding(.horizontal, DS.Spacing.md)
-                    .padding(.vertical, DS.Spacing.xs)
-                    .background(branchColor.opacity(DS.Opacity.selected))
-                    .cornerRadius(DS.Radius.sm)
+                    .font(AppUI.Font.label)
+                    .padding(.horizontal, AppUI.Spacing.md)
+                    .padding(.vertical, AppUI.Spacing.xs)
+                    .background(branchColor.opacity(AppUI.Opacity.selected))
+                    .cornerRadius(AppUI.Radius.sm)
                 Text("\(chunks.count) commands")
-                    .font(DS.Font.label)
+                    .font(AppUI.Font.label)
                     .foregroundColor(.secondary)
             }
         }
     }
 
     private var summaryEditor: some View {
-        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
             HStack {
                 Text("Summary (editable)")
                     .sectionLabelStyle()
@@ -66,9 +66,9 @@ struct BranchMergeSheet: View {
                 }
             }
             TextEditor(text: $summary)
-                .font(DS.Font.bodyMono)
+                .font(AppUI.Font.bodyMono)
                 .frame(minHeight: 120)
-                .border(Color.secondary.opacity(DS.Opacity.muted))
+                .border(Color.secondary.opacity(AppUI.Opacity.muted))
         }
     }
 
@@ -102,21 +102,21 @@ struct BranchMergeSheet: View {
 
     private var branchIcon: String {
         switch branchSession.branchType {
-        case .main: return "circle.fill"
-        case .investigation: return "magnifyingglass"
-        case .fix: return "wrench.fill"
-        case .review: return "eye.fill"
-        case .experiment: return "flask.fill"
+        case .main: "circle.fill"
+        case .investigation: "magnifyingglass"
+        case .fix: "wrench.fill"
+        case .review: "eye.fill"
+        case .experiment: "flask.fill"
         }
     }
 
     private var branchColor: Color {
         switch branchSession.branchType {
-        case .main: return .primary
-        case .investigation: return .blue
-        case .fix: return .orange
-        case .review: return .green
-        case .experiment: return .purple
+        case .main: .primary
+        case .investigation: .blue
+        case .fix: .orange
+        case .review: .green
+        case .experiment: .purple
         }
     }
 }

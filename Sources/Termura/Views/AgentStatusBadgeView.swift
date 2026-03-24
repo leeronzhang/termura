@@ -7,7 +7,7 @@ struct AgentStatusBadgeView: View {
     let agentType: AgentType
 
     var body: some View {
-        HStack(spacing: DS.Spacing.sm) {
+        HStack(spacing: AppUI.Spacing.sm) {
             statusDot
             if status == .thinking || status == .toolRunning {
                 pulsingIndicator
@@ -19,26 +19,26 @@ struct AgentStatusBadgeView: View {
     private var statusDot: some View {
         Circle()
             .fill(statusColor)
-            .frame(width: DS.Size.dotMedium, height: DS.Size.dotMedium)
+            .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
     }
 
     @ViewBuilder
     private var pulsingIndicator: some View {
         Circle()
             .fill(statusColor.opacity(0.4))
-            .frame(width: DS.Size.dotMedium, height: DS.Size.dotMedium)
+            .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
             .scaleEffect(1.5)
-            .opacity(DS.Opacity.secondary)
+            .opacity(AppUI.Opacity.secondary)
     }
 
     private var statusColor: Color {
         switch status {
-        case .idle: return .gray
-        case .thinking: return .blue
-        case .toolRunning: return .orange
-        case .waitingInput: return .yellow
-        case .error: return .red
-        case .completed: return .green
+        case .idle: .gray
+        case .thinking: .blue
+        case .toolRunning: .orange
+        case .waitingInput: .yellow
+        case .error: .red
+        case .completed: .green
         }
     }
 
