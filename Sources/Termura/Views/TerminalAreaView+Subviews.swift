@@ -188,7 +188,7 @@ extension TerminalAreaView {
             editorOverlayHeight = height
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(NSColor(theme.background)))
+        .background(theme.background)
     }
 
 }
@@ -219,7 +219,7 @@ extension TerminalAreaView {
                 .padding(.horizontal, AppUI.Spacing.xxl)
                 .padding(.vertical, AppUI.Spacing.xl)
         }
-        .background(Color(NSColor(theme.background)))
+        .background(theme.background)
     }
 
     /// Draggable divider between terminal and editor input.

@@ -31,7 +31,7 @@ struct AgentDashboardView: View {
                 .font(AppUI.Font.caption)
                 .foregroundColor(.secondary)
         }
-        .padding(.horizontal, AppUI.Spacing.md)
+        .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
     }
 

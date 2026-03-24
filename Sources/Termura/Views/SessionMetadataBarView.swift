@@ -19,7 +19,7 @@ struct SessionMetadataBarView: View {
                     commandSection
                     durationSection
                 }
-                .padding(.horizontal, AppUI.Spacing.lg)
+                .padding(.horizontal, AppUI.Spacing.xxxl)
                 .padding(.vertical, AppUI.Spacing.lgXl)
             }
         }
@@ -33,7 +33,7 @@ struct SessionMetadataBarView: View {
         Text("Session")
             .panelHeaderStyle()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, AppUI.Spacing.lg)
+            .padding(.horizontal, AppUI.Spacing.xxxl)
             .padding(.vertical, AppUI.Spacing.mdLg)
     }
 

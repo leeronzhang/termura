@@ -74,7 +74,7 @@ enum AppConfig {
         static let sidebarMaxWidth: Double = 480
         static let sidebarDefaultWidth: Double = 280
         static let metadataBarHeight: Double = 28
-        static let metadataPanelWidth: Double = 160
+        static let metadataPanelWidth: Double = 280
         static let metadataPanelMinWidth: Double = 120
         static let metadataPanelMaxWidth: Double = 300
         static let tokenProgressWarningFraction: Double = 0.8

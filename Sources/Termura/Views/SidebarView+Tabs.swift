@@ -206,7 +206,7 @@ struct SidebarSearchContent: View {
                 ProgressView().scaleEffect(0.6)
             }
         }
-        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
@@ -219,7 +219,7 @@ struct SidebarSearchContent: View {
                 .textFieldStyle(.plain)
                 .font(AppUI.Font.body)
         }
-        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.md)
     }
 
@@ -284,7 +284,7 @@ extension SidebarView {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, AppUI.Spacing.md)
+        .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
@@ -300,7 +300,7 @@ extension SidebarView {
                         }
                 }
             }
-            .padding(.horizontal, AppUI.Spacing.md)
+            .padding(.horizontal, AppUI.Spacing.lg)
         }
     }
 
@@ -315,7 +315,7 @@ extension SidebarView {
                     .lineLimit(1)
                 Spacer()
             }
-            .padding(.horizontal, AppUI.Spacing.mdLg)
+            .padding(.horizontal, AppUI.Spacing.lg)
             .padding(.vertical, AppUI.Spacing.smMd)
             .background(
                 isActive
@@ -393,7 +393,7 @@ struct SidebarHarnessContent: View {
             .disabled(viewModel.selectedFilePath == nil || viewModel.isScanning)
             .help("Scan for issues")
         }
-        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
@@ -461,7 +461,7 @@ struct SidebarHarnessContent: View {
                 .foregroundColor(.secondary)
             Spacer()
         }
-        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.md)
     }
 

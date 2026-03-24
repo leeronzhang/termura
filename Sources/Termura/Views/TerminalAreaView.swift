@@ -107,11 +107,19 @@ struct TerminalAreaView: View {
 
                 // Right panel: metadata (hidden in compact/split mode)
                 if !isCompact && showMetadata {
+                    ResizableDivider(
+                        width: $metadataPanelWidth,
+                        minWidth: AppConfig.UI.metadataPanelMinWidth,
+                        maxWidth: AppConfig.UI.metadataPanelMaxWidth,
+                        dragFactor: -1.0
+                    )
+
                     SessionMetadataBarView(metadata: viewModel.currentMetadata)
                         .frame(width: metadataPanelWidth)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(theme.background)
 
             // EditorInputView is rendered inside terminalAndOutputArea as a ZStack overlay.
         }
