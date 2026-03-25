@@ -65,7 +65,10 @@ struct NotesSplitView: View {
                     .padding(.top, 16)
                     .padding(.bottom, 8)
                 Divider()
-                MarkdownEditorView(text: $viewModel.editingBody)
+                NoteEditorView(
+                    title: viewModel.editingTitle,
+                    text: $viewModel.editingBody
+                )
             }
         } else {
             Text("Select or create a note")
