@@ -102,14 +102,14 @@ struct FilePreviewView: View {
 
 // MARK: - Image Preview (scrollable, 1:1 default)
 
-/// Renders an image at native pixel size (1:1) inside a scroll view.
+/// Renders an image at native pixel size (1:1), centered in the view.
 /// Supports zoom via the header controls.
 struct ImagePreviewView: NSViewRepresentable {
     let fileURL: URL
     let zoom: CGFloat
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = CenteringScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
@@ -119,8 +119,6 @@ struct ImagePreviewView: NSViewRepresentable {
         let imageView = NSImageView()
         imageView.imageScaling = .scaleNone
         imageView.imageAlignment = .alignCenter
-        imageView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        imageView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
         if let image = NSImage(contentsOf: fileURL) {
             imageView.image = image
@@ -152,6 +150,40 @@ struct ImagePreviewView: NSViewRepresentable {
         )
         if imageView.frame.size != newFrame.size {
             imageView.frame = newFrame
+            scrollView.needsLayout = true
+        }
+    }
+}
+
+// MARK: - Centering Scroll View
+
+/// NSScrollView subclass that centers its document view when smaller than the clip bounds.
+final class CenteringScrollView: NSScrollView {
+    override func tile() {
+        super.tile()
+        centerDocumentView()
+    }
+
+    override func layout() {
+        super.layout()
+        centerDocumentView()
+    }
+
+    private func centerDocumentView() {
+        guard let docView = documentView else { return }
+        let clipSize = contentView.bounds.size
+        let docSize = docView.frame.size
+
+        var origin = CGPoint.zero
+        if docSize.width < clipSize.width {
+            origin.x = (clipSize.width - docSize.width) / 2
+        }
+        if docSize.height < clipSize.height {
+            origin.y = (clipSize.height - docSize.height) / 2
+        }
+
+        if docView.frame.origin != origin {
+            docView.setFrameOrigin(origin)
         }
     }
 }

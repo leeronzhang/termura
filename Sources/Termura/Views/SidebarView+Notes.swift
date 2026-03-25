@@ -48,7 +48,12 @@ extension SidebarView {
         Button {
             onOpenNote?(note.id, note.title)
         } label: {
-            HStack {
+            HStack(spacing: AppUI.Spacing.md) {
+                FileTypeIcon.image(for: "note.md")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 13, height: 13)
+                    .foregroundColor(.secondary)
                 Text(note.title.isEmpty ? "Untitled" : note.title)
                     .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
                     .foregroundColor(isActive ? .primary : .secondary)

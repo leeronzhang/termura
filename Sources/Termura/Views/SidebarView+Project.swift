@@ -11,6 +11,7 @@ extension SidebarView {
         if !root.isEmpty {
             SidebarProjectContent(
                 viewModel: projectContext.projectViewModel,
+                activeFilePath: activeContentTab?.filePath,
                 onOpenFile: onOpenFile
             )
         } else {
@@ -22,6 +23,7 @@ extension SidebarView {
 /// Project file tree with integrated git status.
 struct SidebarProjectContent: View {
     @ObservedObject var viewModel: ProjectViewModel
+    var activeFilePath: String?
     var onOpenFile: ((String, FileOpenMode) -> Void)?
 
     private var git: GitStatusResult { viewModel.gitResult }
@@ -152,6 +154,7 @@ struct SidebarProjectContent: View {
                             node: node,
                             depth: 0,
                             expandedIDs: $viewModel.expandedNodeIDs,
+                            activeFilePath: activeFilePath,
                             onOpenFile: onOpenFile
                         )
                     }

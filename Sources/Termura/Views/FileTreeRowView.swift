@@ -6,10 +6,16 @@ struct FileTreeRowView: View {
     let node: FileTreeNode
     let depth: Int
     @Binding var expandedIDs: Set<String>
+    var activeFilePath: String?
     var onOpenFile: ((String, FileOpenMode) -> Void)?
 
     private var isExpanded: Bool {
         expandedIDs.contains(node.id)
+    }
+
+    private var isActive: Bool {
+        guard let active = activeFilePath, !node.isDirectory else { return false }
+        return node.relativePath == active
     }
 
     var body: some View {
@@ -21,6 +27,7 @@ struct FileTreeRowView: View {
                         node: child,
                         depth: depth + 1,
                         expandedIDs: $expandedIDs,
+                        activeFilePath: activeFilePath,
                         onOpenFile: onOpenFile
                     )
                 }
@@ -74,6 +81,7 @@ struct FileTreeRowView: View {
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.smMd)
+        .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture {
             if node.isDirectory {

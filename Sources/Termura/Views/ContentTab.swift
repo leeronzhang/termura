@@ -58,6 +58,16 @@ enum ContentTab: Identifiable, Hashable, Codable {
         if case .terminal(let sid, _) = self { return sid }
         return nil
     }
+
+    /// The file path if this is a file, preview, or diff tab.
+    var filePath: String? {
+        switch self {
+        case .file(let path, _), .preview(let path, _), .diff(let path, _, _):
+            return path
+        case .terminal, .note:
+            return nil
+        }
+    }
 }
 
 /// Horizontal tab strip for the main content area.

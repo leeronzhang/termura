@@ -80,8 +80,10 @@ struct SidebarHarnessContent: View {
                     onOpenFile?(file.filePath, .edit)
                 } label: {
                     HStack(spacing: AppUI.Spacing.md) {
-                        Image(systemName: "doc.text")
-                            .font(AppUI.Font.caption)
+                        FileTypeIcon.image(for: file.fileName)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 13, height: 13)
                             .foregroundColor(.secondary)
                         Text(file.fileName)
                             .font(AppUI.Font.body)
