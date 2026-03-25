@@ -68,7 +68,8 @@ struct EditorInputView: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.allowsUndo = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.font = NSFont(name: AppConfig.Fonts.terminalFamily, size: AppConfig.Fonts.editorSize)
+            ?? NSFont.monospacedSystemFont(ofSize: AppConfig.Fonts.editorSize, weight: .regular)
         textView.placeholderString = "输入命令，Shift+Enter 换行，↑↓ 历史"
         textView.delegate = coordinator
 

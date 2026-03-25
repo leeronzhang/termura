@@ -38,7 +38,8 @@ final class EditorTextView: NSTextView {
         )
         let attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.placeholderTextColor,
-            .font: font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+            .font: font ?? NSFont(name: AppConfig.Fonts.terminalFamily, size: AppConfig.Fonts.editorSize)
+                ?? NSFont.monospacedSystemFont(ofSize: AppConfig.Fonts.editorSize, weight: .regular)
         ]
         NSAttributedString(string: placeholder, attributes: attrs).draw(in: drawRect)
     }

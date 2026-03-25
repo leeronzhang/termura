@@ -55,7 +55,7 @@ enum AppUI {
         /// 10pt — meta labels, timestamps, uppercase headers
         static let caption = SwiftUI.Font.system(size: 10)
         /// 10pt monospaced — token counts, small data
-        static let captionMono = SwiftUI.Font.system(size: 10, design: .monospaced)
+        static let captionMono = SwiftUI.Font.custom(AppConfig.Fonts.terminalFamily, size: 10)
         /// 10pt medium — section headers (UPPERCASE)
         static let sectionHeader = SwiftUI.Font.system(size: 10, weight: .medium)
         /// 11pt — secondary labels, sidebar subtitle, timeline text
@@ -63,7 +63,7 @@ enum AppUI {
         /// 11pt semibold — panel headers
         static let panelHeader = SwiftUI.Font.system(size: 11, weight: .semibold)
         /// 11pt monospaced — code snippets, directory paths
-        static let labelMono = SwiftUI.Font.system(size: 11, design: .monospaced)
+        static let labelMono = SwiftUI.Font.custom(AppConfig.Fonts.terminalFamily, size: 11)
         /// 11pt medium — toolbar labels, agent names
         static let labelMedium = SwiftUI.Font.system(size: 11, weight: .medium)
         /// 12pt — list items, form fields
@@ -71,7 +71,7 @@ enum AppUI {
         /// 12pt medium — emphasized body text
         static let bodyMedium = SwiftUI.Font.system(size: 12, weight: .medium)
         /// 12pt monospaced — code editors, diffs
-        static let bodyMono = SwiftUI.Font.system(size: 12, design: .monospaced)
+        static let bodyMono = SwiftUI.Font.custom(AppConfig.Fonts.terminalFamily, size: 12)
         /// 13pt — primary text, session titles
         static let title3 = SwiftUI.Font.system(size: 13)
         /// 13pt medium — metadata values, command counts
