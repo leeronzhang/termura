@@ -84,6 +84,23 @@ struct AppCommands: Commands {
             .keyboardShortcut("a", modifiers: [.command, .shift])
         }
 
+        CommandGroup(after: .toolbar) {
+            Button("Zoom In") {
+                (NSApp.delegate as? AppDelegate)?.themeManager.increaseFontSize()
+            }
+            .keyboardShortcut("+", modifiers: .command)
+
+            Button("Zoom Out") {
+                (NSApp.delegate as? AppDelegate)?.themeManager.decreaseFontSize()
+            }
+            .keyboardShortcut("-", modifiers: .command)
+
+            Button("Actual Size") {
+                (NSApp.delegate as? AppDelegate)?.themeManager.resetFontSize()
+            }
+            .keyboardShortcut("0", modifiers: .command)
+        }
+
         CommandGroup(replacing: .undoRedo) {
             SessionSwitchCommands()
         }

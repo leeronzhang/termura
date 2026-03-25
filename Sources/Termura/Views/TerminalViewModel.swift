@@ -81,7 +81,7 @@ final class TerminalViewModel: ObservableObject {
         interventionService = InterventionService()
         contextWindowMonitor = ContextWindowMonitor()
 
-        let workingDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let workingDir = AppConfig.Paths.homeDirectory
         currentMetadata = SessionMetadata.empty(
             sessionID: sessionID,
             workingDirectory: workingDir

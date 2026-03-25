@@ -113,7 +113,7 @@ extension TerminalAreaView {
     }
 
     var abbreviatedWorkingDirectory: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = AppConfig.Paths.homeDirectory
         let path = viewModel.currentMetadata.workingDirectory
         if path.hasPrefix(home) {
             return "~" + path.dropFirst(home.count)
@@ -145,7 +145,7 @@ extension TerminalAreaView {
                 if !isCompact {
                     projectPathBar
                 }
-                TerminalContainerView(viewModel: viewModel, engine: engine, theme: theme)
+                TerminalContainerView(viewModel: viewModel, engine: engine, theme: theme, fontSize: fontSize)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, AppUI.Spacing.xxl)
                     // Reserve space at the bottom so terminal content is not hidden behind the overlay.

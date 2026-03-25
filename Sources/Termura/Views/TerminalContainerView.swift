@@ -10,6 +10,7 @@ struct TerminalContainerView: NSViewRepresentable {
     let viewModel: TerminalViewModel
     let engine: SwiftTermEngine
     let theme: ThemeColors
+    var fontSize: CGFloat = AppConfig.Fonts.terminalSize
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         let view = engine.terminalView
@@ -44,7 +45,7 @@ struct TerminalContainerView: NSViewRepresentable {
         view.nativeForegroundColor = NSColor(theme.foreground)
         view.installColors(theme.toSwiftTermColors())
 
-        if let font = NSFont(name: AppConfig.Fonts.terminalFamily, size: AppConfig.Fonts.terminalSize) {
+        if let font = NSFont(name: AppConfig.Fonts.terminalFamily, size: fontSize) {
             view.font = font
         }
     }

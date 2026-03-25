@@ -8,7 +8,11 @@ extension SidebarView {
     var harnessContent: some View {
         if let repo = ruleFileRepository {
             let projectRoot = activeSessionWorkingDirectory
-            SidebarHarnessContent(repository: repo, projectRoot: projectRoot)
+            SidebarHarnessContent(
+                repository: repo,
+                projectRoot: projectRoot,
+                onOpenFile: onOpenFile
+            )
         } else {
             sidebarEmptyState(icon: "shield.lefthalf.filled", message: "Harness unavailable")
         }
@@ -20,16 +24,22 @@ extension SidebarView {
             let dir = session.workingDirectory
             if !dir.isEmpty { return dir }
         }
-        return FileManager.default.homeDirectoryForCurrentUser.path
+        return AppConfig.Paths.homeDirectory
     }
 }
 
 /// Harness content following the Agent tab structure: header → divider → content.
 struct SidebarHarnessContent: View {
     @StateObject private var viewModel: HarnessViewModel
+    var onOpenFile: ((String, FileOpenMode) -> Void)?
 
-    init(repository: RuleFileRepository, projectRoot: String) {
+    init(
+        repository: RuleFileRepository,
+        projectRoot: String,
+        onOpenFile: ((String, FileOpenMode) -> Void)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: HarnessViewModel(repository: repository, projectRoot: projectRoot))
+        self.onOpenFile = onOpenFile
     }
 
     var body: some View {
@@ -71,6 +81,7 @@ struct SidebarHarnessContent: View {
             ForEach(viewModel.ruleFiles) { file in
                 Button {
                     Task { await viewModel.selectFile(file.filePath) }
+                    onOpenFile?(file.filePath, .edit)
                 } label: {
                     HStack(spacing: AppUI.Spacing.md) {
                         Image(systemName: "doc.text")

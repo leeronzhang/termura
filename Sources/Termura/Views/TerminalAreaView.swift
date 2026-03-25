@@ -16,6 +16,7 @@ struct TerminalAreaView: View {
     let isRestoredSession: Bool
     var contextInjectionService: ContextInjectionService?
     var sessionHandoffService: SessionHandoffService?
+    var fontSize: CGFloat = AppConfig.Fonts.terminalSize
     /// When true (split pane mode), hides side panels and toolbar to save space.
     var isCompact: Bool = false
 
@@ -54,6 +55,7 @@ struct TerminalAreaView: View {
         isRestoredSession: Bool = false,
         contextInjectionService: ContextInjectionService? = nil,
         sessionHandoffService: SessionHandoffService? = nil,
+        fontSize: CGFloat = AppConfig.Fonts.terminalSize,
         isCompact: Bool = false
     ) {
         self.engine = engine
@@ -65,6 +67,7 @@ struct TerminalAreaView: View {
         self.isRestoredSession = isRestoredSession
         self.contextInjectionService = contextInjectionService
         self.sessionHandoffService = sessionHandoffService
+        self.fontSize = fontSize
         self.isCompact = isCompact
 
         let store = OutputStore(sessionID: sessionID)
@@ -202,7 +205,10 @@ struct TerminalAreaView: View {
         let path = (dir as NSString)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
             .appending("/\(AppConfig.SessionHandoff.contextFileName)")
-        contextFileExists = FileManager.default.fileExists(atPath: path)
+        Task.detached {
+            let exists = FileManager.default.fileExists(atPath: path)
+            await MainActor.run { contextFileExists = exists }
+        }
     }
 
     // MARK: - Key routing

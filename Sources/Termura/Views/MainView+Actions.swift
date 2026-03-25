@@ -9,6 +9,34 @@ extension MainView {
             openTabs.append(tab)
         }
         selectedContentTab = tab
+        persistOpenTabs()
+    }
+
+    func openDiffTab(path: String, staged: Bool, untracked: Bool = false) {
+        let tab = ContentTab.diff(path, staged, untracked)
+        if !openTabs.contains(tab) {
+            openTabs.append(tab)
+        }
+        selectedContentTab = tab
+    }
+
+    func openFileTab(path: String, name: String) {
+        let tab = ContentTab.file(path, name)
+        if !openTabs.contains(tab) {
+            openTabs.append(tab)
+        }
+        selectedContentTab = tab
+        persistOpenTabs()
+    }
+
+    func openProjectFile(relativePath: String, mode: FileOpenMode) {
+        switch mode {
+        case .diff(let staged, let untracked):
+            openDiffTab(path: relativePath, staged: staged, untracked: untracked)
+        case .edit:
+            let name = URL(fileURLWithPath: relativePath).lastPathComponent
+            openFileTab(path: relativePath, name: name)
+        }
     }
 
     func closeContentTab(_ tab: ContentTab) {
@@ -18,11 +46,12 @@ extension MainView {
             if sessionStore.activeSessionID != nil {
                 showCloseSessionConfirm = true
             }
-        case .note:
+        case .note, .diff, .file:
             openTabs.removeAll { $0 == tab }
             if selectedContentTab == tab {
                 selectedContentTab = .terminal
             }
+            persistOpenTabs()
         }
     }
 
@@ -85,9 +114,51 @@ extension MainView {
     }
 }
 
+// MARK: - Tab persistence
+
+extension MainView {
+    /// UserDefaults key for open tabs, scoped to the current project.
+    private var tabsDefaultsKey: String {
+        "openTabs-\(sessionStore.projectRoot)"
+    }
+
+    /// Saves persistable tabs (note/file) to UserDefaults.
+    func persistOpenTabs() {
+        // Only persist note and file tabs — diffs are ephemeral.
+        let persistable = openTabs.filter {
+            switch $0 {
+            case .note, .file: return true
+            case .terminal, .diff: return false
+            }
+        }
+        guard let data = try? JSONEncoder().encode(persistable) else { return }
+        UserDefaults.standard.set(data, forKey: tabsDefaultsKey)
+        // Also save the selected tab id for restoration.
+        UserDefaults.standard.set(selectedContentTab.id, forKey: tabsDefaultsKey + ".selected")
+    }
+
+    /// Restores previously open tabs from UserDefaults.
+    func restoreOpenTabs() {
+        guard let data = UserDefaults.standard.data(forKey: tabsDefaultsKey),
+              let restored = try? JSONDecoder().decode([ContentTab].self, from: data),
+              !restored.isEmpty else { return }
+
+        for tab in restored where !openTabs.contains(tab) {
+            openTabs.append(tab)
+        }
+
+        // Restore selected tab if it matches a restored tab.
+        if let selectedID = UserDefaults.standard.string(forKey: tabsDefaultsKey + ".selected"),
+           let match = openTabs.first(where: { $0.id == selectedID }) {
+            selectedContentTab = match
+        }
+    }
+}
+
 // MARK: - Notification Names
 
 extension Notification.Name {
     static let toggleSidebar = Notification.Name("com.termura.toggleSidebar")
     static let showShellIntegrationOnboarding = Notification.Name("com.termura.showShellOnboarding")
+    static let projectGitStatusChanged = Notification.Name("com.termura.projectGitStatusChanged")
 }

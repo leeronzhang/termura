@@ -215,11 +215,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openLastProjectOrShowPicker() {
-        ProjectMigrationService.migrateIfNeeded()
-        if let lastURL = recentProjects.lastOpened() {
-            openProject(at: lastURL)
-        } else {
-            showProjectPicker()
+        Task { @MainActor in
+            await ProjectMigrationService.migrateIfNeeded()
+            if let lastURL = recentProjects.lastOpened() {
+                openProject(at: lastURL)
+            } else {
+                showProjectPicker()
+            }
         }
     }
 

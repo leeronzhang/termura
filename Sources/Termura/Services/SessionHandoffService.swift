@@ -61,7 +61,7 @@ actor SessionHandoffService {
         let errors = extractErrors(from: chunks)
         let duration = session.lastActiveAt.timeIntervalSince(session.createdAt)
 
-        let existing = readExistingContext(projectRoot: projectRoot)
+        let existing = await readExistingContext(projectRoot: projectRoot)
 
         var mergedDecisions = (existing?.decisions ?? []) + decisions
         if mergedDecisions.count > AppConfig.SessionHandoff.maxDecisionEntries {
@@ -79,7 +79,7 @@ actor SessionHandoffService {
             lastUpdated: Date()
         )
 
-        try writeContextFile(context: context, projectRoot: projectRoot)
+        try await writeContextFile(context: context, projectRoot: projectRoot)
 
         // Record metadata message
         let path = "\(projectRoot)/\(AppConfig.SessionHandoff.directoryName)/\(AppConfig.SessionHandoff.contextFileName)"
@@ -102,19 +102,17 @@ actor SessionHandoffService {
         logger.info("Session handoff generated for \(session.id) at \(projectRoot)")
     }
 
-    func readExistingContext(projectRoot: String) -> HandoffContext? {
-        let dirPath = (projectRoot as NSString).appendingPathComponent(
-            AppConfig.SessionHandoff.directoryName
-        )
-        let filePath = (dirPath as NSString).appendingPathComponent(
-            AppConfig.SessionHandoff.contextFileName
-        )
+    func readExistingContext(projectRoot: String) async -> HandoffContext? {
+        let dir = (projectRoot as NSString).appendingPathComponent(AppConfig.SessionHandoff.directoryName)
+        let filePath = (dir as NSString).appendingPathComponent(AppConfig.SessionHandoff.contextFileName)
+        let content: String?
         do {
-            let content = try String(contentsOfFile: filePath, encoding: .utf8)
-            return parseContextMarkdown(content)
+            content = try String(contentsOfFile: filePath, encoding: .utf8)
         } catch {
-            return nil
+            content = nil
         }
+        guard let content else { return nil }
+        return parseContextMarkdown(content)
     }
 
     // MARK: - File I/O
@@ -122,42 +120,41 @@ actor SessionHandoffService {
     private func writeContextFile(
         context: HandoffContext,
         projectRoot: String
-    ) throws {
+    ) async throws {
         let dirPath = (projectRoot as NSString).appendingPathComponent(
             AppConfig.SessionHandoff.directoryName
         )
         let filePath = (dirPath as NSString).appendingPathComponent(
             AppConfig.SessionHandoff.contextFileName
         )
-
-        // Ensure directory exists
-        if !fileManager.fileExists(atPath: dirPath) {
-            try fileManager.createDirectory(
-                atPath: dirPath,
-                withIntermediateDirectories: true
-            )
-        }
-
-        // Backup existing file before overwrite
-        let backupPath = filePath + ".backup"
-        var backedUp = false
-        if fileManager.fileExists(atPath: filePath) {
-            let existing = try String(contentsOfFile: filePath, encoding: .utf8)
-            try existing.write(toFile: backupPath, atomically: true, encoding: .utf8)
-            backedUp = true
-        }
-
         let markdown = renderContextMarkdown(context)
-        try markdown.write(toFile: filePath, atomically: true, encoding: .utf8)
+        let fm = FileManager.default
 
-        // Clean up backup only after successful write
-        if backedUp {
-            do {
-                try fileManager.removeItem(atPath: backupPath)
-            } catch {
-                logger.error("Failed to remove handoff backup: \(error)")
+        try await Task.detached {
+            // Ensure directory exists
+            if !fm.fileExists(atPath: dirPath) {
+                try fm.createDirectory(
+                    atPath: dirPath,
+                    withIntermediateDirectories: true
+                )
             }
-        }
+
+            // Backup existing file before overwrite
+            let backupPath = filePath + ".backup"
+            var backedUp = false
+            if fm.fileExists(atPath: filePath) {
+                let existing = try String(contentsOfFile: filePath, encoding: .utf8)
+                try existing.write(toFile: backupPath, atomically: true, encoding: .utf8)
+                backedUp = true
+            }
+
+            try markdown.write(toFile: filePath, atomically: true, encoding: .utf8)
+
+            // Clean up backup only after successful write
+            if backedUp {
+                try? fm.removeItem(atPath: backupPath)
+            }
+        }.value
     }
 
     // MARK: - Extraction Heuristics

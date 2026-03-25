@@ -77,7 +77,7 @@ actor NotificationService: NotificationServiceProtocol {
         }
     }
 
-    private func formattedDuration(_ secs: TimeInterval) -> String {
+    func formattedDuration(_ secs: TimeInterval) -> String {
         secs < 60
             ? String(format: "%.0fs", secs)
             : "\(Int(secs / 60))m \(Int(secs) % 60)s"

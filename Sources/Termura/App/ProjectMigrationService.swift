@@ -11,7 +11,7 @@ enum ProjectMigrationService {
 
     static var needsMigration: Bool {
         guard !UserDefaults.standard.bool(forKey: migratedKey) else { return false }
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
         let legacyDB = home
             .appendingPathComponent(AppConfig.Persistence.directoryName)
             .appendingPathComponent(AppConfig.Persistence.databaseFileName)
@@ -20,15 +20,15 @@ enum ProjectMigrationService {
 
     /// Reads all sessions from the legacy DB, groups by `workingDirectory`,
     /// and copies each group's data into a per-project database.
-    static func migrateIfNeeded() {
+    static func migrateIfNeeded() async {
         guard needsMigration else { return }
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
         let legacyDir = home.appendingPathComponent(AppConfig.Persistence.directoryName)
         let legacyPath = legacyDir.appendingPathComponent(AppConfig.Persistence.databaseFileName)
 
         do {
             let legacyPool = try DatabasePool(path: legacyPath.path)
-            let projects = try legacyPool.read { db -> [String] in
+            let projects = try await legacyPool.read { db -> [String] in
                 let rows = try Row.fetchAll(db, sql: """
                     SELECT DISTINCT working_directory FROM sessions
                     WHERE working_directory IS NOT NULL AND working_directory != ''
@@ -37,7 +37,7 @@ enum ProjectMigrationService {
             }
 
             for projectPath in projects {
-                try migrateProject(projectPath: projectPath, legacyPool: legacyPool)
+                try await migrateProject(projectPath: projectPath, legacyPool: legacyPool)
             }
 
             // Rename legacy DB as backup
@@ -53,7 +53,7 @@ enum ProjectMigrationService {
 
     // MARK: - Private
 
-    private static func migrateProject(projectPath: String, legacyPool: DatabasePool) throws {
+    private static func migrateProject(projectPath: String, legacyPool: DatabasePool) async throws {
         let projectURL = URL(fileURLWithPath: projectPath)
         guard FileManager.default.fileExists(atPath: projectPath) else {
             logger.warning("Skipping missing project directory: \(projectPath)")
@@ -67,7 +67,7 @@ enum ProjectMigrationService {
         try migrator.migrate(newPool)
 
         // Get session IDs for this project
-        let sessionIDs: [String] = try legacyPool.read { db in
+        let sessionIDs: [String] = try await legacyPool.read { db in
             let rows = try Row.fetchAll(db, sql: """
                 SELECT id FROM sessions WHERE working_directory = ?
             """, arguments: [projectPath])
@@ -75,8 +75,8 @@ enum ProjectMigrationService {
         }
         guard !sessionIDs.isEmpty else { return }
 
-        // Copy all data using synchronous writes on the new pool
-        try newPool.write { target in
+        // Copy all data using async writes on the new pool
+        try await newPool.write { target in
             try copyTable(
                 "sessions",
                 where: "working_directory = ?",

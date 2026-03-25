@@ -10,6 +10,7 @@ struct MainView: View {
     let noteRepository: any NoteRepositoryProtocol
     var agentStateStore: AgentStateStore?
     var contextInjectionService: ContextInjectionService?
+    var gitService: (any GitServiceProtocol)?
     var vectorSearchService: VectorSearchService?
     var sessionMessageRepository: SessionMessageRepository?
     var ruleFileRepository: RuleFileRepository?
@@ -29,6 +30,7 @@ struct MainView: View {
     @State var openTabs: [ContentTab] = [.terminal]
     @State var selectedContentTab: ContentTab = .terminal
     @State private var isFullScreen = false
+    @State private var projectHasUncommittedChanges = false
 
     @StateObject private var notesViewModel: NotesViewModel
 
@@ -41,6 +43,7 @@ struct MainView: View {
         noteRepository: any NoteRepositoryProtocol,
         agentStateStore: AgentStateStore? = nil,
         contextInjectionService: ContextInjectionService? = nil,
+        gitService: (any GitServiceProtocol)? = nil,
         vectorSearchService: VectorSearchService? = nil,
         sessionMessageRepository: SessionMessageRepository? = nil,
         ruleFileRepository: RuleFileRepository? = nil,
@@ -54,6 +57,7 @@ struct MainView: View {
         self.noteRepository = noteRepository
         self.agentStateStore = agentStateStore
         self.contextInjectionService = contextInjectionService
+        self.gitService = gitService
         self.vectorSearchService = vectorSearchService
         self.sessionMessageRepository = sessionMessageRepository
         self.ruleFileRepository = ruleFileRepository
@@ -67,12 +71,14 @@ struct MainView: View {
                 SidebarView(
                     sessionStore: sessionStore,
                     agentStateStore: agentStateStore,
-                    searchService: searchService,
+                    gitService: gitService,
                     noteRepository: noteRepository,
                     notesViewModel: notesViewModel,
                     ruleFileRepository: ruleFileRepository,
                     isFullScreen: isFullScreen,
-                    onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) }
+                    hasUncommittedChanges: projectHasUncommittedChanges,
+                    onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) },
+                    onOpenFile: { path, mode in openProjectFile(relativePath: path, mode: mode) }
                 )
                 .frame(width: sidebarWidth)
                 .environmentObject(themeManager)
@@ -124,7 +130,15 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
             isFullScreen = false
         }
-        .task { await ensureInitialSession() }
+        .onReceive(NotificationCenter.default.publisher(for: .projectGitStatusChanged)) { notification in
+            if let hasChanges = notification.object as? Bool {
+                projectHasUncommittedChanges = hasChanges
+            }
+        }
+        .task {
+            await ensureInitialSession()
+            restoreOpenTabs()
+        }
         .sheet(isPresented: $showShellOnboarding) {
             ShellIntegrationOnboardingView(isPresented: $showShellOnboarding)
         }
@@ -180,7 +194,33 @@ struct MainView: View {
             terminalArea
         case .note(let noteID, _):
             noteEditorView(noteID: noteID)
+        case .diff(let path, let staged, let untracked):
+            if let service = gitService {
+                DiffContentView(
+                    filePath: path,
+                    isStaged: staged,
+                    isUntracked: untracked,
+                    gitService: service,
+                    projectRoot: activeProjectRoot
+                )
+            }
+        case .file(let path, _):
+            CodeEditorView(
+                filePath: path,
+                projectRoot: activeProjectRoot
+            )
         }
+    }
+
+    /// Project root with fallback to active session working directory.
+    private var activeProjectRoot: String {
+        if !sessionStore.projectRoot.isEmpty { return sessionStore.projectRoot }
+        if let id = sessionStore.activeSessionID,
+           let session = sessionStore.sessions.first(where: { $0.id == id }),
+           !session.workingDirectory.isEmpty {
+            return session.workingDirectory
+        }
+        return AppConfig.Paths.homeDirectory
     }
 
     @ViewBuilder
@@ -204,7 +244,8 @@ struct MainView: View {
                 agentStateStore: agentStateStore,
                 isRestoredSession: sessionStore.isRestoredSession(id: activeID),
                 contextInjectionService: contextInjectionService,
-                sessionHandoffService: sessionHandoffService
+                sessionHandoffService: sessionHandoffService,
+                fontSize: themeManager.terminalFontSize
             )
             .id(activeID)
         } else {
@@ -221,7 +262,10 @@ struct MainView: View {
                 .padding(.top, AppUI.Spacing.xl)
                 .padding(.bottom, AppUI.Spacing.md)
             Divider()
-            MarkdownEditorView(text: $notesViewModel.editingBody)
+            NoteEditorView(
+                title: notesViewModel.editingTitle,
+                text: $notesViewModel.editingBody
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { notesViewModel.selectNote(id: noteID) }
@@ -240,6 +284,7 @@ struct MainView: View {
                 isRestoredSession: sessionStore.isRestoredSession(id: sessionID),
                 contextInjectionService: contextInjectionService,
                 sessionHandoffService: sessionHandoffService,
+                fontSize: themeManager.terminalFontSize,
                 isCompact: true
             )
             .id(sessionID)

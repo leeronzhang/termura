@@ -42,7 +42,7 @@ extension MainView {
             let dir = session.workingDirectory
             if !dir.isEmpty { return dir }
         }
-        return FileManager.default.homeDirectoryForCurrentUser.path
+        return AppConfig.Paths.homeDirectory
     }
 
     @ViewBuilder

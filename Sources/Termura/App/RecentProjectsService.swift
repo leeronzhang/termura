@@ -9,7 +9,7 @@ struct RecentProjectsService: Sendable {
     private let fileURL: URL
 
     init() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
         let dir = home.appendingPathComponent(AppConfig.RecentProjects.globalDirectoryName)
         fileURL = dir.appendingPathComponent(AppConfig.RecentProjects.fileName)
     }

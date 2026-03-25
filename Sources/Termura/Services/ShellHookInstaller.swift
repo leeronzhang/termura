@@ -75,7 +75,7 @@ actor ShellHookInstaller {
     // MARK: - Private helpers
 
     private func rcFilePath(for shell: ShellType) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = AppConfig.Paths.homeDirectory
         return "\(home)/\(shell.rcFileName)"
     }
 

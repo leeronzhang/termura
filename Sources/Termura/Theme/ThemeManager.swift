@@ -13,10 +13,31 @@ final class ThemeManager: ObservableObject {
     @Published private(set) var availableDefinitions: [ThemeDefinition] = ThemeDefinition.builtIn
     @Published private(set) var selectedThemeID: UUID?
 
+    /// Current terminal font size — persisted via UserDefaults.
+    @Published var terminalFontSize: CGFloat {
+        didSet { UserDefaults.standard.set(Double(terminalFontSize), forKey: "terminalFontSize") }
+    }
+
     private var extendedColors: [ThemeToken: SwiftUI.Color] = [:]
     private var appearanceObservation: NSKeyValueObservation?
 
+    // MARK: - Font zoom
+
+    func increaseFontSize() {
+        terminalFontSize = min(terminalFontSize + AppConfig.Fonts.zoomStep, AppConfig.Fonts.maxSize)
+    }
+
+    func decreaseFontSize() {
+        terminalFontSize = max(terminalFontSize - AppConfig.Fonts.zoomStep, AppConfig.Fonts.minSize)
+    }
+
+    func resetFontSize() {
+        terminalFontSize = AppConfig.Fonts.terminalSize
+    }
+
     init() {
+        let saved = UserDefaults.standard.double(forKey: "terminalFontSize")
+        terminalFontSize = saved > 0 ? CGFloat(saved) : AppConfig.Fonts.terminalSize
         current = ThemeManager.themeForCurrentAppearance()
         observeAppearance()
         Task { @MainActor [weak self] in
@@ -185,7 +206,7 @@ final class ThemeManager: ObservableObject {
     }
 
     private nonisolated static var themesDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
             .appendingPathComponent(AppConfig.Persistence.directoryName)
             .appendingPathComponent(AppConfig.Theme.themesDirectoryName)
     }

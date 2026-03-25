@@ -35,6 +35,7 @@ final class ProjectContext: ObservableObject {
     let branchSummarizer: BranchSummarizer
     let embeddingService: EmbeddingService
     let vectorSearchService: VectorSearchService
+    let gitService: GitService
 
     // MARK: - Init (private — use open(at:engineFactory:))
 
@@ -57,7 +58,8 @@ final class ProjectContext: ObservableObject {
         experienceCodifier: ExperienceCodifier,
         branchSummarizer: BranchSummarizer,
         embeddingService: EmbeddingService,
-        vectorSearchService: VectorSearchService
+        vectorSearchService: VectorSearchService,
+        gitService: GitService
     ) {
         self.projectURL = projectURL
         self.databaseService = databaseService
@@ -78,6 +80,7 @@ final class ProjectContext: ObservableObject {
         self.branchSummarizer = branchSummarizer
         self.embeddingService = embeddingService
         self.vectorSearchService = vectorSearchService
+        self.gitService = gitService
     }
 
     /// Project display name (directory basename).
@@ -123,8 +126,10 @@ final class ProjectContext: ObservableObject {
         let codifier = ExperienceCodifier(harnessEventRepo: harnessRepo)
         let embedding = EmbeddingService()
         let vector = VectorSearchService(embeddingService: embedding)
+        let git = GitService()
 
-        ensureGitignore(at: projectURL)
+        let url = projectURL
+        Task.detached { await Self.ensureGitignore(at: url) }
         logger.info("Opened project at \(projectURL.path)")
 
         return ProjectContext(
@@ -146,7 +151,8 @@ final class ProjectContext: ObservableObject {
             experienceCodifier: codifier,
             branchSummarizer: summarizer,
             embeddingService: embedding,
-            vectorSearchService: vector
+            vectorSearchService: vector,
+            gitService: git
         )
     }
 

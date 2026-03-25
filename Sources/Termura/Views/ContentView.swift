@@ -26,6 +26,7 @@ struct ContentView: View {
             noteRepository: projectContext.noteRepository,
             agentStateStore: projectContext.agentStateStore,
             contextInjectionService: projectContext.contextInjectionService,
+            gitService: projectContext.gitService,
             vectorSearchService: projectContext.vectorSearchService,
             sessionMessageRepository: projectContext.sessionMessageRepository,
             ruleFileRepository: projectContext.ruleFileRepository,

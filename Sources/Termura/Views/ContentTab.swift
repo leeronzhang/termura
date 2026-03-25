@@ -1,14 +1,18 @@
 import SwiftUI
 
 /// Identifies an open tab in the main content area.
-enum ContentTab: Identifiable, Hashable {
+enum ContentTab: Identifiable, Hashable, Codable {
     case terminal
     case note(NoteID, String)
+    case diff(String, Bool, Bool) // file path, isStaged, isUntracked
+    case file(String, String) // relativePath, fileName
 
     var id: String {
         switch self {
         case .terminal: return "terminal"
         case .note(let noteID, _): return "note-\(noteID)"
+        case .diff(let path, let staged, _): return "diff-\(staged ? "staged" : "wt")-\(path)"
+        case .file(let path, _): return "file-\(path)"
         }
     }
 
@@ -16,6 +20,8 @@ enum ContentTab: Identifiable, Hashable {
         switch self {
         case .terminal: return "Terminal"
         case .note(_, let name): return name.isEmpty ? "Untitled" : name
+        case .diff(let path, _, _): return URL(fileURLWithPath: path).lastPathComponent
+        case .file(_, let name): return name
         }
     }
 
@@ -23,6 +29,8 @@ enum ContentTab: Identifiable, Hashable {
         switch self {
         case .terminal: return "terminal"
         case .note: return "doc.text"
+        case .diff: return "doc.text.magnifyingglass"
+        case .file: return "doc.text"
         }
     }
 
@@ -31,6 +39,8 @@ enum ContentTab: Identifiable, Hashable {
         switch self {
         case .terminal: return false
         case .note: return true
+        case .diff: return true
+        case .file: return true
         }
     }
 }

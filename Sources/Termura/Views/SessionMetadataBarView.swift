@@ -126,33 +126,14 @@ struct SessionMetadataBarView: View {
     // MARK: - Computed
 
     private var formattedTokenCount: String {
-        let tokens = metadata.estimatedTokenCount
-        if tokens >= 1000 {
-            return String(format: "%.1fk", Double(tokens) / 1000)
-        }
-        return "\(tokens)"
+        MetadataFormatter.formatTokenCount(metadata.estimatedTokenCount)
     }
 
     private var abbreviatedDirectory: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let path = metadata.workingDirectory
-        if path.hasPrefix(home) {
-            return "~" + path.dropFirst(home.count)
-        }
-        return path
+        MetadataFormatter.abbreviateDirectory(metadata.workingDirectory)
     }
 
     private var formattedDuration: String {
-        let secs = Int(metadata.sessionDuration)
-        let hours = secs / 3600
-        let mins = (secs % 3600) / 60
-        let remainSecs = secs % 60
-        if hours > 0 {
-            return "\(hours)h \(mins)m"
-        } else if mins > 0 {
-            return "\(mins)m \(remainSecs)s"
-        } else {
-            return "\(remainSecs)s"
-        }
+        MetadataFormatter.formatDuration(metadata.sessionDuration)
     }
 }

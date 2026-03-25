@@ -76,7 +76,7 @@ struct ContextFileView: View {
     }
 
     private var abbreviatedPath: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = AppConfig.Paths.homeDirectory
         let path = contextFilePath
         if path.hasPrefix(home) {
             return "~" + path.dropFirst(home.count)
@@ -85,30 +85,42 @@ struct ContextFileView: View {
     }
 
     private func loadFile() {
-        do {
-            content = try String(contentsOfFile: contextFilePath, encoding: .utf8)
-        } catch {
-            errorMessage = "Could not read context.md: \(error.localizedDescription)"
+        let path = contextFilePath
+        Task.detached {
+            do {
+                let text = try String(contentsOfFile: path, encoding: .utf8)
+                await MainActor.run { content = text }
+            } catch {
+                let msg = "Could not read context.md: \(error.localizedDescription)"
+                await MainActor.run { errorMessage = msg }
+            }
         }
     }
 
     private func saveFile() {
         isSaving = true
-        defer { isSaving = false }
-
         let dirPath = (projectRoot as NSString)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
-        do {
-            if !FileManager.default.fileExists(atPath: dirPath) {
-                try FileManager.default.createDirectory(
-                    atPath: dirPath,
-                    withIntermediateDirectories: true
-                )
+        let filePath = contextFilePath
+        let text = content
+        Task.detached {
+            do {
+                if !FileManager.default.fileExists(atPath: dirPath) {
+                    try FileManager.default.createDirectory(
+                        atPath: dirPath, withIntermediateDirectories: true)
+                }
+                try text.write(toFile: filePath, atomically: true, encoding: .utf8)
+                await MainActor.run {
+                    isSaving = false
+                    isPresented = false
+                }
+            } catch {
+                let msg = "Save failed: \(error.localizedDescription)"
+                await MainActor.run {
+                    isSaving = false
+                    errorMessage = msg
+                }
             }
-            try content.write(toFile: contextFilePath, atomically: true, encoding: .utf8)
-            isPresented = false
-        } catch {
-            errorMessage = "Save failed: \(error.localizedDescription)"
         }
     }
 }

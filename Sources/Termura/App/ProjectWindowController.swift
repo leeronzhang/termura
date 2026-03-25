@@ -49,7 +49,10 @@ final class ProjectWindowController: NSWindowController {
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
         window.setFrameAutosaveName("ProjectWindow-\(title)")
-        window.center()
+        // Only center if no saved frame was restored by autosave.
+        if !window.setFrameUsingName("ProjectWindow-\(title)") {
+            window.center()
+        }
         return window
     }
 }

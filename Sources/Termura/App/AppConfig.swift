@@ -3,12 +3,23 @@ import Foundation
 /// Central configuration for all app-wide constants.
 /// All magic numbers must live here — never inline in logic layer.
 enum AppConfig {
+    enum Paths {
+        /// Cached home directory — resolved once at process launch.
+        static let homeDirectory: String = FileManager.default.homeDirectoryForCurrentUser.path
+    }
+
     enum Fonts {
         /// Source Code Pro — bundled monospaced font for terminal, editor, and code display.
         static let terminalFamily = "Source Code Pro"
-        static let terminalSize: CGFloat = 13
-        static let editorSize: CGFloat = 13
-        static let notesSize: CGFloat = 13
+        static let terminalSize: CGFloat = 15
+        static let editorSize: CGFloat = 15
+        static let notesSize: CGFloat = 15
+        /// Font size increment/decrement step for Cmd+/-.
+        static let zoomStep: CGFloat = 1
+        /// Minimum allowed terminal font size.
+        static let minSize: CGFloat = 9
+        /// Maximum allowed terminal font size.
+        static let maxSize: CGFloat = 28
     }
 
     enum Terminal {
@@ -213,6 +224,27 @@ enum AppConfig {
         static let injectionMaxLength = 1500
         /// Delay before injecting context after prompt detection (nanoseconds).
         static let injectionDelayNanoseconds: UInt64 = 200_000_000
+    }
+
+    enum FileTree {
+        /// Directories to skip when scanning the project file tree.
+        static let ignoredDirectories: Set<String> = [
+            ".git", ".termura", "node_modules", ".build",
+            "DerivedData", ".swiftpm", "Pods", "xcuserdata"
+        ]
+        /// Whether to skip all dotfiles (files/dirs starting with `.`).
+        static let ignoredDotfiles = true
+        /// Maximum directory nesting depth to scan.
+        static let maxDepth = 10
+    }
+
+    enum Git {
+        /// Debounce interval before refreshing git status after terminal output (seconds).
+        static let refreshDebounceSeconds: Double = 0.5
+        /// Maximum number of file entries to display in the sidebar.
+        static let maxDisplayedFiles = 200
+        /// Timeout for git CLI commands (nanoseconds). 5 seconds.
+        static let commandTimeoutNanoseconds: UInt64 = 5_000_000_000
     }
 
     enum RecentProjects {

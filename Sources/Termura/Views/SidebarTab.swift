@@ -6,7 +6,7 @@ enum SidebarTab: String, CaseIterable, Identifiable {
     case agents
     case harness
     case notes
-    case search
+    case project
 
     var id: String { rawValue }
 
@@ -14,9 +14,9 @@ enum SidebarTab: String, CaseIterable, Identifiable {
         switch self {
         case .sessions: return "terminal"
         case .agents: return "poweroutlet.type.f"
-        case .search: return "magnifyingglass"
-        case .notes: return "text.page"
+        case .notes: return "text.rectangle"
         case .harness: return "pano"
+        case .project: return "folder"
         }
     }
 
@@ -24,9 +24,9 @@ enum SidebarTab: String, CaseIterable, Identifiable {
         switch self {
         case .sessions: return "terminal.fill"
         case .agents: return "poweroutlet.type.f.fill"
-        case .search: return "magnifyingglass"
-        case .notes: return "text.page.fill"
+        case .notes: return "text.rectangle.fill"
         case .harness: return "pano.fill"
+        case .project: return "folder.fill"
         }
     }
 
@@ -34,9 +34,9 @@ enum SidebarTab: String, CaseIterable, Identifiable {
         switch self {
         case .sessions: return "Sessions"
         case .agents: return "Agents"
-        case .search: return "Search"
         case .notes: return "Notes"
         case .harness: return "Harness"
+        case .project: return "Project"
         }
     }
 }
@@ -45,6 +45,7 @@ enum SidebarTab: String, CaseIterable, Identifiable {
 struct SidebarTabBar: View {
     @Binding var selectedTab: SidebarTab
     var isFullScreen: Bool = false
+    var hasUncommittedChanges: Bool = false
 
     /// Extra leading space to clear the traffic-light buttons in non-fullscreen.
     private var trafficLightLeading: CGFloat { isFullScreen ? 0 : 80 }
@@ -66,12 +67,21 @@ struct SidebarTabBar: View {
         Button {
             selectedTab = tab
         } label: {
-            Image(systemName: selectedTab == tab ? tab.activeIcon : tab.icon)
-                .font(.system(size: 15))
-                .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 32)
-                .contentShape(Rectangle())
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: selectedTab == tab ? tab.activeIcon : tab.icon)
+                    .font(.system(size: 15))
+                    .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32)
+
+                if tab == .project && hasUncommittedChanges {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 6, height: 6)
+                        .offset(x: -2, y: 4)
+                }
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(tab.label)
