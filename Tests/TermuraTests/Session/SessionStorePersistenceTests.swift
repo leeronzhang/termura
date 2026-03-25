@@ -22,16 +22,16 @@ final class SessionStorePersistenceTests: XCTestCase {
     func testCreateSessionCallsSave() async throws {
         let session = store.createSession(title: "Persist Me")
         // Allow the fire-and-forget Task to complete
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
         let saved = try await repository.fetchAll()
         XCTAssertTrue(saved.contains { $0.id == session.id })
     }
 
     func testCloseSessionCallsDelete() async throws {
         let session = store.createSession(title: "To Close")
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
         store.closeSession(id: session.id)
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
         let saved = try await repository.fetchAll()
         XCTAssertFalse(saved.contains { $0.id == session.id })
     }
@@ -39,10 +39,10 @@ final class SessionStorePersistenceTests: XCTestCase {
     func testReorderSessionsCallsReorder() async throws {
         let first = store.createSession(title: "First")
         let second = store.createSession(title: "Second")
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
 
         store.reorderSessions(from: IndexSet(integer: 0), to: 2)
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
 
         let saved = try await repository.fetchAll()
         // After moving first to end, second should come before first
@@ -56,10 +56,10 @@ final class SessionStorePersistenceTests: XCTestCase {
 
     func testPinSessionCallsSetPinnedAndSave() async throws {
         let session = store.createSession(title: "Pin Test")
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
 
         store.pinSession(id: session.id)
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
 
         let saved = try await repository.fetchAll()
         XCTAssertEqual(saved.first(where: { $0.id == session.id })?.isPinned, true)
@@ -76,10 +76,10 @@ final class SessionStorePersistenceTests: XCTestCase {
 
     func testSetColorLabelPersists() async throws {
         let session = store.createSession(title: "Color Test")
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
 
         store.setColorLabel(id: session.id, label: .green)
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
 
         let saved = try await repository.fetchAll()
         XCTAssertEqual(saved.first(where: { $0.id == session.id })?.colorLabel, .green)

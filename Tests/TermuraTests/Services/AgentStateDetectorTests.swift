@@ -88,4 +88,89 @@ struct AgentStateDetectorTests {
         #expect(state != nil)
         #expect(state?.agentType == .claudeCode)
     }
+
+    // MARK: - Extended Agent Type Detection
+
+    @Test("Detects opencode command")
+    func detectOpenCode() async {
+        let detector = makeDetector()
+        #expect(await detector.detectFromCommand("opencode start") == .openCode)
+    }
+
+    @Test("Detects oc shorthand as openCode")
+    func detectOCShorthand() async {
+        let detector = makeDetector()
+        #expect(await detector.detectFromCommand("oc run") == .openCode)
+    }
+
+    @Test("Detects gemini command")
+    func detectGemini() async {
+        let detector = makeDetector()
+        #expect(await detector.detectFromCommand("gemini chat") == .gemini)
+    }
+
+    @Test("Detects pi command")
+    func detectPi() async {
+        let detector = makeDetector()
+        #expect(await detector.detectFromCommand("pi run") == .pi)
+    }
+
+    @Test("Detects pi-agent command")
+    func detectPiAgent() async {
+        let detector = makeDetector()
+        #expect(await detector.detectFromCommand("pi-agent start") == .pi)
+    }
+
+    @Test("Case insensitive command detection")
+    func detectCaseInsensitive() async {
+        let detector = makeDetector()
+        #expect(await detector.detectFromCommand("CLAUDE code") == .claudeCode)
+    }
+
+    @Test("Path prefix detection: /usr/local/bin/claude")
+    func detectPathPrefix() async {
+        let detector = makeDetector()
+        #expect(await detector.detectFromCommand("/usr/local/bin/claude") == .claudeCode)
+    }
+
+    // MARK: - Status Transitions
+
+    @Test("Detects thinking status from output")
+    func detectThinking() async {
+        let detector = makeDetector()
+        _ = await detector.detectFromCommand("claude")
+        let status = await detector.analyzeOutput("Thinking\u{2026}")
+        #expect(status == .thinking)
+    }
+
+    @Test("Detects completed status from output")
+    func detectCompleted() async {
+        let detector = makeDetector()
+        _ = await detector.detectFromCommand("claude")
+        let status = await detector.analyzeOutput("Task completed successfully")
+        #expect(status == .completed)
+    }
+
+    @Test("Reset clears detected state")
+    func resetClearsState() async {
+        let detector = makeDetector()
+        _ = await detector.detectFromCommand("claude")
+        await detector.reset()
+        #expect(await detector.buildState() == nil)
+    }
+
+    @Test("Status transition sequence: thinking -> toolRunning -> completed")
+    func statusTransitionSequence() async {
+        let detector = makeDetector()
+        _ = await detector.detectFromCommand("claude")
+
+        let thinking = await detector.analyzeOutput("Thinking\u{2026}")
+        #expect(thinking == .thinking)
+
+        let running = await detector.analyzeOutput("\u{23FA} Writing to main.swift")
+        #expect(running == .toolRunning)
+
+        let completed = await detector.analyzeOutput("Task completed \u{2713}")
+        #expect(completed == .completed)
+    }
 }

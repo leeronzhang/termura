@@ -73,7 +73,7 @@ final class TerminalViewModelTests: XCTestCase {
         // Emit a title change event.
         await engine.emit(.titleChanged("New Title"))
         // Give the stream subscription time to process.
-        try await Task.sleep(for: .milliseconds(100))
+        try await yieldForDuration(seconds: 0.1)
         // titleChanged updates the session record, not metadata directly
         _ = vm
     }
@@ -81,7 +81,7 @@ final class TerminalViewModelTests: XCTestCase {
     func testDirectoryChangedUpdatesMetadata() async throws {
         let vm = makeViewModel()
         await engine.emit(.workingDirectoryChanged("/tmp/test"))
-        try await Task.sleep(for: .milliseconds(100))
+        try await yieldForDuration(seconds: 0.1)
         XCTAssertEqual(vm.currentMetadata.workingDirectory, "/tmp/test")
     }
 
@@ -97,7 +97,7 @@ final class TerminalViewModelTests: XCTestCase {
     func testSendDelegatesToEngine() async throws {
         let vm = makeViewModel()
         vm.send("hello")
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
         let sent = await engine.sentTexts
         XCTAssertTrue(sent.contains("hello"))
     }
@@ -105,7 +105,7 @@ final class TerminalViewModelTests: XCTestCase {
     func testResizeDelegatesToEngine() async throws {
         let vm = makeViewModel()
         vm.resize(columns: 120, rows: 40)
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
         let resizes = await engine.resizes
         XCTAssertFalse(resizes.isEmpty)
         XCTAssertEqual(resizes.last?.0, 120)
@@ -120,7 +120,7 @@ final class TerminalViewModelTests: XCTestCase {
         XCTAssertEqual(modeController.mode, .passthrough)
 
         await engine.emitShellEvent(.promptStarted)
-        try await Task.sleep(for: .milliseconds(100))
+        try await yieldForDuration(seconds: 0.1)
         XCTAssertEqual(vm.modeController.mode, .editor)
     }
 
@@ -129,7 +129,7 @@ final class TerminalViewModelTests: XCTestCase {
         XCTAssertEqual(modeController.mode, .editor)
 
         await engine.emitShellEvent(.executionStarted)
-        try await Task.sleep(for: .milliseconds(100))
+        try await yieldForDuration(seconds: 0.1)
         XCTAssertEqual(vm.modeController.mode, .passthrough)
         _ = vm
     }
@@ -139,7 +139,7 @@ final class TerminalViewModelTests: XCTestCase {
         modeController.switchToPassthrough()
 
         await engine.emitShellEvent(.executionFinished(exitCode: 0))
-        try await Task.sleep(for: .milliseconds(100))
+        try await yieldForDuration(seconds: 0.1)
         XCTAssertEqual(vm.modeController.mode, .editor)
         _ = vm
     }
@@ -151,7 +151,7 @@ final class TerminalViewModelTests: XCTestCase {
         let text = String(repeating: "a", count: 400) // 400 chars → 100 tokens
         let data = text.data(using: .utf8) ?? Data()
         await engine.emit(.data(data))
-        try await Task.sleep(for: .milliseconds(200))
+        try await yieldForDuration(seconds: 0.2)
 
         let tokens = await tokenService.estimatedTokens(for: sessionID)
         XCTAssertGreaterThan(tokens, 0)
@@ -163,7 +163,7 @@ final class TerminalViewModelTests: XCTestCase {
     func testProcessExitDoesNotCrash() async throws {
         let vm = makeViewModel()
         await engine.emit(.processExited(0))
-        try await Task.sleep(for: .milliseconds(100))
+        try await yieldForDuration(seconds: 0.1)
         // No crash, no handoff (no sessionHandoffService set).
         XCTAssertNotNil(vm)
     }

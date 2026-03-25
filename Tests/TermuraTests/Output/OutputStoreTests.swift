@@ -37,11 +37,13 @@ final class OutputStoreTests: XCTestCase {
         XCTAssertEqual(store.chunks[1].commandText, "third")
     }
 
-    func testAppendPostsNotification() {
-        let store = OutputStore(sessionID: sessionID, capacity: 10)
-        let expectation = expectation(forNotification: .chunkCompleted, object: nil)
+    func testAppendNotifiesCommandRouter() {
+        let router = CommandRouter()
+        let store = OutputStore(sessionID: sessionID, capacity: 10, commandRouter: router)
+        var received = false
+        router.onChunkCompleted { _ in received = true }
         store.append(makeChunk())
-        wait(for: [expectation], timeout: 1.0)
+        XCTAssertTrue(received)
     }
 
     // MARK: - Toggle collapse
@@ -75,5 +77,36 @@ final class OutputStoreTests: XCTestCase {
         store.append(makeChunk())
         store.clear()
         XCTAssertTrue(store.chunks.isEmpty)
+    }
+
+    // MARK: - Capacity Edge Cases
+
+    func testAppendExactlyAtCapacityNoEviction() {
+        let store = OutputStore(sessionID: sessionID, capacity: 3)
+        store.append(makeChunk(command: "a"))
+        store.append(makeChunk(command: "b"))
+        store.append(makeChunk(command: "c"))
+        XCTAssertEqual(store.chunks.count, 3)
+        XCTAssertEqual(store.chunks[0].commandText, "a")
+    }
+
+    func testAppendDoubleCapacityKeepsOrder() {
+        let store = OutputStore(sessionID: sessionID, capacity: 3)
+        for idx in 0 ..< 6 {
+            store.append(makeChunk(command: "cmd\(idx)"))
+        }
+        XCTAssertEqual(store.chunks.count, 3)
+        XCTAssertEqual(store.chunks[0].commandText, "cmd3")
+        XCTAssertEqual(store.chunks[1].commandText, "cmd4")
+        XCTAssertEqual(store.chunks[2].commandText, "cmd5")
+    }
+
+    func testClearThenAppendWorks() {
+        let store = OutputStore(sessionID: sessionID, capacity: 5)
+        store.append(makeChunk(command: "before"))
+        store.clear()
+        store.append(makeChunk(command: "after"))
+        XCTAssertEqual(store.chunks.count, 1)
+        XCTAssertEqual(store.chunks[0].commandText, "after")
     }
 }

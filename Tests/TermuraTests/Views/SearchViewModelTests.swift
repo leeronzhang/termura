@@ -28,9 +28,9 @@ final class SearchViewModelTests: XCTestCase {
 
         viewModel.query = "Fi"
         // Wait for debounce.
-        try await Task.sleep(for: .milliseconds(500))
+        try await yieldForDuration(seconds: 0.5)
         viewModel.query = "F"
-        try await Task.sleep(for: .milliseconds(500))
+        try await yieldForDuration(seconds: 0.5)
 
         // Query "F" is < minQueryLength, results should be empty.
         XCTAssertTrue(viewModel.results.sessions.isEmpty && viewModel.results.notes.isEmpty)
@@ -44,7 +44,7 @@ final class SearchViewModelTests: XCTestCase {
 
         viewModel.query = "SearchTarget"
         // Debounce fires after searchDebounceSeconds.
-        try await Task.sleep(for: .milliseconds(600))
+        try await yieldForDuration(seconds: 0.6)
 
         // After search completes, isSearching should be false.
         XCTAssertFalse(viewModel.isSearching)
@@ -55,7 +55,7 @@ final class SearchViewModelTests: XCTestCase {
         try await sessionRepo.save(session)
 
         viewModel.query = "UniqueMatch"
-        try await Task.sleep(for: .milliseconds(600))
+        try await yieldForDuration(seconds: 0.6)
 
         XCTAssertFalse(viewModel.results.sessions.isEmpty)
     }

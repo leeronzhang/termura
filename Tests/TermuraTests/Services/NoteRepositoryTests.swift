@@ -60,7 +60,7 @@ final class NoteRepositoryTests: XCTestCase {
         let originalUpdatedAt = note.updatedAt
         note.title = "Updated"
         // Small delay to ensure timestamp changes
-        try await Task.sleep(for: .milliseconds(10))
+        try await yieldForDuration(seconds: 0.01)
         try await repository.save(note)
 
         let all = try await repository.fetchAll()
@@ -72,7 +72,7 @@ final class NoteRepositoryTests: XCTestCase {
         let first = NoteRecord(title: "First")
         let second = NoteRecord(title: "Second")
         try await repository.save(first)
-        try await Task.sleep(for: .milliseconds(20))
+        try await yieldForDuration(seconds: 0.02)
         try await repository.save(second)
 
         let all = try await repository.fetchAll()

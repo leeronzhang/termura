@@ -85,4 +85,46 @@ final class SessionRepositoryTests: XCTestCase {
         let all = try await repository.fetchAll()
         XCTAssertEqual(all.first?.isPinned, true)
     }
+
+    // MARK: - FTS Edge Cases
+
+    func testSearchWithQuotesInQuery() async throws {
+        let record = SessionRecord(title: "Quote \"test\" session")
+        try await repository.save(record)
+        let results = try await repository.search(query: "\"test\"")
+        // Should not crash; may or may not find the result depending on FTS escaping
+        XCTAssertNotNil(results)
+    }
+
+    func testSearchWithSpecialFTSCharacters() async throws {
+        let record = SessionRecord(title: "Special chars session")
+        try await repository.save(record)
+        // FTS operators should be safely escaped, not crash
+        let results = try await repository.search(query: "chars*()")
+        XCTAssertNotNil(results)
+    }
+
+    func testSearchEmptyResults() async throws {
+        let record = SessionRecord(title: "Something")
+        try await repository.save(record)
+        let results = try await repository.search(query: "nonexistent")
+        XCTAssertTrue(results.isEmpty)
+    }
+
+    func testSearchLongQuery() async throws {
+        let record = SessionRecord(title: "LongQueryTarget")
+        try await repository.save(record)
+        let longQuery = String(repeating: "a", count: 500)
+        let results = try await repository.search(query: longQuery)
+        // Should not crash, returns empty since nothing matches
+        XCTAssertTrue(results.isEmpty)
+    }
+
+    func testSearchDoesNotReturnArchivedSessions() async throws {
+        let record = SessionRecord(title: "ArchivedSearchTarget")
+        try await repository.save(record)
+        try await repository.archive(id: record.id)
+        let results = try await repository.search(query: "ArchivedSearch")
+        XCTAssertTrue(results.isEmpty)
+    }
 }

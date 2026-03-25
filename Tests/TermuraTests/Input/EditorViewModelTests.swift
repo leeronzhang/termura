@@ -31,8 +31,8 @@ final class EditorViewModelTests: XCTestCase {
     func testSubmitSendsToEngine() async throws {
         viewModel.updateText("echo hello")
         viewModel.submit()
-        // Wait for the Task inside submit to execute.
-        try await Task.sleep(for: .milliseconds(50))
+        // Yield to allow the fire-and-forget Task inside submit to execute.
+        try await yieldForDuration(seconds: 0.05)
         let sent = await engine.sentTexts
         XCTAssertTrue(sent.contains("echo hello\r"))
     }
@@ -94,7 +94,7 @@ final class EditorViewModelTests: XCTestCase {
 
     func testSendRawSendsToEngine() async throws {
         viewModel.sendRaw("\u{03}") // Ctrl+C
-        try await Task.sleep(for: .milliseconds(50))
+        try await yieldForDuration(seconds: 0.05)
         let sent = await engine.sentTexts
         XCTAssertTrue(sent.contains("\u{03}"))
     }

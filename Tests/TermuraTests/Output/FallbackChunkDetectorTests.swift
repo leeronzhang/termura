@@ -8,15 +8,15 @@ struct FallbackChunkDetectorTests {
 
     private func makeDetector(
         pattern: String = AppConfig.Output.aiToolPromptPattern
-    ) -> FallbackChunkDetector {
-        FallbackChunkDetector(sessionID: sessionID, pattern: pattern)
+    ) throws -> FallbackChunkDetector {
+        try FallbackChunkDetector(sessionID: sessionID, pattern: pattern)
     }
 
     // MARK: - Prompt detection
 
     @Test("Detects Claude Code bare > prompt")
-    func detectClaudeCodePrompt() async {
-        let detector = makeDetector()
+    func detectClaudeCodePrompt() async throws {
+        let detector = try makeDetector()
         // First prompt establishes a boundary but emits nothing yet.
         _ = await detector.processOutput(">\n", raw: ">\n")
         // Feed some output then a second prompt to trigger emission.
@@ -27,8 +27,8 @@ struct FallbackChunkDetectorTests {
     }
 
     @Test("Detects unicode fish prompt ❯")
-    func detectFishPrompt() async {
-        let detector = makeDetector(pattern: "^[>❯›]\\s*$")
+    func detectFishPrompt() async throws {
+        let detector = try makeDetector(pattern: "^[>❯›]\\s*$")
         _ = await detector.processOutput("❯\n", raw: "❯\n")
         _ = await detector.processOutput("output\n", raw: "output\n")
         let chunks = await detector.processOutput("❯\n", raw: "❯\n")
@@ -36,8 +36,8 @@ struct FallbackChunkDetectorTests {
     }
 
     @Test("Mid-line > does not trigger boundary")
-    func midLineGreaterThan() async {
-        let detector = makeDetector()
+    func midLineGreaterThan() async throws {
+        let detector = try makeDetector()
         _ = await detector.processOutput(">\n", raw: ">\n")
         let chunks = await detector.processOutput("if x > 5 then\n", raw: "if x > 5 then\n")
         // No boundary should fire — "if x > 5 then" doesn't match ^[>❯›]\s*$
@@ -47,8 +47,8 @@ struct FallbackChunkDetectorTests {
     // MARK: - Chunk emission
 
     @Test("Emits chunk when second prompt detected")
-    func emitOnSecondPrompt() async {
-        let detector = makeDetector()
+    func emitOnSecondPrompt() async throws {
+        let detector = try makeDetector()
         _ = await detector.processOutput(">\n", raw: ">\n")
         _ = await detector.processOutput("line 1\nline 2\n", raw: "line 1\nline 2\n")
         let chunks = await detector.processOutput(">\n", raw: ">\n")
@@ -59,8 +59,8 @@ struct FallbackChunkDetectorTests {
     }
 
     @Test("Multiple prompts produce multiple chunks")
-    func multipleChunks() async {
-        let detector = makeDetector()
+    func multipleChunks() async throws {
+        let detector = try makeDetector()
         _ = await detector.processOutput(">\n", raw: ">\n")
         _ = await detector.processOutput("output A\n", raw: "output A\n")
         _ = await detector.processOutput(">\n", raw: ">\n")
@@ -70,15 +70,15 @@ struct FallbackChunkDetectorTests {
         // But the second prompt also was called separately.
         // Let's count all emitted chunks across calls.
         // Actually we need to accumulate:
-        let detector2 = makeDetector()
+        let detector2 = try makeDetector()
         var allChunks: [OutputChunk] = []
         allChunks += await detector2.processOutput(">\noutput A\n>\noutput B\n>\n", raw: ">\noutput A\n>\noutput B\n>\n")
         #expect(allChunks.count == 2)
     }
 
     @Test("No chunk emitted without prompt")
-    func noChunkWithoutPrompt() async {
-        let detector = makeDetector()
+    func noChunkWithoutPrompt() async throws {
+        let detector = try makeDetector()
         let chunks = await detector.processOutput("just output\nmore output\n", raw: "just output\nmore output\n")
         #expect(chunks.isEmpty)
     }
@@ -86,8 +86,8 @@ struct FallbackChunkDetectorTests {
     // MARK: - ANSI capping
 
     @Test("Raw ANSI capped at maxChunkOutputChars")
-    func rawANSICapping() async {
-        let detector = makeDetector()
+    func rawANSICapping() async throws {
+        let detector = try makeDetector()
         _ = await detector.processOutput(">\n", raw: ">\n")
 
         let maxChars = AppConfig.Output.maxChunkOutputChars
@@ -99,8 +99,8 @@ struct FallbackChunkDetectorTests {
     }
 
     @Test("Pending lines capped at maxChunkOutputChars")
-    func pendingLinesCapping() async {
-        let detector = makeDetector()
+    func pendingLinesCapping() async throws {
+        let detector = try makeDetector()
         _ = await detector.processOutput(">\n", raw: ">\n")
 
         let maxChars = AppConfig.Output.maxChunkOutputChars
@@ -117,8 +117,8 @@ struct FallbackChunkDetectorTests {
     // MARK: - Semantic classification
 
     @Test("Error output gets classified")
-    func semanticClassification() async {
-        let detector = makeDetector()
+    func semanticClassification() async throws {
+        let detector = try makeDetector()
         _ = await detector.processOutput(">\n", raw: ">\n")
         _ = await detector.processOutput("error: something failed\n", raw: "error: something failed\n")
         let chunks = await detector.processOutput(">\n", raw: ">\n")
@@ -129,8 +129,8 @@ struct FallbackChunkDetectorTests {
     // MARK: - Session ID
 
     @Test("Chunks carry the correct sessionID")
-    func chunkSessionID() async {
-        let detector = makeDetector()
+    func chunkSessionID() async throws {
+        let detector = try makeDetector()
         _ = await detector.processOutput(">\noutput\n>\n", raw: ">\noutput\n>\n")
         let chunks = await detector.processOutput(">\n", raw: ">\n")
         for chunk in chunks {
