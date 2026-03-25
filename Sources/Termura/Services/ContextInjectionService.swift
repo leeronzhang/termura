@@ -64,7 +64,18 @@ actor ContextInjectionService: ContextInjectionServiceProtocol {
 
         lines.append("--- End context ---")
 
-        let body = lines.joined(separator: "\\n")
-        return "echo \"\(body)\"\n"
+        let body = lines.joined(separator: "\n")
+        let escaped = shellEscape(body)
+        return "printf '%s\\n' \(escaped)\n"
+    }
+
+    // MARK: - Shell safety
+
+    /// Wraps a string in single quotes with proper escaping for POSIX shells.
+    /// Single quotes inside the value are handled by ending the quoted segment,
+    /// inserting an escaped single quote, and reopening single quotes.
+    private func shellEscape(_ value: String) -> String {
+        let escaped = value.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
     }
 }
