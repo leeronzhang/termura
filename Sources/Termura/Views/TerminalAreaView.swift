@@ -1,5 +1,8 @@
 import AppKit
+import OSLog
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.termura.app", category: "TerminalAreaView")
 
 /// Composes the terminal display, chunked output overlay, metadata panel, and editor input.
 /// All @StateObject lifetimes are tied to the session via `.id(sessionID)` in the parent.
@@ -12,6 +15,7 @@ struct TerminalAreaView: View {
     var agentStateStore: AgentStateStore?
     let isRestoredSession: Bool
     var contextInjectionService: ContextInjectionService?
+    var sessionHandoffService: SessionHandoffService?
     /// When true (split pane mode), hides side panels and toolbar to save space.
     var isCompact: Bool = false
 
@@ -49,6 +53,7 @@ struct TerminalAreaView: View {
         agentStateStore: AgentStateStore? = nil,
         isRestoredSession: Bool = false,
         contextInjectionService: ContextInjectionService? = nil,
+        sessionHandoffService: SessionHandoffService? = nil,
         isCompact: Bool = false
     ) {
         self.engine = engine
@@ -59,6 +64,7 @@ struct TerminalAreaView: View {
         self.agentStateStore = agentStateStore
         self.isRestoredSession = isRestoredSession
         self.contextInjectionService = contextInjectionService
+        self.sessionHandoffService = sessionHandoffService
         self.isCompact = isCompact
 
         let store = OutputStore(sessionID: sessionID)
@@ -77,7 +83,8 @@ struct TerminalAreaView: View {
             modeController: modeCtrl,
             agentStateStore: agentStateStore,
             isRestoredSession: isRestoredSession,
-            contextInjectionService: contextInjectionService
+            contextInjectionService: contextInjectionService,
+            sessionHandoffService: sessionHandoffService
         ))
         _editorViewModel = StateObject(wrappedValue: EditorViewModel(
             engine: engine,
@@ -123,7 +130,16 @@ struct TerminalAreaView: View {
             installKeyRouter()
             checkContextFileExists()
             Task { @MainActor in
-                do { try await Task.sleep(nanoseconds: 50_000_000) } catch { /* ignore */ }
+                do {
+                    try await Task.sleep(
+                        nanoseconds: AppConfig.UI.editorFocusDelayNanoseconds
+                    )
+                } catch is CancellationError {
+                    return
+                } catch {
+                    logger.warning("Editor focus delay failed: \(error.localizedDescription)")
+                    return
+                }
                 editorHandle.textView?.window?.makeFirstResponder(editorHandle.textView)
             }
         }

@@ -36,7 +36,7 @@ actor AgentStateDetector {
     func analyzeOutput(_ text: String) -> AgentStatus {
         guard detectedType != nil else { return .idle }
 
-        let sample = String(text.suffix(2000))
+        let sample = String(text.suffix(AppConfig.Agent.outputAnalysisSuffixLength))
 
         if isWaitingInput(sample) {
             currentStatus = .waitingInput

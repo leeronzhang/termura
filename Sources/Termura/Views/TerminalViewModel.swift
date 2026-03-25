@@ -39,10 +39,11 @@ final class TerminalViewModel: ObservableObject {
     /// Debounced re-check for prompt detection after PTY output settles.
     var promptRecheckTask: Task<Void, Never>?
 
-    // MARK: - Context injection
+    // MARK: - Context injection & handoff
 
     private let isRestoredSession: Bool
     private let contextInjectionService: ContextInjectionService?
+    let sessionHandoffService: SessionHandoffService?
     private var hasInjectedContext = false
 
     /// Currently pending risk alert (shown as sheet).
@@ -61,7 +62,8 @@ final class TerminalViewModel: ObservableObject {
         modeController: InputModeController,
         agentStateStore: AgentStateStore? = nil,
         isRestoredSession: Bool = false,
-        contextInjectionService: ContextInjectionService? = nil
+        contextInjectionService: ContextInjectionService? = nil,
+        sessionHandoffService: SessionHandoffService? = nil
     ) {
         self.sessionID = sessionID
         self.engine = engine
@@ -72,6 +74,7 @@ final class TerminalViewModel: ObservableObject {
         self.agentStateStore = agentStateStore
         self.isRestoredSession = isRestoredSession
         self.contextInjectionService = contextInjectionService
+        self.sessionHandoffService = sessionHandoffService
         chunkDetector = ChunkDetector(sessionID: sessionID)
         fallbackDetector = FallbackChunkDetector(sessionID: sessionID)
         agentDetector = AgentStateDetector(sessionID: sessionID)
@@ -177,7 +180,12 @@ final class TerminalViewModel: ObservableObject {
             guard let text = await service.buildInjectionText(projectRoot: workingDir) else { return }
             do {
                 try await Task.sleep(nanoseconds: AppConfig.SessionHandoff.injectionDelayNanoseconds)
-            } catch { return }
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.warning("Context injection delay failed: \(error.localizedDescription)")
+                return
+            }
             await self?.engine.send(text)
         }
     }

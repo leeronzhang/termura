@@ -5,84 +5,58 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "com.termura.app", category: "AppDelegate")
 
-/// Dependency injection root. Owns all top-level singletons.
+/// Dependency injection root. Owns global services and per-project contexts.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    // MARK: - DI root — all singletons constructed here
+    // MARK: - Global services (shared across all projects)
 
     let engineFactory: any TerminalEngineFactory = LiveTerminalEngineFactory()
-    private(set) lazy var engineStore: TerminalEngineStore = .init(factory: engineFactory)
     private(set) lazy var themeManager: ThemeManager = .init()
     private(set) lazy var tokenCountingService: TokenCountingService = .init()
-
-    private(set) lazy var databaseService: DatabaseService = {
-        do {
-            let pool = try DatabaseService.makePool()
-            return try DatabaseService(pool: pool)
-        } catch {
-            logger.error("DatabaseService init failed: \(error)")
-            preconditionFailure("Cannot initialize database: \(error)")
-        }
-    }()
-
-    private(set) lazy var sessionRepository: SessionRepository = .init(db: databaseService)
-    private(set) lazy var noteRepository: NoteRepository = .init(db: databaseService)
-    private(set) lazy var searchService: SearchService = .init(
-        sessionRepository: sessionRepository,
-        noteRepository: noteRepository
-    )
-    private(set) lazy var sessionSnapshotRepository: SessionSnapshotRepository = .init(
-        db: databaseService
-    )
-    private(set) lazy var sessionArchiveService: SessionArchiveService = .init(
-        repository: sessionRepository
-    )
-    private(set) lazy var sessionStore: SessionStore = .init(
-        engineStore: engineStore,
-        repository: sessionRepository
-    )
-
-    // MARK: - Phase 4 Services
-
     private(set) lazy var notificationService: NotificationService = .init()
     private(set) lazy var menuBarService: MenuBarService = .init()
     private(set) lazy var themeImportService: ThemeImportService = .init()
+    let recentProjects = RecentProjectsService()
 
-    // MARK: - Phase 2 (V3.1) Services
+    // MARK: - Project windows
 
-    private(set) lazy var agentStateStore: AgentStateStore = .init()
-    private(set) lazy var sessionMessageRepository: SessionMessageRepository = .init(db: databaseService)
-    private(set) lazy var harnessEventRepository: HarnessEventRepository = .init(db: databaseService)
+    /// Maps project URL → window controller. Each window owns one project.
+    private(set) var projectWindows: [URL: ProjectWindowController] = [:]
 
-    // MARK: - Session Handoff
+    /// The context of the most recently focused project window.
+    private(set) var activeContext: ProjectContext?
 
-    private(set) lazy var sessionHandoffService: SessionHandoffService = .init(
-        messageRepo: sessionMessageRepository,
-        harnessEventRepo: harnessEventRepository,
-        summarizer: branchSummarizer
-    )
+    // MARK: - Convenience accessors (route through activeContext)
 
-    private(set) lazy var contextInjectionService: ContextInjectionService = .init(
-        handoffService: sessionHandoffService
-    )
+    var sessionStore: SessionStore { activeContext?.sessionStore ?? fallbackSessionStore }
+    var engineStore: TerminalEngineStore { activeContext?.engineStore ?? fallbackEngineStore }
+    var noteRepository: any NoteRepositoryProtocol { activeContext?.noteRepository ?? fallbackNoteRepo }
+    var searchService: SearchService { activeContext?.searchService ?? fallbackSearchService }
+    var agentStateStore: AgentStateStore { activeContext?.agentStateStore ?? AgentStateStore() }
+    var contextInjectionService: ContextInjectionService? { activeContext?.contextInjectionService }
+    var sessionMessageRepository: SessionMessageRepository? { activeContext?.sessionMessageRepository }
+    var harnessEventRepository: HarnessEventRepository? { activeContext?.harnessEventRepository }
+    var ruleFileRepository: RuleFileRepository? { activeContext?.ruleFileRepository }
+    var vectorSearchService: VectorSearchService? { activeContext?.vectorSearchService }
+    var sessionHandoffService: SessionHandoffService? { activeContext?.sessionHandoffService }
 
-    // MARK: - Phase 3 (V3.1) Services
+    // MARK: - Fallbacks (used only until first project opens)
 
-    private(set) lazy var ruleFileRepository: RuleFileRepository = .init(db: databaseService)
-    private(set) lazy var experienceCodifier: ExperienceCodifier = .init(
-        harnessEventRepo: harnessEventRepository
-    )
-    private(set) lazy var branchSummarizer: BranchSummarizer = .init()
-    private(set) lazy var embeddingService: EmbeddingService = .init()
-    private(set) lazy var vectorSearchService: VectorSearchService = .init(
-        embeddingService: embeddingService
-    )
+    private lazy var fallbackEngineStore = TerminalEngineStore(factory: engineFactory)
+    private lazy var fallbackSessionStore = SessionStore(engineStore: fallbackEngineStore)
+    private lazy var fallbackNoteRepo: any NoteRepositoryProtocol = MockNoteRepository()
+    private lazy var fallbackSearchService: SearchService = {
+        let sessionRepo = MockSessionRepository()
+        let noteRepo = MockNoteRepository()
+        return SearchService(sessionRepository: sessionRepo, noteRepository: noteRepo)
+    }()
 
     // MARK: - UI controllers
 
     private var visorController: VisorWindowController?
     @Published private(set) var showShellOnboarding = false
     private var chunkObserver: NSObjectProtocol?
+    private var windowObserver: NSObjectProtocol?
 
     // MARK: - NSApplicationDelegate
 
@@ -91,31 +65,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkShellIntegrationOnboarding()
         setupMenuBarActivation()
         setupChunkObserver()
-        configureMainWindow()
-        Task { @MainActor [weak self] in
-            await self?.sessionStore.loadPersistedSessions()
-        }
+        observeWindowFocus()
+        openLastProjectOrShowPicker()
         logger.info("Termura launched")
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let activeID = sessionStore.activeSessionID,
-              let session = sessionStore.sessions.first(where: { $0.id == activeID }),
-              !session.workingDirectory.isEmpty else {
-            return .terminateNow
+        // Capture per-project handoff info on MainActor before detaching.
+        let handoffItems: [(SessionHandoffService, SessionRecord)] = projectWindows.values.compactMap { controller in
+            let ctx = controller.projectContext
+            guard let activeID = ctx.sessionStore.activeSessionID,
+                  let session = ctx.sessionStore.sessions.first(where: { $0.id == activeID }) else {
+                return nil
+            }
+            return (ctx.sessionHandoffService, session)
         }
+        guard !handoffItems.isEmpty else { return .terminateNow }
 
-        let service = sessionHandoffService
         Task.detached {
-            let state = AgentState(sessionID: session.id, agentType: .unknown)
-            do {
-                try await service.generateHandoff(
-                    session: session,
-                    chunks: [],
-                    agentState: state
-                )
-            } catch {
-                logger.error("generateHandoff failed on termination: \(error)")
+            for (handoff, session) in handoffItems {
+                let state = AgentState(sessionID: session.id, agentType: .unknown)
+                do {
+                    try await handoff.generateHandoff(
+                        session: session,
+                        chunks: [],
+                        agentState: state
+                    )
+                } catch {
+                    logger.error("generateHandoff failed on termination: \(error)")
+                }
             }
             await MainActor.run {
                 NSApp.reply(toApplicationShouldTerminate: true)
@@ -128,24 +106,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let observer = chunkObserver {
             NotificationCenter.default.removeObserver(observer)
         }
-        engineStore.terminateAll()
+        if let observer = windowObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        for (_, controller) in projectWindows {
+            controller.projectContext.close()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
 
+    // MARK: - Project management
+
+    func openProject(at url: URL) {
+        // If already open, bring existing window to front
+        if let existing = projectWindows[url] {
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        do {
+            let context = try ProjectContext.open(at: url, engineFactory: engineFactory)
+            let controller = ProjectWindowController(
+                projectContext: context,
+                themeManager: themeManager,
+                tokenCountingService: tokenCountingService
+            )
+            projectWindows[url] = controller
+            activeContext = context
+            recentProjects.addRecent(url)
+            persistOpenProjects()
+            controller.showWindow(nil)
+            if let window = controller.window {
+                configureProjectWindow(window)
+            }
+
+            Task { @MainActor in
+                await context.sessionStore.loadPersistedSessions()
+            }
+            logger.info("Opened project window: \(url.path)")
+        } catch {
+            logger.error("Failed to open project at \(url.path): \(error)")
+        }
+    }
+
+    func closeProject(at url: URL) {
+        guard let controller = projectWindows.removeValue(forKey: url) else { return }
+        controller.projectContext.close()
+        controller.close()
+        if activeContext?.projectURL == url {
+            activeContext = projectWindows.values.first?.projectContext
+        }
+        persistOpenProjects()
+        logger.info("Closed project: \(url.path)")
+    }
+
+    func showProjectPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Open Project"
+        panel.message = "Choose a project directory to open in Termura"
+
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                self?.openProject(at: url)
+            }
+        }
+    }
+
     // MARK: - Visor
 
     func toggleVisor() {
+        guard let context = activeContext else { return }
         if visorController == nil {
             visorController = VisorWindowController(
-                sessionStore: sessionStore,
-                engineStore: engineStore,
+                sessionStore: context.sessionStore,
+                engineStore: context.engineStore,
                 themeManager: themeManager,
                 tokenCountingService: tokenCountingService,
-                searchService: searchService,
-                noteRepository: noteRepository
+                searchService: context.searchService,
+                noteRepository: context.noteRepository
             )
         }
         visorController?.toggle()
@@ -163,6 +208,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Private
+
+    private func persistOpenProjects() {
+        let paths = projectWindows.keys.map(\.path)
+        UserDefaults.standard.set(paths, forKey: "openProjectPaths")
+    }
+
+    private func openLastProjectOrShowPicker() {
+        ProjectMigrationService.migrateIfNeeded()
+        if let lastURL = recentProjects.lastOpened() {
+            openProject(at: lastURL)
+        } else {
+            showProjectPicker()
+        }
+    }
+
+    private func observeWindowFocus() {
+        windowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let window = notification.object as? NSWindow else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                for (_, controller) in projectWindows where controller.window === window {
+                    activeContext = controller.projectContext
+                    return
+                }
+            }
+        }
+    }
 
     private func setupMenuBarActivation() {
         menuBarService.configure { [weak self] in

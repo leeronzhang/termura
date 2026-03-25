@@ -5,76 +5,145 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "com.termura.app", category: "WindowChrome")
 
+/// Tag used to find/remove the fullscreen project label.
+private let fullScreenLabelTag = 9901
+
 // MARK: - Window chrome configuration
 
 extension AppDelegate {
-    /// Makes the main window title bar transparent and extends content into the toolbar area,
-    /// so non-fullscreen appearance matches fullscreen.
-    func configureMainWindow() {
+    /// Configures the given project window: transparent titlebar, traffic-light
+    /// repositioning, and fullscreen project-name label.
+    func configureProjectWindow(_ window: NSWindow) {
         Task { @MainActor in
-            do { try await Task.sleep(nanoseconds: 50_000_000) } catch { return }
-            guard let window = NSApp.windows.first(where: { $0.className.contains("AppKitWindow") })
-                    ?? NSApp.windows.first else { return }
+            do {
+                try await Task.sleep(nanoseconds: AppConfig.UI.windowConfigDelayNanoseconds)
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.warning("Window config delay failed: \(error.localizedDescription)")
+                return
+            }
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.backgroundColor = NSColor(self.themeManager.current.background)
 
-            // Disable the system's own visual effect in the toolbar area.
-            // .unifiedCompact places an NSVisualEffectView to the right of the
-            // traffic lights which creates a lighter strip that clashes with our
-            // content material background.
             disableTitlebarEffect(in: window)
             adjustTrafficLights(in: window)
 
-            // Add invisible view to the window's themeFrame (contentView's superview)
-            // instead of contentView itself, because contentView is an NSHostingView
-            // and adding subviews to it breaks the SwiftUI view hierarchy.
             if let themeFrame = window.contentView?.superview {
                 let adjuster = TrafficLightAdjuster(window: window)
                 adjuster.frame = .zero
                 themeFrame.addSubview(adjuster)
             }
 
-            // Hide traffic-light container BEFORE the exit animation starts,
-            // so the user never sees them at the macOS-default position.
-            NotificationCenter.default.addObserver(
-                forName: NSWindow.willExitFullScreenNotification,
-                object: window,
-                queue: .main
-            ) { [weak self, weak window] _ in
-                MainActor.assumeIsolated {
-                    guard let self, let window else { return }
-                    self.trafficLightContainer(in: window)?.alphaValue = 0
-                }
-            }
+            observeFullScreenTransitions(window: window)
+        }
+    }
 
-            // After the exit animation finishes, reposition and fade in.
-            NotificationCenter.default.addObserver(
-                forName: NSWindow.didExitFullScreenNotification,
-                object: window,
-                queue: .main
-            ) { [weak self, weak window] _ in
-                MainActor.assumeIsolated {
+    /// Legacy entry point — finds the first available window and configures it.
+    func configureMainWindow() {
+        guard let window = NSApp.windows.first(where: {
+            !($0 is NSPanel) && $0.contentViewController != nil
+        }) else { return }
+        configureProjectWindow(window)
+    }
+
+    // MARK: - Fullscreen transitions
+
+    private func observeFullScreenTransitions(window: NSWindow) {
+        // On entering fullscreen: add project label to traffic-light container.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didEnterFullScreenNotification,
+            object: window,
+            queue: .main
+        ) { [weak window] _ in
+            MainActor.assumeIsolated {
+                guard let window else { return }
+                Self.addFullScreenLabel(to: window)
+            }
+        }
+
+        // Hide traffic-light container BEFORE exit animation starts.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willExitFullScreenNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window else { return }
+                Self.removeFullScreenLabel(from: window)
+                self.trafficLightContainer(in: window)?.alphaValue = 0
+            }
+        }
+
+        // After exit animation finishes, reposition traffic lights and fade in.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didExitFullScreenNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window else { return }
+                Task { @MainActor [weak self, weak window] in
                     guard let self, let window else { return }
-                    Task { @MainActor [weak self, weak window] in
-                        guard let self, let window else { return }
-                        do {
-                            try await Task.sleep(nanoseconds: AppConfig.UI.fullScreenExitDelayNanoseconds)
-                        } catch { return }
-                        self.disableTitlebarEffect(in: window)
-                        self.adjustTrafficLights(in: window)
-                        await NSAnimationContext.runAnimationGroup { ctx in
-                            ctx.duration = 0.2
-                            self.trafficLightContainer(in: window)?.animator().alphaValue = 1
-                        }
+                    do {
+                        try await Task.sleep(nanoseconds: AppConfig.UI.fullScreenExitDelayNanoseconds)
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        logger.warning("Full-screen exit delay failed: \(error.localizedDescription)")
+                        return
+                    }
+                    self.disableTitlebarEffect(in: window)
+                    self.adjustTrafficLights(in: window)
+                    await NSAnimationContext.runAnimationGroup { ctx in
+                        ctx.duration = AppConfig.UI.trafficLightFadeSeconds
+                        self.trafficLightContainer(in: window)?.animator().alphaValue = 1
                     }
                 }
             }
         }
     }
 
-    /// Finds and deactivates every NSVisualEffectView inside the titlebar
-    /// container so the system toolbar background doesn't paint over our content.
+    // MARK: - Fullscreen project label
+
+    /// Adds a project-name label as a sibling of the traffic-light buttons
+    /// inside their shared container, so it appears on titlebar hover.
+    private static func addFullScreenLabel(to window: NSWindow) {
+        guard let closeBtn = window.standardWindowButton(.closeButton),
+              let container = closeBtn.superview else { return }
+
+        // Remove existing label if any (e.g. rapid toggle).
+        removeFullScreenLabel(from: window)
+
+        let label = NSTextField(labelWithString: window.title)
+        label.tag = fullScreenLabelTag
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.isEditable = false
+        label.isBordered = false
+        label.drawsBackground = false
+        label.isSelectable = false
+        label.lineBreakMode = .byTruncatingTail
+        label.sizeToFit()
+
+        container.addSubview(label)
+
+        // Position to the right of the rightmost traffic-light button.
+        let zoomBtn = window.standardWindowButton(.zoomButton) ?? closeBtn
+        let rightEdge = zoomBtn.frame.maxX
+        let labelY = zoomBtn.frame.midY - label.frame.height / 2
+        label.frame.origin = NSPoint(x: rightEdge + 12, y: labelY)
+    }
+
+    private static func removeFullScreenLabel(from window: NSWindow) {
+        guard let closeBtn = window.standardWindowButton(.closeButton),
+              let container = closeBtn.superview else { return }
+        container.viewWithTag(fullScreenLabelTag)?.removeFromSuperview()
+    }
+
+    // MARK: - Titlebar helpers
+
     func disableTitlebarEffect(in window: NSWindow) {
         guard let themebarParent = window.contentView?.superview else { return }
         for container in themebarParent.subviews {

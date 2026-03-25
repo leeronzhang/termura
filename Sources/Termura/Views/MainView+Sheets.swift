@@ -17,8 +17,7 @@ extension MainView {
 
     @ViewBuilder
     var harnessSheet: some View {
-        let appDel = NSApp.delegate as? AppDelegate
-        if let repo = appDel?.ruleFileRepository {
+        if let repo = ruleFileRepository {
             let projectRoot = activeSessionWorkingDirectory
             let vm = HarnessViewModel(repository: repo, projectRoot: projectRoot)
             HarnessSidebarView(viewModel: vm, isPresented: $showHarness)
@@ -55,7 +54,7 @@ extension MainView {
                 branchSession: session,
                 chunks: [],
                 onMerge: { summary in
-                    let msgRepo = (NSApp.delegate as? AppDelegate)?.sessionMessageRepository
+                    let msgRepo = sessionMessageRepository
                     Task {
                         await sessionStore.mergeBranchSummary(
                             branchID: activeID,

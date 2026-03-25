@@ -6,8 +6,7 @@ import SwiftUI
 extension SidebarView {
     @ViewBuilder
     var harnessContent: some View {
-        if let appDel = NSApp.delegate as? AppDelegate {
-            let repo = appDel.ruleFileRepository
+        if let repo = ruleFileRepository {
             let projectRoot = activeSessionWorkingDirectory
             SidebarHarnessContent(repository: repo, projectRoot: projectRoot)
         } else {

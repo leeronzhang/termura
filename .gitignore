@@ -33,3 +33,4 @@ landing/
 
 # macOS
 .DS_Store
+.termura/

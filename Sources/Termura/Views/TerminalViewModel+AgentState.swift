@@ -17,9 +17,7 @@ extension TerminalViewModel {
               !session.workingDirectory.isEmpty else { return }
 
         let chunks = outputStore.chunks
-
-        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
-        let handoffService = appDelegate.sessionHandoffService
+        guard let handoffService = sessionHandoffService else { return }
 
         Task.detached {
             do {

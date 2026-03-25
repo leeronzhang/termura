@@ -8,6 +8,7 @@ struct SidebarView: View {
     var searchService: SearchService?
     var noteRepository: (any NoteRepositoryProtocol)?
     var notesViewModel: NotesViewModel?
+    var ruleFileRepository: RuleFileRepository?
     var isFullScreen: Bool = false
     /// Called when a note title is tapped in the sidebar to open it as a content tab.
     var onOpenNote: ((NoteID, String) -> Void)?

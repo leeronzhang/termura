@@ -61,7 +61,7 @@ final class VisorWindowController: NSWindowController {
     func show() {
         guard let screen = NSScreen.main, let panel = window else { return }
         let screenFrame = screen.frame
-        let panelHeight = screenFrame.height * 0.55
+        let panelHeight = screenFrame.height * AppConfig.UI.visorPanelHeightFraction
         let targetFrame = NSRect(
             x: screenFrame.minX,
             y: screenFrame.maxY - panelHeight,

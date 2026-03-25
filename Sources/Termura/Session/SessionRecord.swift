@@ -22,7 +22,7 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
     init(
         id: SessionID = SessionID(),
         title: String = "Terminal",
-        workingDirectory: String = FileManager.default.homeDirectoryForCurrentUser.path,
+        workingDirectory: String = "",
         createdAt: Date = Date(),
         lastActiveAt: Date = Date(),
         colorLabel: SessionColorLabel = .none,

@@ -16,14 +16,20 @@ actor DatabaseService: DatabaseServiceProtocol {
         logger.info("DatabaseService ready — migrations applied")
     }
 
-    /// Convenience factory — creates the pool at the standard ~/.termura/ path.
-    static func makePool() throws -> DatabasePool {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let dir = home.appendingPathComponent(AppConfig.Persistence.directoryName)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    /// Creates a pool at `<projectURL>/.termura/termura.db`.
+    /// - Throws: `RepositoryError.migrationFailed` if the directory is not writable.
+    static func makePool(at projectURL: URL) throws -> DatabasePool {
+        let fm = FileManager.default
+        guard fm.isWritableFile(atPath: projectURL.path) else {
+            throw RepositoryError.migrationFailed(
+                "No write permission for project directory: \(projectURL.path)"
+            )
+        }
+        let dir = projectURL.appendingPathComponent(AppConfig.Persistence.directoryName)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(AppConfig.Persistence.databaseFileName)
         var config = Configuration()
-        config.label = "com.termura.db"
+        config.label = "com.termura.db.\(projectURL.lastPathComponent)"
         return try DatabasePool(path: url.path, configuration: config)
     }
 

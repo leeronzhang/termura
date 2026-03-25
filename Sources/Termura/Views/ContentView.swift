@@ -1,27 +1,35 @@
 import SwiftUI
 
-/// Thin wrapper — injects environment into MainView.
+/// Thin wrapper — bridges ProjectContext into MainView.
 struct ContentView: View {
-    @EnvironmentObject private var sessionStore: SessionStore
-    @EnvironmentObject private var engineStore: TerminalEngineStore
-    @EnvironmentObject private var themeManager: ThemeManager
-    /// Passed via direct injection since TokenCountingService is an actor (not ObservableObject).
+    @ObservedObject var projectContext: ProjectContext
+    let themeManager: ThemeManager
     let tokenCountingService: TokenCountingService
-    let searchService: SearchService
-    let noteRepository: any NoteRepositoryProtocol
-    var agentStateStore: AgentStateStore?
-    var contextInjectionService: ContextInjectionService?
+
+    init(
+        projectContext: ProjectContext,
+        themeManager: ThemeManager,
+        tokenCountingService: TokenCountingService
+    ) {
+        self.projectContext = projectContext
+        self.themeManager = themeManager
+        self.tokenCountingService = tokenCountingService
+    }
 
     var body: some View {
         MainView(
-            sessionStore: sessionStore,
-            engineStore: engineStore,
+            sessionStore: projectContext.sessionStore,
+            engineStore: projectContext.engineStore,
             themeManager: themeManager,
             tokenCountingService: tokenCountingService,
-            searchService: searchService,
-            noteRepository: noteRepository,
-            agentStateStore: agentStateStore,
-            contextInjectionService: contextInjectionService
+            searchService: projectContext.searchService,
+            noteRepository: projectContext.noteRepository,
+            agentStateStore: projectContext.agentStateStore,
+            contextInjectionService: projectContext.contextInjectionService,
+            vectorSearchService: projectContext.vectorSearchService,
+            sessionMessageRepository: projectContext.sessionMessageRepository,
+            ruleFileRepository: projectContext.ruleFileRepository,
+            sessionHandoffService: projectContext.sessionHandoffService
         )
         .toolbarBackground(.hidden, for: .windowToolbar)
         .ignoresSafeArea(edges: .top)

@@ -82,8 +82,13 @@ extension TerminalViewModel {
         promptRecheckTask?.cancel()
         promptRecheckTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-            } catch { return }
+                try await Task.sleep(nanoseconds: AppConfig.UI.promptRecheckDelayNanoseconds)
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.warning("Prompt recheck delay failed: \(error.localizedDescription)")
+                return
+            }
             self?.detectPromptFromScreenBuffer()
         }
     }

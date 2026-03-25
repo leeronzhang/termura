@@ -46,7 +46,7 @@ enum SemanticParser {
     // MARK: - Detection Heuristics
 
     private static func isDiff(_ text: String) -> Bool {
-        let lines = text.prefix(2000)
+        let lines = text.prefix(AppConfig.Output.diffDetectionPrefixLength)
         return lines.contains("--- a/") && lines.contains("+++ b/")
             || lines.contains("diff --git")
     }
@@ -59,7 +59,7 @@ enum SemanticParser {
     }
 
     private static func isError(_ text: String) -> Bool {
-        let lowered = text.lowercased().prefix(3000)
+        let lowered = text.lowercased().prefix(AppConfig.Output.errorDetectionPrefixLength)
         let errorIndicators = [
             "error:", "error[", "fatal:", "panic:",
             "traceback (most recent", "exception:",
@@ -77,7 +77,7 @@ enum SemanticParser {
     }
 
     private static func isToolCall(_ text: String) -> Bool {
-        let prefix = text.prefix(500)
+        let prefix = text.prefix(AppConfig.Output.toolCallDetectionPrefixLength)
         return prefix.contains("⏺") || prefix.contains("Tool:") || prefix.contains("tool_use")
     }
 }

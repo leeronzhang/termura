@@ -78,7 +78,7 @@ extension TerminalAreaView {
             .buttonStyle(.plain)
             .help(showMetadata ? "Hide Session Info" : "Show Session Info")
         }
-        .frame(height: 32)
+        .frame(height: AppConfig.UI.projectPathBarHeight)
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.top, AppUI.Spacing.md)
         .padding(.bottom, AppUI.Spacing.smMd)
@@ -215,7 +215,7 @@ extension TerminalAreaView {
         ZStack {
             Divider()
             Color.clear
-                .frame(height: 9)
+                .frame(height: AppConfig.UI.editorDividerHandleHeight)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 1, coordinateSpace: .global)

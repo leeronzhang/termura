@@ -14,16 +14,20 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
 
     private let engineStore: TerminalEngineStore
     private let defaultShell: String
+    /// Project root directory — used as default working directory for new sessions.
+    let projectRoot: String
     private let repository: (any SessionRepositoryProtocol)?
     private var saveTask: Task<Void, Never>?
 
     init(
         engineStore: TerminalEngineStore,
         shell: String = "",
+        projectRoot: String = "",
         repository: (any SessionRepositoryProtocol)? = nil
     ) {
         self.engineStore = engineStore
         defaultShell = shell
+        self.projectRoot = projectRoot
         self.repository = repository
     }
 
@@ -41,9 +45,8 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
             // lazily on activation to avoid forking dozens of shells at startup.
             let sorted = loaded.sorted { $0.lastActiveAt > $1.lastActiveAt }
             activeSessionID = sorted.first?.id ?? loaded.first?.id
-            if let activeID = activeSessionID,
-               let session = loaded.first(where: { $0.id == activeID }) {
-                let dir = session.workingDirectory.isEmpty ? nil : session.workingDirectory
+            if let activeID = activeSessionID {
+                let dir = projectRoot.isEmpty ? nil : projectRoot
                 engineStore.createEngine(for: activeID, shell: defaultShell, currentDirectory: dir)
             }
             logger.info("Loaded \(loaded.count) persisted sessions")
@@ -63,21 +66,28 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     @discardableResult
     func createSession(title: String = "", shell: String = "") -> SessionRecord {
         let resolvedShell = shell.isEmpty ? defaultShell : shell
-        let resolvedTitle = title.isEmpty ? Self.defaultSessionTitle() : title
-        let record = SessionRecord(title: resolvedTitle, orderIndex: sessions.count)
+        let resolvedTitle = title.isEmpty ? defaultSessionTitle() : title
+        let dir = projectRoot.isEmpty ? nil : projectRoot
+        let record = SessionRecord(
+            title: resolvedTitle,
+            workingDirectory: projectRoot,
+            orderIndex: sessions.count
+        )
         sessions.append(record)
-        engineStore.createEngine(for: record.id, shell: resolvedShell)
+        engineStore.createEngine(for: record.id, shell: resolvedShell, currentDirectory: dir)
         activeSessionID = record.id
         persistAsync { try await $0.save(record) }
         logger.info("Created session \(record.id) title=\(resolvedTitle)")
         return record
     }
 
-    /// Derives a human-readable session title from the current working directory basename.
-    private static func defaultSessionTitle() -> String {
-        let cwd = FileManager.default.currentDirectoryPath
-        let basename = URL(fileURLWithPath: cwd).lastPathComponent
-        return basename.isEmpty ? "Terminal" : basename
+    /// Derives a human-readable session title from the project root directory basename.
+    private func defaultSessionTitle() -> String {
+        if !projectRoot.isEmpty {
+            let basename = URL(fileURLWithPath: projectRoot).lastPathComponent
+            if !basename.isEmpty { return basename }
+        }
+        return "Terminal"
     }
 
     func closeSession(id: SessionID) {
@@ -90,11 +100,11 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     }
 
     func activateSession(id: SessionID) {
-        guard let session = sessions.first(where: { $0.id == id }) else { return }
+        guard sessions.contains(where: { $0.id == id }) else { return }
         activeSessionID = id
         // Lazy engine creation for restored sessions that haven't been activated yet.
         if engineStore.engine(for: id) == nil {
-            let dir = session.workingDirectory.isEmpty ? nil : session.workingDirectory
+            let dir = projectRoot.isEmpty ? nil : projectRoot
             engineStore.createEngine(for: id, shell: defaultShell, currentDirectory: dir)
         }
     }

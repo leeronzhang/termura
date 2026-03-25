@@ -10,6 +10,10 @@ struct MainView: View {
     let noteRepository: any NoteRepositoryProtocol
     var agentStateStore: AgentStateStore?
     var contextInjectionService: ContextInjectionService?
+    var vectorSearchService: VectorSearchService?
+    var sessionMessageRepository: SessionMessageRepository?
+    var ruleFileRepository: RuleFileRepository?
+    var sessionHandoffService: SessionHandoffService?
 
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
     @State private var showSidebar = true
@@ -36,7 +40,11 @@ struct MainView: View {
         searchService: SearchService,
         noteRepository: any NoteRepositoryProtocol,
         agentStateStore: AgentStateStore? = nil,
-        contextInjectionService: ContextInjectionService? = nil
+        contextInjectionService: ContextInjectionService? = nil,
+        vectorSearchService: VectorSearchService? = nil,
+        sessionMessageRepository: SessionMessageRepository? = nil,
+        ruleFileRepository: RuleFileRepository? = nil,
+        sessionHandoffService: SessionHandoffService? = nil
     ) {
         self.sessionStore = sessionStore
         self.engineStore = engineStore
@@ -46,6 +54,10 @@ struct MainView: View {
         self.noteRepository = noteRepository
         self.agentStateStore = agentStateStore
         self.contextInjectionService = contextInjectionService
+        self.vectorSearchService = vectorSearchService
+        self.sessionMessageRepository = sessionMessageRepository
+        self.ruleFileRepository = ruleFileRepository
+        self.sessionHandoffService = sessionHandoffService
         _notesViewModel = StateObject(wrappedValue: NotesViewModel(repository: noteRepository))
     }
 
@@ -58,6 +70,7 @@ struct MainView: View {
                     searchService: searchService,
                     noteRepository: noteRepository,
                     notesViewModel: notesViewModel,
+                    ruleFileRepository: ruleFileRepository,
                     isFullScreen: isFullScreen,
                     onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) }
                 )
@@ -120,7 +133,7 @@ struct MainView: View {
                 searchService: searchService,
                 isPresented: $showSearch,
                 onSelectSession: { id in sessionStore.activateSession(id: id) },
-                vectorService: (NSApp.delegate as? AppDelegate)?.vectorSearchService
+                vectorService: vectorSearchService
             )
         }
         .sheet(isPresented: $showNotes) {
@@ -190,7 +203,8 @@ struct MainView: View {
                 tokenCountingService: tokenCountingService,
                 agentStateStore: agentStateStore,
                 isRestoredSession: sessionStore.isRestoredSession(id: activeID),
-                contextInjectionService: contextInjectionService
+                contextInjectionService: contextInjectionService,
+                sessionHandoffService: sessionHandoffService
             )
             .id(activeID)
         } else {
@@ -225,6 +239,7 @@ struct MainView: View {
                 agentStateStore: agentStateStore,
                 isRestoredSession: sessionStore.isRestoredSession(id: sessionID),
                 contextInjectionService: contextInjectionService,
+                sessionHandoffService: sessionHandoffService,
                 isCompact: true
             )
             .id(sessionID)

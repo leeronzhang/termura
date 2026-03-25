@@ -3,6 +3,14 @@ import Foundation
 /// Central configuration for all app-wide constants.
 /// All magic numbers must live here — never inline in logic layer.
 enum AppConfig {
+    enum Fonts {
+        /// Source Code Pro — bundled monospaced font for terminal, editor, and code display.
+        static let terminalFamily = "Source Code Pro"
+        static let terminalSize: CGFloat = 13
+        static let editorSize: CGFloat = 13
+        static let notesSize: CGFloat = 13
+    }
+
     enum Terminal {
         static let maxScrollbackLines = 10000
         static let maxOutputChunksPerSession = 500
@@ -82,6 +90,22 @@ enum AppConfig {
         static let editorMaxHeightPoints: Double = 300
         /// Delay after exiting full screen before repositioning traffic lights (100ms).
         static let fullScreenExitDelayNanoseconds: UInt64 = 100_000_000
+        /// Delay before window configuration after launch (50ms).
+        static let windowConfigDelayNanoseconds: UInt64 = 50_000_000
+        /// Delay before focusing editor on appear (50ms).
+        static let editorFocusDelayNanoseconds: UInt64 = 50_000_000
+        /// Delay before prompt recheck after terminal data (100ms).
+        static let promptRecheckDelayNanoseconds: UInt64 = 100_000_000
+        /// Fraction of context window at which token progress turns red.
+        static let tokenProgressCriticalFraction: Double = 0.9
+        /// Animation duration for traffic light fade-in after full-screen exit.
+        static let trafficLightFadeSeconds: Double = 0.2
+        /// Height of the project path bar in points.
+        static let projectPathBarHeight: Double = 32
+        /// Hit-target height for the editor divider handle.
+        static let editorDividerHandleHeight: Double = 9
+        /// Visor panel height as a fraction of screen height.
+        static let visorPanelHeightFraction: Double = 0.55
     }
 
     enum ShellIntegration {
@@ -101,6 +125,12 @@ enum AppConfig {
         /// AI tool prompt pattern for Claude Code / Aider style prompts.
         /// Matches `>` (U+003E), `❯` (U+276F), or `›` (U+203A) as a bare prompt line.
         static let aiToolPromptPattern = "^[>❯›]\\s*$"
+        /// Prefix character limit for diff detection heuristic.
+        static let diffDetectionPrefixLength = 2000
+        /// Prefix character limit for error detection heuristic.
+        static let errorDetectionPrefixLength = 3000
+        /// Prefix character limit for tool-call detection heuristic.
+        static let toolCallDetectionPrefixLength = 500
     }
 
     enum Search {
@@ -155,6 +185,8 @@ enum AppConfig {
         static let statusPollInterval: Double = 0.5
         /// Glow animation duration for attention sessions (seconds).
         static let glowAnimationDuration: Double = 2.0
+        /// Suffix character count for agent output analysis.
+        static let outputAnalysisSuffixLength = 2000
     }
 
     enum Harness {
@@ -181,6 +213,13 @@ enum AppConfig {
         static let injectionMaxLength = 1500
         /// Delay before injecting context after prompt detection (nanoseconds).
         static let injectionDelayNanoseconds: UInt64 = 200_000_000
+    }
+
+    enum RecentProjects {
+        static let maxCount = 20
+        static let fileName = "recent-projects.json"
+        /// Global config directory under user home for app-level files.
+        static let globalDirectoryName = ".termura"
     }
 
     enum TerminalBackend: String, Sendable {

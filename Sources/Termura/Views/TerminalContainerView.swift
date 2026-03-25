@@ -43,6 +43,10 @@ struct TerminalContainerView: NSViewRepresentable {
         view.nativeBackgroundColor = NSColor(theme.background)
         view.nativeForegroundColor = NSColor(theme.foreground)
         view.installColors(theme.toSwiftTermColors())
+
+        if let font = NSFont(name: AppConfig.Fonts.terminalFamily, size: AppConfig.Fonts.terminalSize) {
+            view.font = font
+        }
     }
 }
 
