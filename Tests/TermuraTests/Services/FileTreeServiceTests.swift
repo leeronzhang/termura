@@ -19,7 +19,7 @@ struct FileTreeServiceTests {
     }
 
     private func makeGitResult(files: [GitFileStatus]) -> GitStatusResult {
-        GitStatusResult(branch: "main", files: files, isGitRepo: true)
+        GitStatusResult(branch: "main", files: files, isGitRepo: true, ahead: 0, behind: 0)
     }
 
     // MARK: - Annotate tests

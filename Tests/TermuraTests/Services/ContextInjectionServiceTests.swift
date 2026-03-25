@@ -150,7 +150,7 @@ struct ContextInjectionServiceTests {
         #expect(result != nil)
     }
 
-    @Test("Returns shell echo command for unknown agent")
+    @Test("Returns printf command for unknown agent")
     func shellInjection() async throws {
         let tmpDir = try makeTempDir()
         defer { try? FileManager.default.removeItem(atPath: tmpDir) }
@@ -162,7 +162,44 @@ struct ContextInjectionServiceTests {
 
         #expect(result != nil)
         let text = try #require(result)
-        #expect(text.hasPrefix("echo "))
+        #expect(text.contains("printf"))
+    }
+
+    @Test("Shell format uses printf with single-quoted argument")
+    func shellFormatUsesPrintf() async throws {
+        let tmpDir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: tmpDir) }
+
+        try writeContextFile(projectRoot: tmpDir, agentType: "unknown")
+
+        let service = makeInjectionService()
+        let text = try #require(await service.buildInjectionText(projectRoot: tmpDir))
+        #expect(text.hasPrefix("printf '%s\\n' '"))
+    }
+
+    @Test("Shell format escapes single quotes in task status")
+    func shellEscapesSingleQuotes() async throws {
+        let tmpDir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: tmpDir) }
+
+        try writeContextFile(projectRoot: tmpDir, agentType: "unknown", taskStatus: "it's a test")
+
+        let service = makeInjectionService()
+        let text = try #require(await service.buildInjectionText(projectRoot: tmpDir))
+        // Single quotes inside the value are escaped as '\''
+        #expect(text.contains("'\\''"))
+    }
+
+    @Test("Shell format includes decision summaries")
+    func shellFormatIncludesDecisions() async throws {
+        let tmpDir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: tmpDir) }
+
+        try writeContextFile(projectRoot: tmpDir, agentType: "unknown")
+
+        let service = makeInjectionService()
+        let text = try #require(await service.buildInjectionText(projectRoot: tmpDir))
+        #expect(text.contains("Decisions:"))
     }
 
     @Test("Injection text is truncated to injectionMaxLength")

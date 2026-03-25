@@ -42,7 +42,8 @@ final class ProjectViewModelTests: XCTestCase {
         let expected = GitStatusResult(
             branch: "main",
             files: [GitFileStatus(path: "file.swift", kind: .modified, isStaged: false)],
-            isGitRepo: true
+            isGitRepo: true,
+            ahead: 0, behind: 0
         )
         await mockGit.setStubbed(expected)
 
@@ -67,7 +68,8 @@ final class ProjectViewModelTests: XCTestCase {
         let status = GitStatusResult(
             branch: "main",
             files: [GitFileStatus(path: "file.swift", kind: .modified, isStaged: false)],
-            isGitRepo: true
+            isGitRepo: true,
+            ahead: 0, behind: 0
         )
         await mockGit.setStubbed(status)
 

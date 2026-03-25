@@ -140,6 +140,27 @@ struct ChunkDetectorTests {
         let outputText = chunk?.outputLines.joined() ?? ""
         #expect(!outputText.contains("before reset"))
     }
+    // MARK: - Truncation
+
+    @Test("Output is truncated when exceeding maxChunkOutputChars")
+    func outputTruncatedAtLimit() async {
+        let detector = ChunkDetector(sessionID: SessionID())
+        let limit = AppConfig.Output.maxChunkOutputChars
+        let oversizedText = String(repeating: "x", count: limit + 500)
+
+        await detector.handleShellEvent(.promptStarted).map { _ in () }
+        await detector.handleShellEvent(.commandStarted).map { _ in () }
+        await detector.appendRawOutput(oversizedText)
+        await detector.handleShellEvent(.executionStarted).map { _ in () }
+        let chunk = await detector.handleShellEvent(.executionFinished(exitCode: 0))
+
+        guard let chunk else {
+            Issue.record("Expected a chunk from oversized output")
+            return
+        }
+        let joined = chunk.outputLines.joined()
+        #expect(joined.count <= limit + 200)
+    }
 }
 
 private extension Optional {
