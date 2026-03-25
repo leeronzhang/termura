@@ -22,11 +22,8 @@ actor FileTreeService {
 
         // Build lookup: relativePath → (kind, isStaged)
         var lookup: [String: (GitFileStatus.Kind, Bool)] = [:]
-        for file in gitResult.files {
-            // Keep first match (staged takes priority in display)
-            if lookup[file.path] == nil {
-                lookup[file.path] = (file.kind, file.isStaged)
-            }
+        for file in gitResult.files where lookup[file.path] == nil {
+            lookup[file.path] = (file.kind, file.isStaged)
         }
 
         return annotateNodes(tree, lookup: lookup)
@@ -42,11 +39,17 @@ actor FileTreeService {
         guard depth < AppConfig.FileTree.maxDepth else { return [] }
 
         let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
-            options: [.skipsPackageDescendants]
-        ) else { return [] }
+        let contents: [URL]
+        do {
+            contents = try fm.contentsOfDirectory(
+                at: directoryURL,
+                includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
+                options: [.skipsPackageDescendants]
+            )
+        } catch {
+            logger.warning("Failed to list directory \(directoryURL.path): \(error.localizedDescription)")
+            return []
+        }
 
         var dirs: [FileTreeNode] = []
         var files: [FileTreeNode] = []
@@ -58,7 +61,13 @@ actor FileTreeService {
             if name.hasPrefix(".") && AppConfig.FileTree.ignoredDotfiles { continue }
             if AppConfig.FileTree.ignoredDirectories.contains(name) { continue }
 
-            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            let isDir: Bool
+            do {
+                isDir = try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory ?? false
+            } catch {
+                logger.warning("Failed to read resource values for \(url.path): \(error.localizedDescription)")
+                isDir = false
+            }
             let relativePath = url.path.replacingOccurrences(
                 of: rootURL.path + "/",
                 with: ""

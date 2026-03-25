@@ -21,7 +21,7 @@ struct HandoffContext: Sendable {
 
 // MARK: - Service
 
-actor SessionHandoffService {
+actor SessionHandoffService: SessionHandoffServiceProtocol {
     private let messageRepo: any SessionMessageRepositoryProtocol
     private let harnessEventRepo: any HarnessEventRepositoryProtocol
     private let summarizer: BranchSummarizer
@@ -109,6 +109,7 @@ actor SessionHandoffService {
         do {
             content = try String(contentsOfFile: filePath, encoding: .utf8)
         } catch {
+            logger.debug("No existing context file at \(filePath): \(error.localizedDescription)")
             content = nil
         }
         guard let content else { return nil }
@@ -152,7 +153,11 @@ actor SessionHandoffService {
 
             // Clean up backup only after successful write
             if backedUp {
-                try? fm.removeItem(atPath: backupPath)
+                do {
+                    try fm.removeItem(atPath: backupPath)
+                } catch {
+                    logger.warning("Failed to remove backup at \(backupPath): \(error.localizedDescription)")
+                }
             }
         }.value
     }

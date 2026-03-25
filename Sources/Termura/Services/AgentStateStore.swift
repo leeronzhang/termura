@@ -6,7 +6,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "AgentStateS
 /// Aggregates agent states across all active sessions.
 /// Provides the data layer for the multi-agent dashboard and notification system.
 @MainActor
-final class AgentStateStore: ObservableObject {
+final class AgentStateStore: ObservableObject, AgentStateStoreProtocol {
     // MARK: - Published state
 
     /// All detected agent states, keyed by session ID.

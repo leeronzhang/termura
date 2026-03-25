@@ -5,7 +5,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "VectorSearc
 
 /// In-memory vector search service for semantic queries across sessions and rules.
 /// Placeholder for sqlite-vec integration; uses brute-force cosine similarity.
-actor VectorSearchService {
+actor VectorSearchService: VectorSearchServiceProtocol {
     private var index: [IndexEntry] = []
     private let embeddingService: EmbeddingService
 

@@ -68,6 +68,7 @@ actor ShellHookInstaller {
         do {
             return try isHookPresent(in: rcPath)
         } catch {
+            logger.debug("Could not check hook in \(rcPath): \(error.localizedDescription)")
             return false
         }
     }
@@ -84,6 +85,7 @@ actor ShellHookInstaller {
         do {
             contents = try String(contentsOfFile: path, encoding: .utf8)
         } catch {
+            logger.debug("RC file not readable at \(path): \(error.localizedDescription)")
             return false
         }
         return contents.contains(AppConfig.ShellIntegration.hookSentinelComment)

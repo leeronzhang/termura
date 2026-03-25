@@ -11,7 +11,7 @@ struct SearchResults: Sendable {
     static let empty = SearchResults(sessions: [], notes: [], query: "")
 }
 
-actor SearchService {
+actor SearchService: SearchServiceProtocol {
     private let sessionRepository: any SessionRepositoryProtocol
     private let noteRepository: any NoteRepositoryProtocol
 

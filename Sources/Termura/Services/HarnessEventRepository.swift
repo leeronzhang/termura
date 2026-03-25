@@ -57,13 +57,13 @@ private struct HarnessEventRow: FetchableRecord, PersistableRecord, Sendable {
 
     func toEvent() throws -> HarnessEvent {
         guard let uuid = UUID(uuidString: id) else {
-            throw RepositoryError.invalidID(id)
+            throw RepositoryError.invalidID(rawValue: id, entity: "HarnessEvent")
         }
         guard let sessionUUID = UUID(uuidString: sessionId) else {
-            throw RepositoryError.invalidID(sessionId)
+            throw RepositoryError.invalidID(rawValue: sessionId, entity: "HarnessEvent.session")
         }
         guard let type = HarnessEventType(rawValue: eventType) else {
-            throw RepositoryError.invalidID("eventType:\(eventType)")
+            throw RepositoryError.invalidID(rawValue: eventType, entity: "HarnessEventType")
         }
         return HarnessEvent(
             id: uuid,

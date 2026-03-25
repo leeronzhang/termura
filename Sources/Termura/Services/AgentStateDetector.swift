@@ -78,6 +78,7 @@ actor AgentStateDetector {
         ("aider", .aider),
         ("opencode", .openCode),
         ("oc ", .openCode),
+        ("gemini", .gemini),
         ("pi ", .pi),
         ("pi-agent", .pi)
     ]
@@ -98,19 +99,19 @@ actor AgentStateDetector {
     }
 
     private func isToolRunning(_ text: String) -> Bool {
-        text.contains("⏺") || text.contains("Running:")
+        text.contains("\u{23FA}") || text.contains("Running:")
             || text.contains("Executing:") || text.contains("Writing to")
             || text.contains("tool_use") || text.contains("bash(")
     }
 
     private func isThinking(_ text: String) -> Bool {
-        text.contains("Thinking") || text.contains("…")
-            || text.contains("Generating") || text.contains("⠋")
-            || text.contains("⠙") || text.contains("⠹")
+        text.contains("Thinking") || text.contains("\u{2026}")
+            || text.contains("Generating") || text.contains("\u{280B}")
+            || text.contains("\u{2819}") || text.contains("\u{2839}")
     }
 
     private func isCompleted(_ text: String) -> Bool {
         text.contains("Task completed") || text.contains("Done!")
-            || text.contains("finished") || text.contains("✓")
+            || text.contains("finished") || text.contains("\u{2713}")
     }
 }

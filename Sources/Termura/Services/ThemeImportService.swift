@@ -11,13 +11,17 @@ protocol ThemeImportServiceProtocol: Sendable {
 }
 
 enum ThemeImportError: Error, LocalizedError {
-    case fileReadError(String)
-    case invalidFormat(String)
+    /// The theme file could not be read from disk.
+    case fileReadFailed(url: URL, underlying: Error)
+    /// The file content is not a valid theme format (JSON or iTerm plist).
+    case invalidFormat(detail: String, underlying: Error?)
 
     var errorDescription: String? {
         switch self {
-        case let .fileReadError(msg): "Failed to read file: \(msg)"
-        case let .invalidFormat(msg): "Invalid theme format: \(msg)"
+        case let .fileReadFailed(url, underlying):
+            "Failed to read \(url.lastPathComponent): \(underlying.localizedDescription)"
+        case let .invalidFormat(detail, _):
+            "Invalid theme format: \(detail)"
         }
     }
 }
@@ -27,28 +31,28 @@ actor ThemeImportService: ThemeImportServiceProtocol {
     func importJSON(from url: URL) async throws -> ThemeDefinition {
         let data: Data
         do { data = try Data(contentsOf: url) } catch {
-            throw ThemeImportError.fileReadError(error.localizedDescription)
+            throw ThemeImportError.fileReadFailed(url: url, underlying: error)
         }
         do {
             return try JSONDecoder().decode(ThemeDefinition.self, from: data)
         } catch {
-            throw ThemeImportError.invalidFormat(error.localizedDescription)
+            throw ThemeImportError.invalidFormat(detail: "JSON decode failed", underlying: error)
         }
     }
 
     func importItermColors(from url: URL) async throws -> ThemeDefinition {
         let data: Data
         do { data = try Data(contentsOf: url) } catch {
-            throw ThemeImportError.fileReadError(error.localizedDescription)
+            throw ThemeImportError.fileReadFailed(url: url, underlying: error)
         }
         let plist: Any
         do {
             plist = try PropertyListSerialization.propertyList(from: data, format: nil)
         } catch {
-            throw ThemeImportError.invalidFormat("PropertyList parse failed: \(error.localizedDescription)")
+            throw ThemeImportError.invalidFormat(detail: "PropertyList parse failed", underlying: error)
         }
         guard let dict = plist as? [String: Any] else {
-            throw ThemeImportError.invalidFormat("Expected top-level dictionary")
+            throw ThemeImportError.invalidFormat(detail: "Expected top-level dictionary", underlying: nil)
         }
         let name = url.deletingPathExtension().lastPathComponent
         return parseItermDict(dict, name: name)

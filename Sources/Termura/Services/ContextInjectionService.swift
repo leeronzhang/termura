@@ -5,10 +5,10 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ContextInje
 
 /// Builds context injection text from a project's `.termura/context.md` for
 /// auto-sending into a restored terminal session.
-actor ContextInjectionService {
-    private let handoffService: SessionHandoffService
+actor ContextInjectionService: ContextInjectionServiceProtocol {
+    private let handoffService: any SessionHandoffServiceProtocol
 
-    init(handoffService: SessionHandoffService) {
+    init(handoffService: any SessionHandoffServiceProtocol) {
         self.handoffService = handoffService
     }
 

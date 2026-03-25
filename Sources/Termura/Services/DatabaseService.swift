@@ -22,7 +22,8 @@ actor DatabaseService: DatabaseServiceProtocol {
         let fm = FileManager.default
         guard fm.isWritableFile(atPath: projectURL.path) else {
             throw RepositoryError.migrationFailed(
-                "No write permission for project directory: \(projectURL.path)"
+                version: "pool-init",
+                underlying: nil
             )
         }
         let dir = projectURL.appendingPathComponent(AppConfig.Persistence.directoryName)

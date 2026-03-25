@@ -75,6 +75,7 @@ actor GitService: GitServiceProtocol {
             let out = try await run(["rev-parse", "--is-inside-work-tree"], at: directory)
             return out.trimmingCharacters(in: .whitespacesAndNewlines) == "true"
         } catch {
+            logger.debug("Not a git repo at \(directory): \(error.localizedDescription)")
             return false
         }
     }
@@ -92,29 +93,40 @@ actor GitService: GitServiceProtocol {
             process.standardOutput = pipe
             process.standardError = errPipe
 
+            // Resume the continuation asynchronously when the process exits.
+            // This avoids blocking the Swift concurrency cooperative thread pool.
+            let cmdString = arguments.joined(separator: " ")
+            process.terminationHandler = { terminatedProcess in
+                guard terminatedProcess.terminationStatus == 0 else {
+                    let stderr = String(
+                        data: errPipe.fileHandleForReading.readDataToEndOfFile(),
+                        encoding: .utf8
+                    ) ?? ""
+                    let error = GitServiceError.commandFailed(
+                        command: cmdString,
+                        exitCode: terminatedProcess.terminationStatus,
+                        stderr: stderr
+                    )
+                    logger.warning("\(error.localizedDescription)")
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let result = String(data: data, encoding: .utf8) ?? ""
+                continuation.resume(returning: result)
+            }
+
             do {
                 try process.run()
             } catch {
-                continuation.resume(throwing: error)
-                return
+                // Clear terminationHandler to prevent double-resume if launch fails.
+                process.terminationHandler = nil
+                continuation.resume(throwing: GitServiceError.launchFailed(
+                    command: cmdString,
+                    underlying: error
+                ))
             }
-
-            process.waitUntilExit()
-
-            guard process.terminationStatus == 0 else {
-                let stderr = String(
-                    data: errPipe.fileHandleForReading.readDataToEndOfFile(),
-                    encoding: .utf8
-                ) ?? ""
-                let msg = "git \(arguments.joined(separator: " ")) failed (\(process.terminationStatus)): \(stderr)"
-                logger.warning("\(msg)")
-                continuation.resume(throwing: GitServiceError.commandFailed(msg))
-                return
-            }
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let result = String(data: data, encoding: .utf8) ?? ""
-            continuation.resume(returning: result)
         }
     }
 
@@ -167,8 +179,8 @@ actor GitService: GitServiceProtocol {
         return GitStatusResult(branch: branch, files: files, isGitRepo: true)
     }
 
-    private static func mapStatusChar(_ c: Character) -> GitFileStatus.Kind {
-        switch c {
+    private static func mapStatusChar(_ char: Character) -> GitFileStatus.Kind {
+        switch char {
         case "M": return .modified
         case "A": return .added
         case "D": return .deleted
@@ -182,11 +194,28 @@ actor GitService: GitServiceProtocol {
 // MARK: - Errors
 
 enum GitServiceError: Error, LocalizedError {
-    case commandFailed(String)
+    /// The git process exited with a non-zero status.
+    case commandFailed(command: String, exitCode: Int32, stderr: String)
+    /// The git executable could not be launched (e.g., not installed, permission denied).
+    case launchFailed(command: String, underlying: Error)
 
     var errorDescription: String? {
         switch self {
-        case .commandFailed(let msg): return msg
+        case let .commandFailed(command, exitCode, stderr):
+            "git \(command) failed (\(exitCode)): \(stderr)"
+        case let .launchFailed(command, underlying):
+            "Failed to launch git \(command): \(underlying.localizedDescription)"
+        }
+    }
+
+    /// Whether the caller may retry this operation (e.g., transient I/O issue).
+    var isRetryable: Bool {
+        switch self {
+        case .commandFailed(_, let code, _):
+            // Exit codes 128+ are often transient (lock file, network).
+            code >= 128
+        case .launchFailed:
+            false
         }
     }
 }

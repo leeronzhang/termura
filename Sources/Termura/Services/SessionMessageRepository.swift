@@ -69,16 +69,16 @@ private struct MessageRow: FetchableRecord, PersistableRecord, Sendable {
 
     func toMessage() throws -> SessionMessage {
         guard let uuid = UUID(uuidString: id) else {
-            throw RepositoryError.invalidID(id)
+            throw RepositoryError.invalidID(rawValue: id, entity: "SessionMessage")
         }
         guard let sessionUUID = UUID(uuidString: sessionId) else {
-            throw RepositoryError.invalidID(sessionId)
+            throw RepositoryError.invalidID(rawValue: sessionId, entity: "SessionMessage.session")
         }
         guard let msgRole = MessageRole(rawValue: role) else {
-            throw RepositoryError.invalidID("role:\(role)")
+            throw RepositoryError.invalidID(rawValue: role, entity: "MessageRole")
         }
         guard let msgType = MessageContentType(rawValue: contentType) else {
-            throw RepositoryError.invalidID("contentType:\(contentType)")
+            throw RepositoryError.invalidID(rawValue: contentType, entity: "MessageContentType")
         }
         return SessionMessage(
             id: SessionMessageID(rawValue: uuid),

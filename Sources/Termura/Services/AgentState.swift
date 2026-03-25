@@ -6,8 +6,22 @@ enum AgentType: String, Sendable, Codable, CaseIterable {
     case codex
     case aider
     case openCode
+    case gemini
     case pi
     case unknown
+
+    /// Human-readable display name for sidebar and tab titles.
+    var displayName: String {
+        switch self {
+        case .claudeCode: "Claude Code"
+        case .codex: "OpenAI Codex"
+        case .aider: "Aider"
+        case .openCode: "OpenCode"
+        case .gemini: "Gemini CLI"
+        case .pi: "Pi"
+        case .unknown: "Terminal"
+        }
+    }
 
     /// Default context window token limit for this agent type.
     var contextWindowLimit: Int {
@@ -16,6 +30,7 @@ enum AgentType: String, Sendable, Codable, CaseIterable {
         case .codex: AppConfig.ContextWindow.codexLimit
         case .aider: AppConfig.ContextWindow.aiderLimit
         case .openCode: AppConfig.ContextWindow.openCodeLimit
+        case .gemini: AppConfig.ContextWindow.geminiLimit
         case .pi: AppConfig.ContextWindow.piLimit
         case .unknown: AppConfig.ContextWindow.unknownLimit
         }

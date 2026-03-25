@@ -21,6 +21,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
     var parentId: String?
     var summary: String
     var branchType: String
+    var agentType: String
 
     enum Columns: String, ColumnExpression {
         case id, title
@@ -34,6 +35,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         case parentId = "parent_id"
         case summary
         case branchType = "branch_type"
+        case agentType = "agent_type"
     }
 
     init(row: Row) throws {
@@ -49,6 +51,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         parentId = row[Columns.parentId]
         summary = row[Columns.summary] ?? ""
         branchType = row[Columns.branchType] ?? "main"
+        agentType = row[Columns.agentType] ?? "unknown"
     }
 
     init(record: SessionRecord, archivedAt: Date? = nil) {
@@ -64,6 +67,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         parentId = record.parentID?.rawValue.uuidString
         summary = record.summary
         branchType = record.branchType.rawValue
+        agentType = record.agentType.rawValue
     }
 
     func encode(to container: inout PersistenceContainer) throws {
@@ -79,18 +83,20 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         container[Columns.parentId] = parentId
         container[Columns.summary] = summary
         container[Columns.branchType] = branchType
+        container[Columns.agentType] = agentType
     }
 
     func toRecord() throws -> SessionRecord {
         guard let uuid = UUID(uuidString: id) else {
-            throw RepositoryError.invalidID(id)
+            throw RepositoryError.invalidID(rawValue: id, entity: "Session")
         }
         guard let label = SessionColorLabel(rawValue: colorLabel) else {
-            throw RepositoryError.invalidColorLabel(colorLabel)
+            throw RepositoryError.invalidColorLabel(rawValue: colorLabel)
         }
         guard let branch = BranchType(rawValue: branchType) else {
-            throw RepositoryError.invalidBranchType(branchType)
+            throw RepositoryError.invalidBranchType(rawValue: branchType)
         }
+        let agent = AgentType(rawValue: agentType) ?? .unknown
         let parentSessionID: SessionID? = parentId.flatMap { str in
             UUID(uuidString: str).map { SessionID(rawValue: $0) }
         }
@@ -105,7 +111,8 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
             orderIndex: orderIndex,
             parentID: parentSessionID,
             summary: summary,
-            branchType: branch
+            branchType: branch,
+            agentType: agent
         )
     }
 }
@@ -259,7 +266,7 @@ actor SessionRepository: SessionRepositoryProtocol {
     ) async throws -> SessionRecord {
         let ancestors = try await fetchAncestors(of: parentID)
         guard ancestors.count < AppConfig.SessionTree.maxDepth else {
-            throw RepositoryError.branchDepthExceeded
+            throw RepositoryError.branchDepthExceeded(currentDepth: ancestors.count)
         }
         let record = SessionRecord(
             title: title,

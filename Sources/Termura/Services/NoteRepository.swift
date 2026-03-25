@@ -52,7 +52,7 @@ private struct NoteRow: FetchableRecord, PersistableRecord, Sendable {
 
     func toNote() throws -> NoteRecord {
         guard let uuid = UUID(uuidString: id) else {
-            throw RepositoryError.invalidID(id)
+            throw RepositoryError.invalidID(rawValue: id, entity: "Note")
         }
         var note = NoteRecord(id: NoteID(rawValue: uuid), title: title, body: body)
         note.createdAt = Date(timeIntervalSince1970: createdAt)

@@ -12,6 +12,7 @@ enum DatabaseMigrations {
         registerV4Notes(into: &migrator)
         registerV5SessionTree(into: &migrator)
         registerV6RuleFiles(into: &migrator)
+        registerV7AgentType(into: &migrator)
     }
 
     // MARK: - v1: sessions table
@@ -161,6 +162,19 @@ enum DatabaseMigrations {
                 columns: ["file_path", "version"]
             )
             logger.info("v6 migration complete: rule_files table")
+        }
+    }
+
+    // MARK: - v7: agent type on sessions
+
+    private static func registerV7AgentType(into migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v7_agent_type") { db in
+            try db.alter(table: "sessions") { table in
+                table.add(column: "agent_type", .text)
+                    .notNull()
+                    .defaults(to: "unknown")
+            }
+            logger.info("v7 migration complete: agent_type column")
         }
     }
 
