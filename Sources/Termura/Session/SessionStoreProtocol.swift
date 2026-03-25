@@ -15,6 +15,7 @@ protocol SessionStoreProtocol: AnyObject {
     func pinSession(id: SessionID)
     func unpinSession(id: SessionID)
     func setColorLabel(id: SessionID, label: SessionColorLabel)
+    func setAgentType(id: SessionID, type: AgentType)
     func reorderSessions(from: IndexSet, to: Int)
     func isRestoredSession(id: SessionID) -> Bool
 

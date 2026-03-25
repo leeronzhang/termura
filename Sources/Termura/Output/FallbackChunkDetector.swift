@@ -19,20 +19,40 @@ actor FallbackChunkDetector {
 
     private let promptRegex: NSRegularExpression
 
+    // MARK: - Pre-validated default regex
+
+    /// The default prompt regex, validated once at process launch.
+    /// Uses the AI tool prompt pattern from AppConfig (`^[>U+276F U+203A]\s*$`).
+    /// Falls back to matching nothing if the pattern is somehow invalid.
+    private static let defaultPromptRegex: NSRegularExpression = {
+        do {
+            return try NSRegularExpression(pattern: AppConfig.Output.aiToolPromptPattern)
+        } catch {
+            logger.fault(
+                "Default AI prompt pattern is invalid — falling back to match-nothing: \(error)"
+            )
+            // NSRegularExpression() with no arguments creates a valid empty-pattern regex.
+            return NSRegularExpression()
+        }
+    }()
+
     // MARK: - Init
 
+    /// Creates a detector using the default AI tool prompt pattern.
+    /// - Parameter sessionID: The owning session.
+    init(sessionID: SessionID) {
+        self.sessionID = sessionID
+        promptRegex = Self.defaultPromptRegex
+    }
+
+    /// Creates a detector with a custom prompt pattern.
     /// - Parameters:
     ///   - sessionID: The owning session.
     ///   - pattern: Regex pattern used to detect prompt boundaries.
-    ///     Defaults to `AppConfig.Output.aiToolPromptPattern` (`^>\s*$`),
-    ///     which matches Claude Code's `>` prompt without overlapping OSC 133 shell events.
-    init(sessionID: SessionID, pattern: String = AppConfig.Output.aiToolPromptPattern) {
+    /// - Throws: If the pattern is not a valid regular expression.
+    init(sessionID: SessionID, pattern: String) throws {
         self.sessionID = sessionID
-        do {
-            promptRegex = try NSRegularExpression(pattern: pattern)
-        } catch {
-            preconditionFailure("FallbackChunkDetector: invalid pattern '\(pattern)': \(error)")
-        }
+        promptRegex = try NSRegularExpression(pattern: pattern)
     }
 
     // MARK: - Public API

@@ -78,6 +78,6 @@ enum SemanticParser {
 
     private static func isToolCall(_ text: String) -> Bool {
         let prefix = text.prefix(AppConfig.Output.toolCallDetectionPrefixLength)
-        return prefix.contains("⏺") || prefix.contains("Tool:") || prefix.contains("tool_use")
+        return prefix.contains("\u{23FA}") || prefix.contains("Tool:") || prefix.contains("tool_use")
     }
 }

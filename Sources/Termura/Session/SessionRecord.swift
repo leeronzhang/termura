@@ -18,6 +18,8 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
     var summary: String
     /// Purpose categorization for branches.
     var branchType: BranchType
+    /// Detected AI agent type running in this session (persisted for sidebar icon).
+    var agentType: AgentType
 
     init(
         id: SessionID = SessionID(),
@@ -30,7 +32,8 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
         orderIndex: Int = 0,
         parentID: SessionID? = nil,
         summary: String = "",
-        branchType: BranchType = .main
+        branchType: BranchType = .main,
+        agentType: AgentType = .unknown
     ) {
         self.id = id
         self.title = title
@@ -43,6 +46,7 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
         self.parentID = parentID
         self.summary = summary
         self.branchType = branchType
+        self.agentType = agentType
     }
 }
 

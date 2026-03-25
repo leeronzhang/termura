@@ -68,7 +68,7 @@ private struct RuleFileRow: FetchableRecord, PersistableRecord, Sendable {
 
     func toRecord() throws -> RuleFileRecord {
         guard let uuid = UUID(uuidString: id) else {
-            throw RepositoryError.invalidID(id)
+            throw RepositoryError.invalidID(rawValue: id, entity: "RuleFile")
         }
         let sid = sessionId.flatMap { UUID(uuidString: $0) }.map { SessionID(rawValue: $0) }
         return RuleFileRecord(

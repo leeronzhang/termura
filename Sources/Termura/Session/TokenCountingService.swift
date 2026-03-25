@@ -2,7 +2,7 @@ import Foundation
 
 /// Background actor that accumulates character counts per session
 /// and provides heuristic token estimates (chars / divisor).
-actor TokenCountingService {
+actor TokenCountingService: TokenCountingServiceProtocol {
     // MARK: - State
 
     private var charCounts: [SessionID: Int] = [:]

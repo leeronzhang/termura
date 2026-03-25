@@ -16,6 +16,8 @@ final class EditorViewModel: ObservableObject {
     private var history: InputHistory
     private let modeController: InputModeController
     private let engine: any TerminalEngine
+    /// Called after a command is submitted, for agent detection / session rename.
+    var onCommandSubmit: ((String) -> Void)?
 
     // MARK: - Init
 
@@ -36,6 +38,7 @@ final class EditorViewModel: ObservableObject {
         currentText = ""
         modeController.switchToPassthrough()
         logger.debug("Submitting command length=\(text.count)")
+        onCommandSubmit?(text)
         Task {
             await engine.send(text + "\r")
         }

@@ -59,7 +59,7 @@ actor ChunkDetector {
             pendingRawANSI += raw
         } else {
             pendingOutput += stripped.prefix(remaining)
-            pendingOutput += "\n…[truncated]"
+            pendingOutput += "\n\u{2026}[truncated]"
             pendingRawANSI += raw.prefix(remaining)
         }
     }

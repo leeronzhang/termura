@@ -144,6 +144,14 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         }
     }
 
+    func setAgentType(id: SessionID, type: AgentType) {
+        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        guard sessions[idx].agentType != type else { return }
+        sessions[idx].agentType = type
+        let updated = sessions[idx]
+        persistAsync { try await $0.save(updated) }
+    }
+
     func setColorLabel(id: SessionID, label: SessionColorLabel) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].colorLabel = label

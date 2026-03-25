@@ -58,7 +58,7 @@ final class EditorTextView: NSTextView {
             return
         }
 
-        // Ctrl+letter → send raw control byte to PTY (Ctrl+C = 0x03, Ctrl+D = 0x04 …)
+        // Ctrl+letter -> send raw control byte to PTY (Ctrl+C = 0x03, Ctrl+D = 0x04 etc.)
         if isCtrl, !isCommand, !isShift,
            let chars = event.charactersIgnoringModifiers,
            let scalar = chars.unicodeScalars.first {

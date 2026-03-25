@@ -37,19 +37,17 @@ struct NotesSplitView: View {
     private var noteListHeader: some View {
         HStack {
             Text("Notes")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
+                .panelHeaderStyle()
             Spacer()
             Button {
                 viewModel.createNote()
             } label: {
-                Image(systemName: "plus").font(.system(size: 12))
+                Image(systemName: "plus").font(AppUI.Font.body)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.vertical, AppUI.Spacing.md)
     }
 
     // MARK: - Editor
@@ -59,11 +57,11 @@ struct NotesSplitView: View {
         if viewModel.selectedNoteID != nil {
             VStack(spacing: 0) {
                 TextField("Title", text: $viewModel.editingTitle)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppUI.Font.title1Semibold)
                     .textFieldStyle(.plain)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, AppUI.Spacing.xl)
+                    .padding(.top, AppUI.Spacing.xl)
+                    .padding(.bottom, AppUI.Spacing.md)
                 Divider()
                 NoteEditorView(
                     title: viewModel.editingTitle,

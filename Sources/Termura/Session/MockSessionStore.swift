@@ -60,6 +60,11 @@ final class MockSessionStore: ObservableObject, SessionStoreProtocol {
         sessions[idx].colorLabel = label
     }
 
+    func setAgentType(id: SessionID, type: AgentType) {
+        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[idx].agentType = type
+    }
+
     func reorderSessions(from source: IndexSet, to destination: Int) {
         sessions.move(fromOffsets: source, toOffset: destination)
     }

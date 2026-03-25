@@ -12,24 +12,30 @@ final class OutputStore: ObservableObject {
 
     let sessionID: SessionID
     private let capacity: Int
+    private weak var commandRouter: CommandRouter?
 
     // MARK: - Init
 
-    init(sessionID: SessionID, capacity: Int = AppConfig.Output.maxChunksPerSession) {
+    init(
+        sessionID: SessionID,
+        capacity: Int = AppConfig.Output.maxChunksPerSession,
+        commandRouter: CommandRouter? = nil
+    ) {
         self.sessionID = sessionID
         self.capacity = capacity
+        self.commandRouter = commandRouter
     }
 
     // MARK: - Mutations
 
     /// Append a new chunk, evicting the oldest if at capacity.
-    /// Posts `.chunkCompleted` notification so AppDelegate can trigger background services.
+    /// Notifies registered CommandRouter handlers for background services.
     func append(_ chunk: OutputChunk) {
         if chunks.count >= capacity {
             chunks.removeFirst()
         }
         chunks.append(chunk)
-        NotificationCenter.default.post(name: .chunkCompleted, object: chunk)
+        commandRouter?.notifyChunkCompleted(chunk)
     }
 
     /// Toggle the collapsed state of a chunk by ID.
@@ -42,8 +48,4 @@ final class OutputStore: ObservableObject {
     func clear() {
         chunks.removeAll()
     }
-}
-
-extension Notification.Name {
-    static let chunkCompleted = Notification.Name("com.termura.chunkCompleted")
 }
