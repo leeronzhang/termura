@@ -11,9 +11,9 @@ enum AppConfig {
     enum Fonts {
         /// Source Code Pro — bundled monospaced font for terminal, editor, and code display.
         static let terminalFamily = "Source Code Pro"
-        static let terminalSize: CGFloat = 15
-        static let editorSize: CGFloat = 15
-        static let notesSize: CGFloat = 15
+        static let terminalSize: CGFloat = 16
+        static let editorSize: CGFloat = 16
+        static let notesSize: CGFloat = 16
         /// Font size increment/decrement step for Cmd+/-.
         static let zoomStep: CGFloat = 1
         /// Minimum allowed terminal font size.
@@ -78,6 +78,7 @@ enum AppConfig {
         static let aiderLimit = 128_000
         static let openCodeLimit = 128_000
         static let piLimit = 128_000
+        static let geminiLimit = 1_000_000
         static let unknownLimit = 100_000
         /// Fraction of context window at which to show a warning.
         static let warningThreshold: Double = 0.8
@@ -117,6 +118,14 @@ enum AppConfig {
         static let editorDividerHandleHeight: Double = 9
         /// Visor panel height as a fraction of screen height.
         static let visorPanelHeightFraction: Double = 0.55
+        /// Indentation per nesting level in the file tree sidebar (points).
+        static let fileTreeIndentPerLevel: Double = 16
+        /// Chevron indicator width in file tree rows (points).
+        static let fileTreeChevronWidth: Double = 12
+        /// Content tab bar height (points, excluding title bar inset).
+        static let contentTabBarHeight: Double = 44
+        /// Scale factor for agent icon relative to the size parameter.
+        static let agentIconScaleFactor: Double = 0.75
     }
 
     enum ShellIntegration {
@@ -134,8 +143,8 @@ enum AppConfig {
         /// Matches lines ending with $, %, #, or > optionally followed by whitespace.
         static let fallbackPromptPattern = ".*[$%#>]\\s*$"
         /// AI tool prompt pattern for Claude Code / Aider style prompts.
-        /// Matches `>` (U+003E), `❯` (U+276F), or `›` (U+203A) as a bare prompt line.
-        static let aiToolPromptPattern = "^[>❯›]\\s*$"
+        /// Matches `>` (U+003E), U+276F, or U+203A as a bare prompt line.
+        static let aiToolPromptPattern = "^[>\u{276F}\u{203A}]\\s*$"
         /// Prefix character limit for diff detection heuristic.
         static let diffDetectionPrefixLength = 2000
         /// Prefix character limit for error detection heuristic.

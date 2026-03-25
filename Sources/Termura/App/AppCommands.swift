@@ -9,12 +9,9 @@ struct AppCommands: Commands {
             }
             .keyboardShortcut("t", modifiers: .command)
 
-            Button("Close Session") {
-                guard let store = appDelegate?.activeContext?.sessionStore,
-                      let id = store.activeSessionID else { return }
-                store.closeSession(id: id)
-            }
-            .keyboardShortcut("w", modifiers: .command)
+            // Cmd+W is handled by TabAwareWindow.performClose() to close the active tab.
+            // Do NOT add a .keyboardShortcut("w") here — it conflicts with the system
+            // "Close" menu item and causes the window to close instead of the tab.
         }
 
         CommandGroup(after: .newItem) {
@@ -26,12 +23,12 @@ struct AppCommands: Commands {
             Divider()
 
             Button("Search\u{2026}") {
-                NotificationCenter.default.post(name: .showSearch, object: nil)
+                appDelegate?.commandRouter?.requestSearch()
             }
             .keyboardShortcut("f", modifiers: [.command, .shift])
 
             Button("New Note") {
-                NotificationCenter.default.post(name: .showNotes, object: nil)
+                appDelegate?.commandRouter?.requestNotes()
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
 
@@ -39,7 +36,7 @@ struct AppCommands: Commands {
 
             Button("Export Session\u{2026}") {
                 guard let id = appDelegate?.activeContext?.sessionStore.activeSessionID else { return }
-                NotificationCenter.default.post(name: .showExport, object: id)
+                appDelegate?.commandRouter?.requestExport(sessionID: id)
             }
             .keyboardShortcut("e", modifiers: [.command, .shift])
 
@@ -50,58 +47,59 @@ struct AppCommands: Commands {
             Divider()
 
             Button("Harness Rules\u{2026}") {
-                NotificationCenter.default.post(name: .showHarness, object: nil)
+                appDelegate?.commandRouter?.requestHarness()
             }
             .keyboardShortcut("h", modifiers: [.command, .shift])
 
             Divider()
 
             Button("Split Horizontally") {
-                NotificationCenter.default.post(name: .splitHorizontal, object: nil)
+                appDelegate?.commandRouter?.requestSplitHorizontal()
             }
             .keyboardShortcut("d", modifiers: .command)
 
             Button("Split Vertically") {
-                NotificationCenter.default.post(name: .splitVertical, object: nil)
+                appDelegate?.commandRouter?.requestSplitVertical()
             }
             .keyboardShortcut("d", modifiers: [.command, .shift])
 
             Button("Close Split Pane") {
-                NotificationCenter.default.post(name: .closeSplitPane, object: nil)
+                appDelegate?.commandRouter?.requestCloseSplitPane()
             }
             .keyboardShortcut("w", modifiers: [.command, .shift])
 
             Divider()
 
             Button("Toggle Timeline") {
-                NotificationCenter.default.post(name: .toggleTimeline, object: nil)
+                appDelegate?.commandRouter?.toggleTimeline()
             }
             .keyboardShortcut("l", modifiers: [.command, .shift])
 
             Button("Toggle Agent Dashboard") {
-                NotificationCenter.default.post(name: .toggleAgentDashboard, object: nil)
+                appDelegate?.commandRouter?.toggleAgentDashboard()
             }
             .keyboardShortcut("a", modifiers: [.command, .shift])
         }
 
         CommandGroup(after: .toolbar) {
             Button("Zoom In") {
-                (NSApp.delegate as? AppDelegate)?.themeManager.increaseFontSize()
+                (NSApp.delegate as? AppDelegate)?.fontSettings.zoomIn()
             }
             .keyboardShortcut("+", modifiers: .command)
 
             Button("Zoom Out") {
-                (NSApp.delegate as? AppDelegate)?.themeManager.decreaseFontSize()
+                (NSApp.delegate as? AppDelegate)?.fontSettings.zoomOut()
             }
             .keyboardShortcut("-", modifiers: .command)
 
             Button("Actual Size") {
-                (NSApp.delegate as? AppDelegate)?.themeManager.resetFontSize()
+                (NSApp.delegate as? AppDelegate)?.fontSettings.resetZoom()
             }
             .keyboardShortcut("0", modifiers: .command)
         }
 
-        CommandGroup(replacing: .undoRedo) {
+        CommandGroup(after: .undoRedo) {
+            Divider()
             SessionSwitchCommands()
         }
 
@@ -116,9 +114,9 @@ struct AppCommands: Commands {
             Divider()
 
             Button("Merge Branch Summary\u{2026}") {
-                NotificationCenter.default.post(name: .showBranchMerge, object: nil)
+                appDelegate?.commandRouter?.requestBranchMerge()
             }
-            .keyboardShortcut("m", modifiers: .command)
+            .keyboardShortcut("m", modifiers: [.command, .shift])
         }
     }
 
@@ -155,24 +153,16 @@ private struct SessionSwitchCommands: View {
                 .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
             }
         }
-        .onReceive(
-            NotificationCenter.default.publisher(for: .sessionsChanged)
-        ) { _ in
+        .onChange(of: sessionCount) { _, _ in
+            sessions = (NSApp.delegate as? AppDelegate)?.activeContext?.sessionStore.sessions ?? []
+        }
+        .onAppear {
             sessions = (NSApp.delegate as? AppDelegate)?.activeContext?.sessionStore.sessions ?? []
         }
     }
-}
 
-extension Notification.Name {
-    static let sessionsChanged = Notification.Name("com.termura.sessionsChanged")
-    static let showSearch = Notification.Name("com.termura.showSearch")
-    static let showNotes = Notification.Name("com.termura.showNotes")
-    static let showExport = Notification.Name("com.termura.showExport")
-    static let showHarness = Notification.Name("com.termura.showHarness")
-    static let showBranchMerge = Notification.Name("com.termura.showBranchMerge")
-    static let toggleTimeline = Notification.Name("com.termura.toggleTimeline")
-    static let toggleAgentDashboard = Notification.Name("com.termura.toggleAgentDashboard")
-    static let splitVertical = Notification.Name("com.termura.splitVertical")
-    static let splitHorizontal = Notification.Name("com.termura.splitHorizontal")
-    static let closeSplitPane = Notification.Name("com.termura.closeSplitPane")
+    /// Observe the session store's published count to trigger updates.
+    private var sessionCount: Int {
+        (NSApp.delegate as? AppDelegate)?.activeContext?.sessionStore.sessions.count ?? 0
+    }
 }

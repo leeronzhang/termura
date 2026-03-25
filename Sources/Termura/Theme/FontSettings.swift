@@ -1,0 +1,132 @@
+import AppKit
+import Foundation
+import OSLog
+import SwiftUI
+
+private let logger = Logger(subsystem: "com.termura.app", category: "FontSettings")
+
+/// Centralized, persisted font settings. All font consumers read from here.
+/// Changed via the Settings panel — no code edits needed for font adjustments.
+@MainActor
+final class FontSettings: ObservableObject {
+    // MARK: - Published settings
+
+    @Published var terminalFontFamily: String {
+        didSet { persist() }
+    }
+
+    @Published var terminalFontSize: CGFloat {
+        didSet { persist() }
+    }
+
+    @Published var editorFontSize: CGFloat {
+        didSet { persist() }
+    }
+
+    // MARK: - Defaults (used when no user customization exists)
+
+    static let defaultFamily = "Source Code Pro"
+    static let defaultTerminalSize: CGFloat = 16
+    static let defaultEditorSize: CGFloat = 16
+    static let minSize: CGFloat = 9
+    static let maxSize: CGFloat = 28
+    static let zoomStep: CGFloat = 1
+
+    // MARK: - UserDefaults keys
+
+    private enum Keys {
+        static let family = "font.family"
+        static let terminalSize = "font.terminalSize"
+        static let editorSize = "font.editorSize"
+    }
+
+    // MARK: - Init
+
+    init() {
+        let ud = UserDefaults.standard
+
+        // Family
+        let savedFamily = ud.string(forKey: Keys.family)
+        terminalFontFamily = savedFamily ?? Self.defaultFamily
+
+        // Terminal size — migrate old key if present
+        let oldKey = "terminalFontSize"
+        let oldSaved = ud.double(forKey: oldKey)
+        let newSaved = ud.double(forKey: Keys.terminalSize)
+        if newSaved > 0 {
+            terminalFontSize = CGFloat(newSaved)
+        } else if oldSaved > 0 && oldSaved != 15.0 {
+            // Migrate user-customized value from old key (skip stale default 15)
+            terminalFontSize = CGFloat(oldSaved)
+            ud.removeObject(forKey: oldKey)
+        } else {
+            terminalFontSize = Self.defaultTerminalSize
+            ud.removeObject(forKey: oldKey)
+        }
+
+        // Editor size
+        let edSaved = ud.double(forKey: Keys.editorSize)
+        editorFontSize = edSaved > 0 ? CGFloat(edSaved) : Self.defaultEditorSize
+
+        let family = terminalFontFamily
+        let tSize = terminalFontSize
+        let eSize = editorFontSize
+        logger.info("FontSettings loaded: family=\(family) terminal=\(tSize) editor=\(eSize)")
+    }
+
+    // MARK: - Zoom actions (Cmd+/-)
+
+    func zoomIn() {
+        terminalFontSize = min(terminalFontSize + Self.zoomStep, Self.maxSize)
+    }
+
+    func zoomOut() {
+        terminalFontSize = max(terminalFontSize - Self.zoomStep, Self.minSize)
+    }
+
+    func resetZoom() {
+        terminalFontSize = Self.defaultTerminalSize
+    }
+
+    // MARK: - Font constructors
+
+    func terminalNSFont() -> NSFont {
+        NSFont(name: terminalFontFamily, size: terminalFontSize)
+            ?? NSFont.monospacedSystemFont(ofSize: terminalFontSize, weight: .regular)
+    }
+
+    func editorNSFont() -> NSFont {
+        NSFont(name: terminalFontFamily, size: editorFontSize)
+            ?? NSFont.monospacedSystemFont(ofSize: editorFontSize, weight: .regular)
+    }
+
+    func terminalSwiftUIFont() -> Font {
+        .custom(terminalFontFamily, size: terminalFontSize)
+    }
+
+    func editorSwiftUIFont() -> Font {
+        .custom(terminalFontFamily, size: editorFontSize)
+    }
+
+    // MARK: - Available monospaced font families
+
+    static var availableMonospacedFamilies: [String] {
+        let fm = NSFontManager.shared
+        return fm.availableFontFamilies.filter { family in
+            guard let members = fm.availableMembers(ofFontFamily: family),
+                  let first = members.first,
+                  let fontName = first[0] as? String,
+                  let font = NSFont(name: fontName, size: 13) else { return false }
+            return font.isFixedPitch
+        }.sorted()
+    }
+
+    // MARK: - Persistence
+
+    private func persist() {
+        let ud = UserDefaults.standard
+        ud.set(terminalFontFamily, forKey: Keys.family)
+        ud.set(Double(terminalFontSize), forKey: Keys.terminalSize)
+        ud.set(Double(editorFontSize), forKey: Keys.editorSize)
+    }
+}

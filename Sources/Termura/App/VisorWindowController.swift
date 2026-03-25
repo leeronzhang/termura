@@ -6,46 +6,31 @@ import SwiftUI
 @MainActor
 final class VisorWindowController: NSWindowController {
     private var isVisible = false
-    private let sessionStore: SessionStore
-    private let engineStore: TerminalEngineStore
+    private let projectContext: ProjectContext
     private let themeManager: ThemeManager
-    private let tokenCountingService: TokenCountingService
-    private let searchService: SearchService
-    private let noteRepository: any NoteRepositoryProtocol
+    private let fontSettings: FontSettings
 
-    init(
-        sessionStore: SessionStore,
-        engineStore: TerminalEngineStore,
-        themeManager: ThemeManager,
-        tokenCountingService: TokenCountingService,
-        searchService: SearchService,
-        noteRepository: any NoteRepositoryProtocol
-    ) {
-        self.sessionStore = sessionStore
-        self.engineStore = engineStore
+    init(projectContext: ProjectContext, themeManager: ThemeManager, fontSettings: FontSettings) {
+        self.projectContext = projectContext
         self.themeManager = themeManager
-        self.tokenCountingService = tokenCountingService
-        self.searchService = searchService
-        self.noteRepository = noteRepository
+        self.fontSettings = fontSettings
 
         let panel = VisorWindowController.makePanel()
         super.init(window: panel)
 
-        let rootView = MainView(
-            sessionStore: sessionStore,
-            engineStore: engineStore,
-            themeManager: themeManager,
-            tokenCountingService: tokenCountingService,
-            searchService: searchService,
-            noteRepository: noteRepository
-        )
+        let rootView = MainView()
+            .environmentObject(projectContext)
+            .environmentObject(projectContext.commandRouter)
+            .environmentObject(projectContext.notesViewModel)
+            .environmentObject(themeManager)
+            .environmentObject(fontSettings)
         let hostingController = NSHostingController(rootView: rootView)
         panel.contentViewController = hostingController
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
-        preconditionFailure("Use init(sessionStore:engineStore:themeManager:tokenCountingService:searchService:noteRepository:)")
+        preconditionFailure("Use init(projectContext:themeManager:)")
     }
 
     // MARK: - Show / hide

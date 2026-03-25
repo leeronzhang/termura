@@ -206,6 +206,22 @@ final class TrafficLightAdjuster: NSView {
     }
 }
 
+// MARK: - Visor
+
+extension AppDelegate {
+    func toggleVisor() {
+        guard let context = activeContext else { return }
+        if visorController == nil {
+            visorController = VisorWindowController(
+                projectContext: context,
+                themeManager: themeManager,
+                fontSettings: fontSettings
+            )
+        }
+        visorController?.toggle()
+    }
+}
+
 // MARK: - KeyboardShortcuts extension
 
 extension KeyboardShortcuts.Name {

@@ -21,6 +21,7 @@ struct RecentProjectsService: Sendable {
         do {
             data = try Data(contentsOf: fileURL)
         } catch {
+            logger.debug("No recent projects file at \(fileURL.path): \(error.localizedDescription)")
             return []
         }
         do {

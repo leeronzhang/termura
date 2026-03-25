@@ -82,8 +82,22 @@ enum AppUI {
         static let searchField = SwiftUI.Font.system(size: 15)
         /// 16pt medium — view titles, empty state headings
         static let title1 = SwiftUI.Font.system(size: 16, weight: .medium)
+        /// 16pt semibold — editable titles (note title field)
+        static let title1Semibold = SwiftUI.Font.system(size: 16, weight: .semibold)
         /// 24pt — empty state hero icons
         static let hero = SwiftUI.Font.system(size: 24, weight: .light)
+        /// 36pt — alert / warning dialog icons
+        static let alertIcon = SwiftUI.Font.system(size: 36)
+        /// 13pt — toolbar toggle icons (timeline, metadata panel)
+        static let toolbarIcon = SwiftUI.Font.system(size: 13)
+        /// 13pt monospaced — project path, working directory display
+        static let pathMono = SwiftUI.Font.system(size: 13, design: .monospaced)
+        /// 9pt semibold — folder / tree chevrons
+        static let chevron = SwiftUI.Font.system(size: 9, weight: .semibold)
+        /// 10pt bold monospaced — git status badges (M, A, D, U, R)
+        static let gitBadge = SwiftUI.Font.system(size: 10, weight: .bold, design: .monospaced)
+        /// 15pt — sidebar tab bar icons
+        static let tabBarIcon = SwiftUI.Font.system(size: 15)
     }
 
     // MARK: - Opacity
@@ -111,6 +125,12 @@ enum AppUI {
         static let secondary: Double = 0.6
         /// 0.7 — strong secondary
         static let strong: Double = 0.7
+        /// 0.25 — tab bar background overlay
+        static let tabBar: Double = 0.25
+        /// 0.1 — diff addition line highlight
+        static let diffAddition: Double = 0.1
+        /// 0.1 — diff removal line highlight
+        static let diffRemoval: Double = 0.1
     }
 
     // MARK: - Sizes

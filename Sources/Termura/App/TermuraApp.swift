@@ -6,8 +6,9 @@ struct TermuraApp: App {
 
     var body: some Scene {
         Settings {
-            ThemePickerView(
+            SettingsView(
                 themeManager: appDelegate.themeManager,
+                fontSettings: appDelegate.fontSettings,
                 themeImportService: appDelegate.themeImportService
             )
         }
