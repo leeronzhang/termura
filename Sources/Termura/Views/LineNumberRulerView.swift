@@ -63,11 +63,6 @@ final class LineNumberRulerView: NSRulerView {
         needsDisplay = true
     }
 
-    /// Build ruler number attributes that match the editor font.
-    /// Uses the same font family at a slightly smaller size so line numbers
-    /// stay visually subordinate while sharing the same baseline metrics.
-    /// NOTE: No paragraphStyle here — adding lineHeightMultiple inflates
-    /// `size(withAttributes:).height`, which breaks the baseline calculation.
     private func rulerAttributes() -> [NSAttributedString.Key: Any] {
         let rulerFontSize = max(fontSize - 3, FontSettings.minSize)
         let rulerFont = NSFont(name: fontFamily, size: rulerFontSize)
@@ -85,45 +80,49 @@ final class LineNumberRulerView: NSRulerView {
 
         let text = textView.string as NSString
         guard text.length > 0 else { return }
-        let containerOrigin = textView.textContainerOrigin
-        let attrs = rulerAttributes()
 
         layoutManager.ensureLayout(for: textContainer)
 
-        let visibleRect = textView.visibleRect
-        let margin = fontSize * lineHeightMultiple * 2
-
-        drawVisibleLineNumbers(
-            text: text,
-            visibleRect: visibleRect,
-            containerOrigin: containerOrigin,
-            margin: margin,
+        let ctx = DrawingContext(
+            textView: textView,
             layoutManager: layoutManager,
             textContainer: textContainer,
-            attrs: attrs
+            attrs: rulerAttributes(),
+            containerOrigin: textView.textContainerOrigin
         )
+
+        let margin = fontSize * lineHeightMultiple * 2
+        let visibleRange = computeVisibleRange(text: text, context: ctx, margin: margin)
+        drawLineNumbers(text: text, visibleRange: visibleRange, context: ctx)
+    }
+}
+
+// MARK: - Drawing helpers
+
+@MainActor
+private extension LineNumberRulerView {
+
+    struct DrawingContext {
+        let textView: NSTextView
+        let layoutManager: NSLayoutManager
+        let textContainer: NSTextContainer
+        let attrs: [NSAttributedString.Key: Any]
+        let containerOrigin: NSPoint
     }
 
-    private func drawVisibleLineNumbers(
-        text: NSString,
-        visibleRect: NSRect,
-        containerOrigin: NSPoint,
-        margin: CGFloat,
-        layoutManager: NSLayoutManager,
-        textContainer: NSTextContainer,
-        attrs: [NSAttributedString.Key: Any]
-    ) {
-        let topY = max(visibleRect.origin.y - containerOrigin.y - margin, 0)
-        let bottomY = visibleRect.maxY - containerOrigin.y + margin
+    func computeVisibleRange(text: NSString, context: DrawingContext, margin: CGFloat) -> NSRange {
+        let visibleRect = context.textView.visibleRect
+        let topY = max(visibleRect.origin.y - context.containerOrigin.y - margin, 0)
+        let bottomY = visibleRect.maxY - context.containerOrigin.y + margin
 
-        let topCharIdx = layoutManager.characterIndex(
+        let topCharIdx = context.layoutManager.characterIndex(
             for: NSPoint(x: 0, y: topY),
-            in: textContainer,
+            in: context.textContainer,
             fractionOfDistanceBetweenInsertionPoints: nil
         )
-        let bottomCharIdx = layoutManager.characterIndex(
+        let bottomCharIdx = context.layoutManager.characterIndex(
             for: NSPoint(x: 0, y: bottomY),
-            in: textContainer,
+            in: context.textContainer,
             fractionOfDistanceBetweenInsertionPoints: nil
         )
 
@@ -131,78 +130,64 @@ final class LineNumberRulerView: NSRulerView {
         let endLine = text.lineRange(for: NSRange(
             location: min(bottomCharIdx, text.length - 1), length: 0
         ))
-        let visibleCharRange = NSRange(
-            location: startLine.location,
-            length: NSMaxRange(endLine) - startLine.location
-        )
+        return NSRange(location: startLine.location, length: NSMaxRange(endLine) - startLine.location)
+    }
 
-        var lineNumber = countPrecedingNewlines(text: text, upTo: visibleCharRange.location)
-        var index = visibleCharRange.location
+    func drawLineNumbers(text: NSString, visibleRange: NSRange, context: DrawingContext) {
+        var lineNumber = countNewlines(in: text, upTo: visibleRange.location)
+        var index = visibleRange.location
 
-        while index < NSMaxRange(visibleCharRange) {
+        while index < NSMaxRange(visibleRange) {
             let lineRange = text.lineRange(for: NSRange(location: index, length: 0))
-            let lineGlyphRange = layoutManager.glyphRange(
+            let glyphRange = context.layoutManager.glyphRange(
                 forCharacterRange: lineRange, actualCharacterRange: nil
             )
-            guard lineGlyphRange.length > 0 else {
+            guard glyphRange.length > 0 else {
                 lineNumber += 1
                 index = NSMaxRange(lineRange)
                 continue
             }
 
-            drawLineNumber(
-                lineNumber,
-                glyphIndex: lineGlyphRange.location,
-                layoutManager: layoutManager,
-                containerOrigin: containerOrigin,
-                attrs: attrs
-            )
+            drawSingleNumber(lineNumber, glyphIndex: glyphRange.location, context: context)
 
             lineNumber += 1
             index = NSMaxRange(lineRange)
         }
     }
 
-    private func countPrecedingNewlines(text: NSString, upTo location: Int) -> Int {
-        var lineNumber = 1
-        guard location > 0 else { return lineNumber }
+    func countNewlines(in text: NSString, upTo location: Int) -> Int {
+        var count = 1
+        guard location > 0 else { return count }
         let prefix = text.substring(to: location) as NSString
         var sr = NSRange(location: 0, length: prefix.length)
         while sr.length > 0 {
             let found = prefix.range(of: "\n", options: [], range: sr)
             if found.location == NSNotFound { break }
-            lineNumber += 1
+            count += 1
             let next = found.location + found.length
             sr = NSRange(location: next, length: prefix.length - next)
         }
-        return lineNumber
+        return count
     }
 
-    private func drawLineNumber(
-        _ lineNumber: Int,
-        glyphIndex: Int,
-        layoutManager: NSLayoutManager,
-        containerOrigin: NSPoint,
-        attrs: [NSAttributedString.Key: Any]
-    ) {
-        guard let textView else { return }
-        let lineRect = layoutManager.lineFragmentRect(
+    func drawSingleNumber(_ lineNumber: Int, glyphIndex: Int, context: DrawingContext) {
+        let lineRect = context.layoutManager.lineFragmentRect(
             forGlyphAt: glyphIndex, effectiveRange: nil
         )
-        let baseline = layoutManager.location(forGlyphAt: glyphIndex)
+        let baseline = context.layoutManager.location(forGlyphAt: glyphIndex)
 
-        let yInTextView = lineRect.origin.y + containerOrigin.y
-        let yInRuler = convert(NSPoint(x: 0, y: yInTextView), from: textView).y
+        let yInTextView = lineRect.origin.y + context.containerOrigin.y
+        let yInRuler = convert(NSPoint(x: 0, y: yInTextView), from: context.textView).y
 
         let numStr = "\(lineNumber)" as NSString
-        let strSize = numStr.size(withAttributes: attrs)
-        let rulerFont = attrs[.font] as? NSFont
+        let strSize = numStr.size(withAttributes: context.attrs)
+        let rulerFont = context.attrs[.font] as? NSFont
         let ascender = rulerFont?.ascender ?? strSize.height
         let baselineInRuler = yInRuler + baseline.y
         let drawPoint = NSPoint(
             x: ruleThickness - strSize.width - Self.trailingPadding,
             y: baselineInRuler - ascender
         )
-        numStr.draw(at: drawPoint, withAttributes: attrs)
+        numStr.draw(at: drawPoint, withAttributes: context.attrs)
     }
 }

@@ -32,13 +32,24 @@ extension MainView {
         persistOpenTabs()
     }
 
+    func openPreviewTab(path: String, name: String) {
+        let tab = ContentTab.preview(path, name)
+        if !openTabs.contains(tab) {
+            openTabs.append(tab)
+        }
+        selectedContentTab = tab
+        persistOpenTabs()
+    }
+
     func openProjectFile(relativePath: String, mode: FileOpenMode) {
+        let name = URL(fileURLWithPath: relativePath).lastPathComponent
         switch mode {
         case .diff(let staged, let untracked):
             openDiffTab(path: relativePath, staged: staged, untracked: untracked)
         case .edit:
-            let name = URL(fileURLWithPath: relativePath).lastPathComponent
             openFileTab(path: relativePath, name: name)
+        case .preview:
+            openPreviewTab(path: relativePath, name: name)
         }
     }
 
@@ -47,7 +58,7 @@ extension MainView {
         case .terminal:
             // Terminal tabs are not closable from tab bar (managed via sidebar).
             break
-        case .note, .diff, .file:
+        case .note, .diff, .file, .preview:
             openTabs.removeAll { $0 == tab }
             if selectedContentTab == tab {
                 // Fall back to the active session's terminal tab.
@@ -145,7 +156,7 @@ extension MainView {
         // diffs are ephemeral.
         let persistable = openTabs.filter {
             switch $0 {
-            case .note, .file: return true
+            case .note, .file, .preview: return true
             case .terminal, .diff: return false
             }
         }

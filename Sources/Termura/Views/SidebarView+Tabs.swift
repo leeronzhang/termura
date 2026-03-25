@@ -73,7 +73,8 @@ extension SidebarView {
     ) -> some View {
         SessionRowView(
             session: session,
-            isActive: sessionStore.activeSessionID == session.id,
+            isActive: sessionStore.activeSessionID == session.id
+                && activeContentTab?.sessionID == session.id,
             hasUnreadFailure: false,
             agentStatus: projectContext.agentStateStore.agents[session.id]?.status,
             agentType: projectContext.agentStateStore.agents[session.id]?.agentType ?? session.agentType,

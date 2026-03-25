@@ -7,6 +7,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
     case note(NoteID, String)
     case diff(String, Bool, Bool) // file path, isStaged, isUntracked
     case file(String, String) // relativePath, fileName
+    case preview(String, String) // relativePath, fileName (read-only QuickLook)
 
     var id: String {
         switch self {
@@ -14,6 +15,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
         case .note(let noteID, _): return "note-\(noteID)"
         case .diff(let path, let staged, _): return "diff-\(staged ? "staged" : "wt")-\(path)"
         case .file(let path, _): return "file-\(path)"
+        case .preview(let path, _): return "preview-\(path)"
         }
     }
 
@@ -23,6 +25,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
         case .note(_, let name): return name.isEmpty ? "Untitled" : name
         case .diff(let path, _, _): return URL(fileURLWithPath: path).lastPathComponent
         case .file(_, let name): return name
+        case .preview(_, let name): return name
         }
     }
 
@@ -32,6 +35,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
         case .note: return "doc.text"
         case .diff: return "doc.text.magnifyingglass"
         case .file: return "doc.text"
+        case .preview: return "eye"
         }
     }
 
@@ -39,9 +43,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
     var isClosable: Bool {
         switch self {
         case .terminal: return false
-        case .note: return true
-        case .diff: return true
-        case .file: return true
+        case .note, .diff, .file, .preview: return true
         }
     }
 

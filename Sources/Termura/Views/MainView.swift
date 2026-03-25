@@ -25,6 +25,7 @@ struct MainView: View {
             if commandRouter.showSidebar {
                 SidebarView(
                     isFullScreen: isFullScreen,
+                    activeContentTab: resolvedSelectedTab,
                     onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) },
                     onOpenFile: { path, mode in openProjectFile(relativePath: path, mode: mode) }
                 )

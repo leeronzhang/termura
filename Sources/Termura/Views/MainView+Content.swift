@@ -76,6 +76,12 @@ extension MainView {
                 projectRoot: activeProjectRoot
             )
             .id(path)
+        case .preview(let path, _):
+            FilePreviewView(
+                filePath: path,
+                projectRoot: activeProjectRoot
+            )
+            .id(path)
         }
     }
 

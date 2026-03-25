@@ -8,6 +8,9 @@ struct SidebarView: View {
     @EnvironmentObject var notesViewModel: NotesViewModel
 
     var isFullScreen: Bool = false
+    /// The currently visible content tab — used to suppress session highlight
+    /// when a non-terminal tab (file, note, diff) is active.
+    var activeContentTab: ContentTab?
     /// Called when a note title is tapped in the sidebar to open it as a content tab.
     var onOpenNote: ((NoteID, String) -> Void)?
     /// Called when a project file is tapped to open in a content tab.
@@ -55,4 +58,5 @@ struct SidebarView: View {
 enum FileOpenMode {
     case diff(staged: Bool, untracked: Bool)
     case edit
+    case preview
 }

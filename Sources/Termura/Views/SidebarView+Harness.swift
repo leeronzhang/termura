@@ -61,7 +61,7 @@ struct SidebarHarnessContent: View {
                 Task { await viewModel.runCorruptionScan() }
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(AppUI.Font.caption)
+                    .font(AppUI.Font.label)
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
@@ -91,7 +91,7 @@ struct SidebarHarnessContent: View {
                             .font(AppUI.Font.captionMono)
                             .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, AppUI.Spacing.mdLg)
+                    .padding(.horizontal, AppUI.Spacing.xxxl)
                     .padding(.vertical, AppUI.Spacing.smMd)
                     .background(
                         viewModel.selectedFilePath == file.filePath
@@ -102,7 +102,6 @@ struct SidebarHarnessContent: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, AppUI.Spacing.sm)
     }
 
     @ViewBuilder
