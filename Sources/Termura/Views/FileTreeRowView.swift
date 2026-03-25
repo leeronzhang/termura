@@ -36,19 +36,17 @@ struct FileTreeRowView: View {
                     .frame(width: CGFloat(depth) * AppConfig.UI.fileTreeIndentPerLevel)
             }
 
-            // Folder chevron or file icon
+            // Directory: arrow only (no folder icon); File: file icon only (no arrow)
             if node.isDirectory {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(AppUI.Font.chevron)
                     .foregroundColor(.secondary)
                     .frame(width: AppConfig.UI.fileTreeChevronWidth)
-                Image(systemName: isExpanded ? "folder.fill" : "folder")
-                    .font(AppUI.Font.label)
-                    .foregroundColor(directoryColor)
             } else {
-                Spacer().frame(width: AppConfig.UI.fileTreeChevronWidth)
-                Image(systemName: "doc")
-                    .font(AppUI.Font.label)
+                FileTypeIcon.image(for: node.name)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 13, height: 13)
                     .foregroundColor(fileColor)
             }
 
@@ -96,7 +94,6 @@ struct FileTreeRowView: View {
 
     private var nameColor: Color {
         guard let status = node.gitStatus else { return .primary }
-        if node.isDirectory { return .primary }
         switch status {
         case .modified: return node.isGitStaged ? .green : .orange
         case .added: return .green
@@ -155,12 +152,31 @@ struct FileTreeRowView: View {
 
     // MARK: - Actions
 
+    /// File extensions that should open in the code editor (text-based).
+    private static let textExtensions: Set<String> = [
+        "swift", "m", "h", "c", "cpp", "rs", "go", "py", "rb", "js", "ts",
+        "jsx", "tsx", "json", "yaml", "yml", "toml", "xml", "plist",
+        "html", "css", "scss", "less", "sh", "bash", "zsh", "fish",
+        "md", "markdown", "txt", "log", "env", "gitignore", "editorconfig",
+        "lock", "resolved", "cfg", "ini", "conf", "sql", "graphql",
+        "vue", "svelte", "astro", "r", "lua", "zig", "nim", "ex", "exs",
+        "java", "kt", "scala", "dart", "php", "pl", "pm"
+    ]
+
+    private var isTextFile: Bool {
+        let ext = URL(fileURLWithPath: node.name).pathExtension.lowercased()
+        // Files without an extension are likely text (Makefile, Dockerfile, etc.)
+        return ext.isEmpty || Self.textExtensions.contains(ext)
+    }
+
     private func openFile() {
         if let status = node.gitStatus {
             let untracked = status == .untracked
             onOpenFile?(node.relativePath, .diff(staged: node.isGitStaged, untracked: untracked))
-        } else {
+        } else if isTextFile {
             onOpenFile?(node.relativePath, .edit)
+        } else {
+            onOpenFile?(node.relativePath, .preview)
         }
     }
 }
