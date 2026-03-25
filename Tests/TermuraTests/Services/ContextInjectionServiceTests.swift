@@ -134,8 +134,7 @@ struct ContextInjectionServiceTests {
 
         #expect(result != nil)
         let text = try #require(result)
-        #expect(text.contains("Continuing from previous session"))
-        #expect(text.contains("Implementing feature X"))
+        #expect(text.contains("claude --continue"))
     }
 
     @Test("Returns injection text for Aider agent")

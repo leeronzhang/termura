@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Termura
 
@@ -44,6 +45,122 @@ struct CorruptionDetectorTests {
         ]
         let detector = makeDetector()
         let results = await detector.scan(sections: sections, projectRoot: "/tmp")
+        #expect(results.isEmpty)
+    }
+
+    // MARK: - Stale file paths
+
+    @Test("Detects stale file reference with path separator")
+    func detectStaleFilePath() async throws {
+        let tmpDir = NSTemporaryDirectory() + "corruption-test-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: tmpDir) }
+
+        let sections = [
+            RuleSection(
+                heading: "Config",
+                level: 2,
+                body: "See `src/config/missing.swift` for details.",
+                lineRange: 1 ... 3
+            )
+        ]
+        let detector = makeDetector()
+        let results = await detector.scan(sections: sections, projectRoot: tmpDir)
+        let stale = results.filter { $0.category == .stalePath }
+        #expect(!stale.isEmpty)
+        #expect(stale.first?.message.contains("missing.swift") ?? false)
+    }
+
+    @Test("Does not flag existing file as stale")
+    func existingFileNotStale() async throws {
+        let tmpDir = NSTemporaryDirectory() + "corruption-test-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(
+            atPath: tmpDir + "/src",
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(atPath: tmpDir) }
+
+        let filePath = tmpDir + "/src/real.swift"
+        try "content".write(toFile: filePath, atomically: true, encoding: .utf8)
+
+        let sections = [
+            RuleSection(
+                heading: "Config",
+                level: 2,
+                body: "See `src/real.swift` for details.",
+                lineRange: 1 ... 3
+            )
+        ]
+        let detector = makeDetector()
+        let results = await detector.scan(sections: sections, projectRoot: tmpDir)
+        let stale = results.filter { $0.category == .stalePath }
+        #expect(stale.isEmpty)
+    }
+
+    @Test("Ignores file references without path separator")
+    func ignoresBareFileNames() async {
+        let sections = [
+            RuleSection(
+                heading: "Config",
+                level: 2,
+                body: "See `README.md` for details.",
+                lineRange: 1 ... 3
+            )
+        ]
+        let detector = makeDetector()
+        let results = await detector.scan(sections: sections, projectRoot: "/tmp")
+        let stale = results.filter { $0.category == .stalePath }
+        #expect(stale.isEmpty)
+    }
+
+    // MARK: - Contradiction edge cases
+
+    @Test("No contradiction when only 'must' without 'must not'")
+    func mustAloneNoContradiction() async {
+        let sections = [
+            RuleSection(
+                heading: "Rules",
+                level: 2,
+                body: "You must use structured concurrency.",
+                lineRange: 1 ... 3
+            )
+        ]
+        let detector = makeDetector()
+        let results = await detector.scan(sections: sections, projectRoot: "/tmp")
+        let contradictions = results.filter { $0.category == .contradiction }
+        #expect(contradictions.isEmpty)
+    }
+
+    // MARK: - Redundancy edge cases
+
+    @Test("Case-insensitive heading dedup")
+    func caseInsensitiveRedundancy() async {
+        let sections = [
+            RuleSection(heading: "Error Handling", level: 2, body: "v1", lineRange: 1 ... 3),
+            RuleSection(heading: "error handling", level: 2, body: "v2", lineRange: 5 ... 7)
+        ]
+        let detector = makeDetector()
+        let results = await detector.scan(sections: sections, projectRoot: "/tmp")
+        let redundancies = results.filter { $0.category == .redundancy }
+        #expect(!redundancies.isEmpty)
+    }
+
+    @Test("Different headings produce no redundancy")
+    func differentHeadingsNoRedundancy() async {
+        let sections = [
+            RuleSection(heading: "Error Handling", level: 2, body: "v1", lineRange: 1 ... 3),
+            RuleSection(heading: "Testing", level: 2, body: "v2", lineRange: 5 ... 7)
+        ]
+        let detector = makeDetector()
+        let results = await detector.scan(sections: sections, projectRoot: "/tmp")
+        let redundancies = results.filter { $0.category == .redundancy }
+        #expect(redundancies.isEmpty)
+    }
+
+    @Test("Empty sections produce no results")
+    func emptySections() async {
+        let detector = makeDetector()
+        let results = await detector.scan(sections: [], projectRoot: "/tmp")
         #expect(results.isEmpty)
     }
 }

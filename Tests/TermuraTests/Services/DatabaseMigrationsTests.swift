@@ -1,5 +1,6 @@
-import XCTest
+import Foundation
 import GRDB
+import XCTest
 @testable import Termura
 
 final class DatabaseMigrationsTests: XCTestCase {
