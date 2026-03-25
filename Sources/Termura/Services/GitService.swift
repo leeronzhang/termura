@@ -3,33 +3,6 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "GitService")
 
-// MARK: - Data Models
-
-/// Status of a single file in the git working tree.
-struct GitFileStatus: Identifiable, Sendable, Hashable {
-    enum Kind: String, Sendable {
-        case modified, added, deleted, renamed, copied, untracked
-    }
-
-    var id: String { path }
-    let path: String
-    let kind: Kind
-    let isStaged: Bool
-}
-
-/// Snapshot of `git status` for a project directory.
-struct GitStatusResult: Sendable {
-    let branch: String
-    let files: [GitFileStatus]
-    let isGitRepo: Bool
-
-    static let notARepo = GitStatusResult(branch: "", files: [], isGitRepo: false)
-
-    var stagedFiles: [GitFileStatus] { files.filter(\.isStaged) }
-    var modifiedFiles: [GitFileStatus] { files.filter { !$0.isStaged && $0.kind != .untracked } }
-    var untrackedFiles: [GitFileStatus] { files.filter { $0.kind == .untracked } }
-}
-
 // MARK: - Protocol
 
 protocol GitServiceProtocol: Sendable {
@@ -51,7 +24,31 @@ actor GitService: GitServiceProtocol {
             ["status", "--porcelain=v1", "-b", "--no-renames"],
             at: directory
         )
-        return Self.parse(porcelain: output)
+        var result = Self.parse(porcelain: output)
+
+        // Fetch last commit message (non-fatal if fails, e.g. empty repo)
+        do {
+            let logLine = try await run(
+                ["log", "-1", "--oneline", "--no-decorate"],
+                at: directory
+            )
+            result.lastCommit = logLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            logger.debug("Could not read last commit: \(error.localizedDescription)")
+        }
+
+        // Fetch remote host label
+        do {
+            let url = try await run(
+                ["remote", "get-url", "origin"],
+                at: directory
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            result.remoteHost = Self.parseRemoteHost(from: url)
+        } catch {
+            logger.debug("No remote origin: \(error.localizedDescription)")
+        }
+
+        return result
     }
 
     func diff(file: String, staged: Bool, at directory: String) async throws -> String {
@@ -138,13 +135,35 @@ actor GitService: GitServiceProtocol {
             return .notARepo
         }
 
-        // Parse branch: "## main...origin/main" or "## HEAD (no branch)"
+        // Parse branch: "## main...origin/main [ahead 2, behind 1]"
         let branchInfo = String(firstLine.dropFirst(3))
         let branch: String
-        if let dotDot = branchInfo.range(of: "...") {
-            branch = String(branchInfo[branchInfo.startIndex..<dotDot.lowerBound])
+        var ahead = 0
+        var behind = 0
+
+        // Split off tracking info in square brackets
+        let bracketParts = branchInfo.components(separatedBy: " [")
+        let branchPart = bracketParts[0]
+
+        if let dotDot = branchPart.range(of: "...") {
+            branch = String(branchPart[branchPart.startIndex..<dotDot.lowerBound])
         } else {
-            branch = branchInfo
+            branch = branchPart
+        }
+
+        // Parse [ahead N, behind N] or [ahead N] or [behind N]
+        if bracketParts.count > 1 {
+            let info = bracketParts[1].replacingOccurrences(of: "]", with: "")
+            for part in info.components(separatedBy: ", ") {
+                let trimmed = part.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("ahead "),
+                   let val = Int(trimmed.dropFirst(6)) {
+                    ahead = val
+                } else if trimmed.hasPrefix("behind "),
+                          let val = Int(trimmed.dropFirst(7)) {
+                    behind = val
+                }
+            }
         }
 
         var files: [GitFileStatus] = []
@@ -176,7 +195,37 @@ actor GitService: GitServiceProtocol {
             }
         }
 
-        return GitStatusResult(branch: branch, files: files, isGitRepo: true)
+        return GitStatusResult(
+            branch: branch, files: files, isGitRepo: true,
+            ahead: ahead, behind: behind
+        )
+    }
+
+    /// Extract a short host label from a remote URL.
+    /// "git@github.com:user/repo" → "GitHub"
+    /// "https://gitlab.com/user/repo" → "GitLab"
+    static func parseRemoteHost(from url: String) -> String {
+        let lowered = url.lowercased()
+        if lowered.contains("github.com") { return "GitHub" }
+        if lowered.contains("gitlab.com") { return "GitLab" }
+        if lowered.contains("bitbucket.org") { return "Bitbucket" }
+        if lowered.contains("gitee.com") { return "Gitee" }
+        if lowered.contains("codeberg.org") { return "Codeberg" }
+        if lowered.contains("sr.ht") { return "SourceHut" }
+        if lowered.contains("dev.azure.com") || lowered.contains("visualstudio.com") {
+            return "Azure DevOps"
+        }
+        // Fallback: extract hostname
+        if let hostRange = url.range(of: "@") {
+            let afterAt = url[hostRange.upperBound...]
+            if let colon = afterAt.firstIndex(of: ":") {
+                return String(afterAt[afterAt.startIndex..<colon])
+            }
+        }
+        if let host = URL(string: url)?.host {
+            return host
+        }
+        return ""
     }
 
     private static func mapStatusChar(_ char: Character) -> GitFileStatus.Kind {

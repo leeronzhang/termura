@@ -16,6 +16,18 @@ final class ProjectViewModel: ObservableObject {
     /// True when there are uncommitted changes — drives the tab badge dot.
     var hasUncommittedChanges: Bool { !gitResult.files.isEmpty }
 
+    /// Full project root for tooltip.
+    var projectRootPath: String { projectRoot }
+
+    /// Shortened display path: replaces home directory with `~`.
+    var displayPath: String {
+        let home = AppConfig.Paths.homeDirectory
+        if projectRoot.hasPrefix(home) {
+            return "~" + projectRoot.dropFirst(home.count)
+        }
+        return projectRoot
+    }
+
     private let gitService: any GitServiceProtocol
     private let fileTreeService = FileTreeService()
     private let projectRoot: String

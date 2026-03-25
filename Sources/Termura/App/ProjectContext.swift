@@ -42,6 +42,14 @@ final class ProjectContext: ObservableObject {
     /// Per-project notes ViewModel — created here so views can share it via @EnvironmentObject.
     let notesViewModel: NotesViewModel
 
+    /// Per-project file tree ViewModel — owned here so expanded state survives
+    /// sidebar re-evaluations. Views receive it as @ObservedObject.
+    lazy var projectViewModel: ProjectViewModel = ProjectViewModel(
+        gitService: gitService,
+        projectRoot: projectURL.path,
+        commandRouter: commandRouter
+    )
+
     // MARK: - Init (private — use open(at:engineFactory:))
 
     private init(
