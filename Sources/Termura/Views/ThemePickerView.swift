@@ -50,7 +50,7 @@ struct ThemePickerView: View {
             Text("Custom Themes")
                 .font(AppUI.Font.title3Medium)
             Spacer()
-            Button("Import Theme…") { openImportPanel() }
+            Button("Import Theme\u{2026}") { openImportPanel() }
         }
         .padding(.top, AppUI.Spacing.md)
     }

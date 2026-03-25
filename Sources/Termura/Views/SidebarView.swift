@@ -2,19 +2,20 @@ import SwiftUI
 
 /// Sidebar with Xcode-style tab bar: Sessions, Agents, Harness, Notes, Project.
 struct SidebarView: View {
-    @ObservedObject var sessionStore: SessionStore
+    @EnvironmentObject var projectContext: ProjectContext
     @EnvironmentObject var themeManager: ThemeManager
-    var agentStateStore: AgentStateStore?
-    var gitService: (any GitServiceProtocol)?
-    var noteRepository: (any NoteRepositoryProtocol)?
-    var notesViewModel: NotesViewModel?
-    var ruleFileRepository: RuleFileRepository?
+    @EnvironmentObject var commandRouter: CommandRouter
+    @EnvironmentObject var notesViewModel: NotesViewModel
+
     var isFullScreen: Bool = false
-    var hasUncommittedChanges: Bool = false
     /// Called when a note title is tapped in the sidebar to open it as a content tab.
     var onOpenNote: ((NoteID, String) -> Void)?
     /// Called when a project file is tapped to open in a content tab.
     var onOpenFile: ((String, FileOpenMode) -> Void)?
+
+    // MARK: - Convenience
+
+    var sessionStore: SessionStore { projectContext.sessionStore }
 
     @State private var selectedTab: SidebarTab = .sessions
 
@@ -23,7 +24,7 @@ struct SidebarView: View {
             SidebarTabBar(
                 selectedTab: $selectedTab,
                 isFullScreen: isFullScreen,
-                hasUncommittedChanges: hasUncommittedChanges
+                hasUncommittedChanges: commandRouter.hasUncommittedChanges
             )
             tabContent
         }

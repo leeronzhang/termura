@@ -75,6 +75,8 @@ extension SidebarView {
             session: session,
             isActive: sessionStore.activeSessionID == session.id,
             hasUnreadFailure: false,
+            agentStatus: projectContext.agentStateStore.agents[session.id]?.status,
+            agentType: projectContext.agentStateStore.agents[session.id]?.agentType ?? session.agentType,
             onActivate: { sessionStore.activateSession(id: session.id) },
             onRename: { sessionStore.renameSession(id: session.id, title: $0) },
             onClose: { sessionStore.closeSession(id: session.id) },
@@ -93,7 +95,7 @@ extension SidebarView {
             colorLabelMenu(for: session)
             Divider()
             Button("Export\u{2026}") {
-                NotificationCenter.default.post(name: .showExport, object: session.id)
+                commandRouter.requestExport(sessionID: session.id)
             }
             Divider()
             Button("Close Session", role: .destructive) {
@@ -152,14 +154,10 @@ extension SidebarView {
 extension SidebarView {
     @ViewBuilder
     var agentsContent: some View {
-        if let store = agentStateStore {
-            AgentDashboardView(agentStore: store) { sid in
-                sessionStore.activateSession(id: sid)
-            }
-            .frame(maxWidth: .infinity)
-        } else {
-            sidebarEmptyState(icon: "cpu", message: "Agent monitoring unavailable")
+        AgentDashboardView(agentStore: projectContext.agentStateStore) { sid in
+            sessionStore.activateSession(id: sid)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 

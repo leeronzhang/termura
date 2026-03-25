@@ -4,15 +4,15 @@ struct SearchView: View {
     @StateObject private var viewModel: SearchViewModel
     @Binding var isPresented: Bool
     let onSelectSession: (SessionID) -> Void
-    let vectorService: VectorSearchService?
+    let vectorService: (any VectorSearchServiceProtocol)?
 
     @State private var searchMode: SearchMode = .keyword
 
     init(
-        searchService: SearchService,
+        searchService: any SearchServiceProtocol,
         isPresented: Binding<Bool>,
         onSelectSession: @escaping (SessionID) -> Void,
-        vectorService: VectorSearchService? = nil
+        vectorService: (any VectorSearchServiceProtocol)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: SearchViewModel(searchService: searchService))
         _isPresented = isPresented

@@ -5,15 +5,11 @@ import SwiftUI
 extension SidebarView {
     @ViewBuilder
     var notesContent: some View {
-        if let vm = notesViewModel {
-            VStack(spacing: 0) {
-                notesHeader(vm: vm)
-                notesList(vm: vm)
-            }
-            .task { await vm.loadNotes() }
-        } else {
-            sidebarEmptyState(icon: "doc.text", message: "Notes unavailable")
+        VStack(spacing: 0) {
+            notesHeader(vm: notesViewModel)
+            notesList(vm: notesViewModel)
         }
+        .task { await notesViewModel.loadNotes() }
     }
 
     func notesHeader(vm: NotesViewModel) -> some View {

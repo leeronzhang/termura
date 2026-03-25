@@ -1,8 +1,11 @@
 // Exemption: This is the ONLY file permitted to import SwiftTerm in the Views layer.
 // The NSViewRepresentable boundary is explicitly required by the architecture.
 import AppKit
+import OSLog
 import SwiftTerm
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.termura.app", category: "TerminalContainerView")
 
 /// NSViewRepresentable wrapper around SwiftTerm's LocalProcessTerminalView.
 /// Acts as the bridge between SwiftUI layout and the AppKit terminal renderer.
@@ -10,7 +13,9 @@ struct TerminalContainerView: NSViewRepresentable {
     let viewModel: TerminalViewModel
     let engine: SwiftTermEngine
     let theme: ThemeColors
-    var fontSize: CGFloat = AppConfig.Fonts.terminalSize
+    /// Value types so SwiftUI diffs trigger updateNSView on change.
+    let fontFamily: String
+    let fontSize: CGFloat
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         let view = engine.terminalView
@@ -45,9 +50,10 @@ struct TerminalContainerView: NSViewRepresentable {
         view.nativeForegroundColor = NSColor(theme.foreground)
         view.installColors(theme.toSwiftTermColors())
 
-        if let font = NSFont(name: AppConfig.Fonts.terminalFamily, size: fontSize) {
-            view.font = font
-        }
+        let font = NSFont(name: fontFamily, size: fontSize)
+            ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        view.font = font
+        logger.debug("Terminal font set: \(font.fontName) size=\(fontSize)")
     }
 }
 

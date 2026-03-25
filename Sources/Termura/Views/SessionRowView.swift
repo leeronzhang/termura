@@ -26,6 +26,9 @@ struct SessionRowView: View {
     var body: some View {
         HStack(spacing: AppUI.Spacing.smMd) {
             colorDot
+            if let type = agentType, type != .unknown {
+                AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
+            }
             sessionTitle
             Spacer(minLength: AppUI.Spacing.sm)
             if let status = agentStatus, let type = agentType {
@@ -55,8 +58,7 @@ struct SessionRowView: View {
         .background(rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
         .overlay(glowBorder)
-        .onTapGesture(count: 2) { beginEditing() }
-        .onTapGesture(count: 1) { onActivate() }
+        .onTapGesture { onActivate() }
         .onHover { isHovered = $0 }
         .contextMenu { contextMenuItems }
         .animation(.easeOut(duration: AppUI.Animation.quick), value: isHovered)

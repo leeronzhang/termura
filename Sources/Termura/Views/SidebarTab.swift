@@ -56,7 +56,7 @@ struct SidebarTabBar: View {
                 tabButton(tab)
             }
         }
-        .padding(.horizontal, AppUI.Spacing.md)
+        .padding(.horizontal, 0)
         .padding(.top, isFullScreen ? AppUI.Spacing.smMd : 8)
         .padding(.bottom, AppUI.Spacing.smMd)
         .padding(.leading, trafficLightLeading)
@@ -69,18 +69,18 @@ struct SidebarTabBar: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: selectedTab == tab ? tab.activeIcon : tab.icon)
-                    .font(.system(size: 15))
+                    .font(AppUI.Font.tabBarIcon)
                     .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 32)
 
                 if tab == .project && hasUncommittedChanges {
                     Circle()
                         .fill(Color.accentColor)
                         .frame(width: 6, height: 6)
-                        .offset(x: -2, y: 4)
+                        .offset(x: 3, y: -1)
                 }
             }
+            .frame(maxWidth: .infinity)
+            .frame(height: AppUI.Spacing.xxxxl)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

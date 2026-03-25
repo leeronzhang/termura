@@ -35,21 +35,13 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
     ) {
         self.sessionID = sessionID
 
-        var outputCap: AsyncStream<TerminalOutputEvent>.Continuation?
-        let stream = AsyncStream<TerminalOutputEvent> { outputCap = $0 }
-        guard let outputCap else {
-            preconditionFailure("AsyncStream continuation must be set synchronously")
-        }
-        outputStream = stream
-        continuation = outputCap
+        let (outputStream, outputContinuation) = AsyncStream.makeStream(of: TerminalOutputEvent.self)
+        self.outputStream = outputStream
+        continuation = outputContinuation
 
-        var shellCap: AsyncStream<ShellIntegrationEvent>.Continuation?
-        let shellStream = AsyncStream<ShellIntegrationEvent> { shellCap = $0 }
-        guard let shellCap else {
-            preconditionFailure("AsyncStream shell continuation must be set synchronously")
-        }
+        let (shellStream, shellCont) = AsyncStream.makeStream(of: ShellIntegrationEvent.self)
         shellEventsStream = shellStream
-        shellContinuation = shellCap
+        shellContinuation = shellCont
 
         let frame = NSRect(x: 0, y: 0, width: 640, height: 480)
         terminalView = TermuraTerminalView(frame: frame)
@@ -58,7 +50,7 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
 
         // Wire raw PTY data into the output stream.
         // Capture only the Sendable continuation — safe to call from any queue.
-        let cap = outputCap
+        let cap = outputContinuation
         terminalView.onDataReceived = { slice in
             let data = Data(slice)
             cap.yield(.data(data))

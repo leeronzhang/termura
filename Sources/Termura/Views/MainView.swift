@@ -2,86 +2,33 @@ import SwiftUI
 
 /// Root layout: horizontal split between sidebar and terminal area.
 struct MainView: View {
-    @ObservedObject var sessionStore: SessionStore
-    let engineStore: TerminalEngineStore
-    @ObservedObject var themeManager: ThemeManager
-    let tokenCountingService: TokenCountingService
-    let searchService: SearchService
-    let noteRepository: any NoteRepositoryProtocol
-    var agentStateStore: AgentStateStore?
-    var contextInjectionService: ContextInjectionService?
-    var gitService: (any GitServiceProtocol)?
-    var vectorSearchService: VectorSearchService?
-    var sessionMessageRepository: SessionMessageRepository?
-    var ruleFileRepository: RuleFileRepository?
-    var sessionHandoffService: SessionHandoffService?
+    @EnvironmentObject var projectContext: ProjectContext
+    @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var commandRouter: CommandRouter
+    @EnvironmentObject var notesViewModel: NotesViewModel
 
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
-    @State private var showSidebar = true
-    @State private var showShellOnboarding = false
-    @State private var showSearch = false
-    @State private var showNotes = false
-    @State var showExport = false
-    @State var exportSessionID: SessionID?
-    @State var showHarness = false
-    @State var showBranchMerge = false
     @State var showCloseSessionConfirm = false
     @State var splitRoot: SplitNode?
-    @State var openTabs: [ContentTab] = [.terminal]
-    @State var selectedContentTab: ContentTab = .terminal
-    @State private var isFullScreen = false
-    @State private var projectHasUncommittedChanges = false
+    /// Non-terminal tabs (files, notes, diffs). Terminal tabs are derived from sessions.
+    @State var openTabs: [ContentTab] = []
+    @State var selectedContentTab: ContentTab?
+    @State var isFullScreen = false
 
-    @StateObject private var notesViewModel: NotesViewModel
+    // MARK: - Convenience accessors
 
-    init(
-        sessionStore: SessionStore,
-        engineStore: TerminalEngineStore,
-        themeManager: ThemeManager,
-        tokenCountingService: TokenCountingService,
-        searchService: SearchService,
-        noteRepository: any NoteRepositoryProtocol,
-        agentStateStore: AgentStateStore? = nil,
-        contextInjectionService: ContextInjectionService? = nil,
-        gitService: (any GitServiceProtocol)? = nil,
-        vectorSearchService: VectorSearchService? = nil,
-        sessionMessageRepository: SessionMessageRepository? = nil,
-        ruleFileRepository: RuleFileRepository? = nil,
-        sessionHandoffService: SessionHandoffService? = nil
-    ) {
-        self.sessionStore = sessionStore
-        self.engineStore = engineStore
-        self.themeManager = themeManager
-        self.tokenCountingService = tokenCountingService
-        self.searchService = searchService
-        self.noteRepository = noteRepository
-        self.agentStateStore = agentStateStore
-        self.contextInjectionService = contextInjectionService
-        self.gitService = gitService
-        self.vectorSearchService = vectorSearchService
-        self.sessionMessageRepository = sessionMessageRepository
-        self.ruleFileRepository = ruleFileRepository
-        self.sessionHandoffService = sessionHandoffService
-        _notesViewModel = StateObject(wrappedValue: NotesViewModel(repository: noteRepository))
-    }
+    var sessionStore: SessionStore { projectContext.sessionStore }
+    var engineStore: TerminalEngineStore { projectContext.engineStore }
 
     var body: some View {
         HStack(spacing: 0) {
-            if showSidebar {
+            if commandRouter.showSidebar {
                 SidebarView(
-                    sessionStore: sessionStore,
-                    agentStateStore: agentStateStore,
-                    gitService: gitService,
-                    noteRepository: noteRepository,
-                    notesViewModel: notesViewModel,
-                    ruleFileRepository: ruleFileRepository,
                     isFullScreen: isFullScreen,
-                    hasUncommittedChanges: projectHasUncommittedChanges,
                     onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) },
                     onOpenFile: { path, mode in openProjectFile(relativePath: path, mode: mode) }
                 )
                 .frame(width: sidebarWidth)
-                .environmentObject(themeManager)
 
                 ResizableDivider(
                     width: $sidebarWidth,
@@ -93,74 +40,58 @@ struct MainView: View {
             contentArea
         }
         .background(themeManager.current.background)
-        .onReceive(NotificationCenter.default.publisher(for: .toggleSidebar)) { _ in
-            withAnimation { showSidebar.toggle() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showShellIntegrationOnboarding)) { _ in
-            showShellOnboarding = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showSearch)) { _ in
-            showSearch = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showNotes)) { _ in
-            showNotes = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showExport)) { notification in
-            exportSessionID = notification.object as? SessionID ?? sessionStore.activeSessionID
-            showExport = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showHarness)) { _ in
-            showHarness = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .showBranchMerge)) { _ in
-            showBranchMerge = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .splitVertical)) { _ in
-            performSplit(axis: .vertical)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .splitHorizontal)) { _ in
-            performSplit(axis: .horizontal)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .closeSplitPane)) { _ in
-            performCloseSplitPane()
-        }
+        // System-level notifications — Apple convention, kept as-is.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
             isFullScreen = true
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
             isFullScreen = false
         }
-        .onReceive(NotificationCenter.default.publisher(for: .projectGitStatusChanged)) { notification in
-            if let hasChanges = notification.object as? Bool {
-                projectHasUncommittedChanges = hasChanges
+        // React to CommandRouter split actions.
+        .onChange(of: commandRouter.pendingSplitAction) { _, action in
+            guard let action else { return }
+            commandRouter.pendingSplitAction = nil
+            switch action {
+            case .vertical: performSplit(axis: .vertical)
+            case .horizontal: performSplit(axis: .horizontal)
+            case .closePane: performCloseSplitPane()
             }
+        }
+        // React to export requests with session ID payload.
+        .onChange(of: commandRouter.exportSessionID) { _, newID in
+            guard newID != nil else { return }
+            // exportSessionID stays non-nil while sheet is shown;
+            // sheet binding resets it on dismiss.
+        }
+        .onChange(of: commandRouter.closeTabTick) { _, _ in
+            handleCloseTab()
         }
         .task {
             await ensureInitialSession()
             restoreOpenTabs()
         }
-        .sheet(isPresented: $showShellOnboarding) {
-            ShellIntegrationOnboardingView(isPresented: $showShellOnboarding)
+        .sheet(isPresented: $commandRouter.showShellOnboarding) {
+            ShellIntegrationOnboardingView(isPresented: $commandRouter.showShellOnboarding)
         }
-        .sheet(isPresented: $showSearch) {
+        .sheet(isPresented: $commandRouter.showSearch) {
             SearchView(
-                searchService: searchService,
-                isPresented: $showSearch,
+                searchService: projectContext.searchService,
+                isPresented: $commandRouter.showSearch,
                 onSelectSession: { id in sessionStore.activateSession(id: id) },
-                vectorService: vectorSearchService
+                vectorService: projectContext.vectorSearchService
             )
         }
-        .sheet(isPresented: $showNotes) {
+        .sheet(isPresented: $commandRouter.showNotes) {
             NotesSplitView(viewModel: notesViewModel)
                 .frame(minWidth: 600, minHeight: 400)
         }
-        .sheet(isPresented: $showExport) {
+        .sheet(isPresented: showExportBinding) {
             exportSheet
         }
-        .sheet(isPresented: $showHarness) {
+        .sheet(isPresented: $commandRouter.showHarness) {
             harnessSheet
         }
-        .sheet(isPresented: $showBranchMerge) {
+        .sheet(isPresented: $commandRouter.showBranchMerge) {
             branchMergeSheet
         }
         .alert("Close Session", isPresented: $showCloseSessionConfirm) {
@@ -171,127 +102,13 @@ struct MainView: View {
         }
     }
 
-    // MARK: - Content area with tabs
+    // MARK: - Export binding
 
-    @ViewBuilder
-    private var contentArea: some View {
-        VStack(spacing: 0) {
-            ContentTabBar(
-                tabs: openTabs,
-                selectedTab: $selectedContentTab,
-                isFullScreen: isFullScreen
-            ) { tab in
-                closeContentTab(tab)
-            }
-            selectedContentView
-        }
+    /// Derived binding: export sheet is shown when `exportSessionID` is non-nil.
+    private var showExportBinding: Binding<Bool> {
+        Binding(
+            get: { commandRouter.exportSessionID != nil },
+            set: { if !$0 { commandRouter.exportSessionID = nil } }
+        )
     }
-
-    @ViewBuilder
-    private var selectedContentView: some View {
-        switch selectedContentTab {
-        case .terminal:
-            terminalArea
-        case .note(let noteID, _):
-            noteEditorView(noteID: noteID)
-        case .diff(let path, let staged, let untracked):
-            if let service = gitService {
-                DiffContentView(
-                    filePath: path,
-                    isStaged: staged,
-                    isUntracked: untracked,
-                    gitService: service,
-                    projectRoot: activeProjectRoot
-                )
-            }
-        case .file(let path, _):
-            CodeEditorView(
-                filePath: path,
-                projectRoot: activeProjectRoot
-            )
-        }
-    }
-
-    /// Project root with fallback to active session working directory.
-    private var activeProjectRoot: String {
-        if !sessionStore.projectRoot.isEmpty { return sessionStore.projectRoot }
-        if let id = sessionStore.activeSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == id }),
-           !session.workingDirectory.isEmpty {
-            return session.workingDirectory
-        }
-        return AppConfig.Paths.homeDirectory
-    }
-
-    @ViewBuilder
-    private var terminalArea: some View {
-        if splitRoot != nil {
-            SplitPaneView(
-                node: Binding(
-                    get: { splitRoot ?? .leaf(SessionID()) },
-                    set: { splitRoot = $0 }
-                ),
-                renderLeaf: { id in AnyView(renderLeaf(sessionID: id)) }
-            )
-        } else if let activeID = sessionStore.activeSessionID,
-                  let engine = engineStore.engine(for: activeID) as? SwiftTermEngine {
-            TerminalAreaView(
-                engine: engine,
-                sessionID: activeID,
-                theme: themeManager.current,
-                sessionStore: sessionStore,
-                tokenCountingService: tokenCountingService,
-                agentStateStore: agentStateStore,
-                isRestoredSession: sessionStore.isRestoredSession(id: activeID),
-                contextInjectionService: contextInjectionService,
-                sessionHandoffService: sessionHandoffService,
-                fontSize: themeManager.terminalFontSize
-            )
-            .id(activeID)
-        } else {
-            emptyState
-        }
-    }
-
-    private func noteEditorView(noteID: NoteID) -> some View {
-        VStack(spacing: 0) {
-            TextField("Title", text: $notesViewModel.editingTitle)
-                .font(.system(size: 16, weight: .semibold))
-                .textFieldStyle(.plain)
-                .padding(.horizontal, AppUI.Spacing.xl)
-                .padding(.top, AppUI.Spacing.xl)
-                .padding(.bottom, AppUI.Spacing.md)
-            Divider()
-            NoteEditorView(
-                title: notesViewModel.editingTitle,
-                text: $notesViewModel.editingBody
-            )
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { notesViewModel.selectNote(id: noteID) }
-    }
-
-    @ViewBuilder
-    private func renderLeaf(sessionID: SessionID) -> some View {
-        if let engine = engineStore.engine(for: sessionID) as? SwiftTermEngine {
-            TerminalAreaView(
-                engine: engine,
-                sessionID: sessionID,
-                theme: themeManager.current,
-                sessionStore: sessionStore,
-                tokenCountingService: tokenCountingService,
-                agentStateStore: agentStateStore,
-                isRestoredSession: sessionStore.isRestoredSession(id: sessionID),
-                contextInjectionService: contextInjectionService,
-                sessionHandoffService: sessionHandoffService,
-                fontSize: themeManager.terminalFontSize,
-                isCompact: true
-            )
-            .id(sessionID)
-        } else {
-            Text("No engine")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
-
 }

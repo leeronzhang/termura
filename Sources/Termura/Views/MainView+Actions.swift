@@ -1,4 +1,7 @@
+import OSLog
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.termura.app", category: "MainView+Actions")
 
 // MARK: - Tab management
 
@@ -42,22 +45,36 @@ extension MainView {
     func closeContentTab(_ tab: ContentTab) {
         switch tab {
         case .terminal:
-            // Active session requires confirmation
-            if sessionStore.activeSessionID != nil {
-                showCloseSessionConfirm = true
-            }
+            // Terminal tabs are not closable from tab bar (managed via sidebar).
+            break
         case .note, .diff, .file:
             openTabs.removeAll { $0 == tab }
             if selectedContentTab == tab {
-                selectedContentTab = .terminal
+                // Fall back to the active session's terminal tab.
+                selectedContentTab = nil
             }
             persistOpenTabs()
+        }
+    }
+
+    /// Cmd+W handler: close the active non-terminal tab, or close the session if on a terminal tab.
+    func handleCloseTab() {
+        let tab = resolvedSelectedTab
+        if tab.isClosable {
+            closeContentTab(tab)
+        } else if tab.isTerminal {
+            // Terminal tab — close the session (with confirmation).
+            showCloseSessionConfirm = true
         }
     }
 
     func confirmCloseActiveSession() {
         if let activeID = sessionStore.activeSessionID {
             sessionStore.closeSession(id: activeID)
+            // Clear selected tab so it falls back to the next available session.
+            if selectedContentTab?.sessionID == activeID {
+                selectedContentTab = nil
+            }
         }
     }
 }
@@ -124,41 +141,48 @@ extension MainView {
 
     /// Saves persistable tabs (note/file) to UserDefaults.
     func persistOpenTabs() {
-        // Only persist note and file tabs — diffs are ephemeral.
+        // Only persist note and file tabs — terminal tabs are derived from sessions,
+        // diffs are ephemeral.
         let persistable = openTabs.filter {
             switch $0 {
             case .note, .file: return true
             case .terminal, .diff: return false
             }
         }
-        guard let data = try? JSONEncoder().encode(persistable) else { return }
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(persistable)
+        } catch {
+            logger.warning("Failed to encode open tabs: \(error.localizedDescription)")
+            return
+        }
         UserDefaults.standard.set(data, forKey: tabsDefaultsKey)
         // Also save the selected tab id for restoration.
-        UserDefaults.standard.set(selectedContentTab.id, forKey: tabsDefaultsKey + ".selected")
+        if let tab = selectedContentTab {
+            UserDefaults.standard.set(tab.id, forKey: tabsDefaultsKey + ".selected")
+        }
     }
 
     /// Restores previously open tabs from UserDefaults.
     func restoreOpenTabs() {
-        guard let data = UserDefaults.standard.data(forKey: tabsDefaultsKey),
-              let restored = try? JSONDecoder().decode([ContentTab].self, from: data),
-              !restored.isEmpty else { return }
+        guard let data = UserDefaults.standard.data(forKey: tabsDefaultsKey) else { return }
+        let restored: [ContentTab]
+        do {
+            restored = try JSONDecoder().decode([ContentTab].self, from: data)
+        } catch {
+            logger.warning("Failed to decode open tabs: \(error.localizedDescription)")
+            return
+        }
+        guard !restored.isEmpty else { return }
 
         for tab in restored where !openTabs.contains(tab) {
             openTabs.append(tab)
         }
 
-        // Restore selected tab if it matches a restored tab.
+        // Restore selected tab if it matches an available tab.
         if let selectedID = UserDefaults.standard.string(forKey: tabsDefaultsKey + ".selected"),
-           let match = openTabs.first(where: { $0.id == selectedID }) {
+           let match = allTabs.first(where: { $0.id == selectedID }) {
             selectedContentTab = match
         }
     }
-}
-
-// MARK: - Notification Names
-
-extension Notification.Name {
-    static let toggleSidebar = Notification.Name("com.termura.toggleSidebar")
-    static let showShellIntegrationOnboarding = Notification.Name("com.termura.showShellOnboarding")
-    static let projectGitStatusChanged = Notification.Name("com.termura.projectGitStatusChanged")
 }

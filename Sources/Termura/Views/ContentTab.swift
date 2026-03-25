@@ -1,15 +1,16 @@
 import SwiftUI
 
 /// Identifies an open tab in the main content area.
+/// Terminal tabs carry a SessionID so each session gets its own tab.
 enum ContentTab: Identifiable, Hashable, Codable {
-    case terminal
+    case terminal(SessionID, String) // sessionID, session title
     case note(NoteID, String)
     case diff(String, Bool, Bool) // file path, isStaged, isUntracked
     case file(String, String) // relativePath, fileName
 
     var id: String {
         switch self {
-        case .terminal: return "terminal"
+        case .terminal(let sid, _): return "terminal-\(sid)"
         case .note(let noteID, _): return "note-\(noteID)"
         case .diff(let path, let staged, _): return "diff-\(staged ? "staged" : "wt")-\(path)"
         case .file(let path, _): return "file-\(path)"
@@ -18,7 +19,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
 
     var title: String {
         switch self {
-        case .terminal: return "Terminal"
+        case .terminal(_, let name): return name.isEmpty ? "Terminal" : name
         case .note(_, let name): return name.isEmpty ? "Untitled" : name
         case .diff(let path, _, _): return URL(fileURLWithPath: path).lastPathComponent
         case .file(_, let name): return name
@@ -34,7 +35,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
         }
     }
 
-    /// Terminal tab cannot be closed.
+    /// Terminal tabs are managed via the sidebar — not closable from the tab bar.
     var isClosable: Bool {
         switch self {
         case .terminal: return false
@@ -42,6 +43,18 @@ enum ContentTab: Identifiable, Hashable, Codable {
         case .diff: return true
         case .file: return true
         }
+    }
+
+    /// Whether this tab represents a terminal session.
+    var isTerminal: Bool {
+        if case .terminal = self { return true }
+        return false
+    }
+
+    /// The session ID if this is a terminal tab.
+    var sessionID: SessionID? {
+        if case .terminal(let sid, _) = self { return sid }
+        return nil
     }
 }
 
@@ -64,36 +77,32 @@ struct ContentTabBar: View {
             Spacer()
         }
         .padding(.top, titleBarTop)
-        .frame(height: 44 + titleBarTop)
-        .background(Color.black.opacity(0.25))
+        .frame(height: AppConfig.UI.contentTabBarHeight + titleBarTop)
+        .background(Color.black.opacity(AppUI.Opacity.tabBar))
     }
 
     private func tabButton(_ tab: ContentTab) -> some View {
         let isSelected = selectedTab == tab
-        return Button {
-            selectedTab = tab
-        } label: {
-            HStack(spacing: AppUI.Spacing.sm) {
-                Image(systemName: tab.icon)
-                    .font(AppUI.Font.caption)
-                Text(tab.title)
-                    .font(AppUI.Font.label)
-                    .lineLimit(1)
-                Spacer()
-                Button {
-                    onClose(tab)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(AppUI.Font.micro)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
+        return HStack(spacing: AppUI.Spacing.sm) {
+            Image(systemName: tab.icon)
+                .font(AppUI.Font.caption)
+            Text(tab.title)
+                .font(AppUI.Font.label)
+                .lineLimit(1)
+            Spacer()
+            if tab.isClosable {
+                Image(systemName: "xmark")
+                    .font(AppUI.Font.micro)
+                    .foregroundColor(.secondary)
+                    .contentShape(Rectangle().size(width: 24, height: 24))
+                    .onTapGesture { onClose(tab) }
             }
-            .foregroundColor(isSelected ? .primary : .secondary)
-            .padding(.horizontal, 18)
-            .frame(maxWidth: 200, maxHeight: .infinity)
-            .background(isSelected ? Color(nsColor: .windowBackgroundColor) : Color.clear)
         }
-        .buttonStyle(.plain)
+        .foregroundColor(isSelected ? .primary : .secondary)
+        .padding(.horizontal, 18)
+        .frame(maxWidth: 200, maxHeight: .infinity)
+        .background(isSelected ? Color(nsColor: .windowBackgroundColor) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { selectedTab = tab }
     }
 }

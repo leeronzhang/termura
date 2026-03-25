@@ -10,11 +10,11 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var results: SearchResults = .empty
     @Published private(set) var isSearching = false
 
-    private let searchService: SearchService
+    private let searchService: any SearchServiceProtocol
     private var cancellables = Set<AnyCancellable>()
     private var searchTask: Task<Void, Never>?
 
-    init(searchService: SearchService) {
+    init(searchService: any SearchServiceProtocol) {
         self.searchService = searchService
         setupDebounce()
     }

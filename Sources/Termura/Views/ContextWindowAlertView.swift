@@ -25,7 +25,7 @@ struct ContextWindowAlertView: View {
 
     private var icon: some View {
         Image(systemName: alert.level == .critical ? "exclamationmark.triangle.fill" : "exclamationmark.circle.fill")
-            .font(.system(size: 36))
+            .font(AppUI.Font.alertIcon)
             .foregroundColor(alert.level == .critical ? .red : .orange)
     }
 

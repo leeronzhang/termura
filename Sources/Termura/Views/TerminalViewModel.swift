@@ -22,7 +22,7 @@ final class TerminalViewModel: ObservableObject {
     let engine: any TerminalEngine
     let sessionStore: any SessionStoreProtocol
     let outputStore: OutputStore
-    let tokenCountingService: TokenCountingService
+    let tokenCountingService: any TokenCountingServiceProtocol
 
     // MARK: - Internal state
 
@@ -32,8 +32,10 @@ final class TerminalViewModel: ObservableObject {
     let agentDetector: AgentStateDetector
     private let interventionService: InterventionService
     let contextWindowMonitor: ContextWindowMonitor
-    weak var agentStateStore: AgentStateStore?
+    weak var agentStateStore: AgentStateStore? // concrete: weak requires class type
     let sessionStartTime: Date = .init()
+    /// Prevents repeated renames after the agent is already detected from output.
+    private var hasDetectedAgentFromOutput = false
     private var streamTask: Task<Void, Never>?
     private var shellTask: Task<Void, Never>?
     /// Debounced re-check for prompt detection after PTY output settles.
@@ -42,8 +44,8 @@ final class TerminalViewModel: ObservableObject {
     // MARK: - Context injection & handoff
 
     private let isRestoredSession: Bool
-    private let contextInjectionService: ContextInjectionService?
-    let sessionHandoffService: SessionHandoffService?
+    private let contextInjectionService: (any ContextInjectionServiceProtocol)?
+    let sessionHandoffService: (any SessionHandoffServiceProtocol)?
     private var hasInjectedContext = false
 
     /// Currently pending risk alert (shown as sheet).
@@ -58,12 +60,12 @@ final class TerminalViewModel: ObservableObject {
         engine: any TerminalEngine,
         sessionStore: any SessionStoreProtocol,
         outputStore: OutputStore,
-        tokenCountingService: TokenCountingService,
+        tokenCountingService: any TokenCountingServiceProtocol,
         modeController: InputModeController,
         agentStateStore: AgentStateStore? = nil,
         isRestoredSession: Bool = false,
-        contextInjectionService: ContextInjectionService? = nil,
-        sessionHandoffService: SessionHandoffService? = nil
+        contextInjectionService: (any ContextInjectionServiceProtocol)? = nil,
+        sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil
     ) {
         self.sessionID = sessionID
         self.engine = engine
@@ -101,6 +103,56 @@ final class TerminalViewModel: ObservableObject {
 
     func send(_ text: String) {
         Task { await engine.send(text) }
+    }
+
+    /// Detect agent type from a submitted command and update session title if matched.
+    func detectAgentFromCommand(_ command: String) {
+        let detector = agentDetector
+        let store = sessionStore
+        let sid = sessionID
+        Task {
+            guard let agentType = await detector.detectFromCommand(command) else { return }
+            await MainActor.run {
+                store.renameSession(id: sid, title: agentType.displayName)
+            }
+        }
+    }
+
+    // MARK: - Output-based agent detection
+
+    /// Signature patterns in terminal output that identify a running agent.
+    private static let outputSignatures: [(pattern: String, type: AgentType)] = [
+        ("claude code", .claudeCode),
+        ("anthropic", .claudeCode),
+        ("openai codex", .codex),
+        (">_ openai codex", .codex),
+        ("aider v", .aider),
+        ("opencode", .openCode),
+        ("gemini cli", .gemini),
+        ("gemini code", .gemini)
+    ]
+
+    /// Strips known agent icon prefixes from OSC terminal titles (e.g. "\u{2733} Claude Code" -> "Claude Code").
+    static func stripAgentPrefixes(_ title: String) -> String {
+        var stripped = title.trimmingCharacters(in: .whitespaces)
+        // Known prefixes set by AI tools via OSC title
+        let prefixes = ["\u{2733}", ">_", "\u{2726}", "\u{26A1}", "\u{203A}"]
+        for prefix in prefixes where stripped.hasPrefix(prefix) {
+            stripped = String(stripped.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
+        return stripped.isEmpty ? title : stripped
+    }
+
+    /// Scan terminal output for agent signatures and rename the session on first match.
+    private func detectAgentFromOutput(_ text: String) {
+        guard !hasDetectedAgentFromOutput else { return }
+        let lower = text.lowercased()
+        for (pattern, type) in Self.outputSignatures where lower.contains(pattern) {
+            hasDetectedAgentFromOutput = true
+            sessionStore.renameSession(id: sessionID, title: type.displayName)
+            sessionStore.setAgentType(id: sessionID, type: type)
+            return
+        }
     }
 
     func resize(columns: UInt16, rows: UInt16) {
@@ -151,6 +203,7 @@ final class TerminalViewModel: ObservableObject {
             }
             detectPromptFromScreenBuffer()
             schedulePromptRecheck()
+            detectAgentFromOutput(stripped)
             await updateAgentState()
             await refreshMetadata()
 
@@ -160,7 +213,10 @@ final class TerminalViewModel: ObservableObject {
             await generateHandoffIfNeeded(exitCode: code)
 
         case let .titleChanged(title):
-            sessionStore.renameSession(id: sessionID, title: title)
+            // Don't let generic OSC title changes override an agent-detected name.
+            if !hasDetectedAgentFromOutput {
+                sessionStore.renameSession(id: sessionID, title: Self.stripAgentPrefixes(title))
+            }
 
         case let .workingDirectoryChanged(path):
             sessionStore.updateWorkingDirectory(id: sessionID, path: path)

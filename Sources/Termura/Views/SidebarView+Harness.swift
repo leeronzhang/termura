@@ -6,16 +6,12 @@ import SwiftUI
 extension SidebarView {
     @ViewBuilder
     var harnessContent: some View {
-        if let repo = ruleFileRepository {
-            let projectRoot = activeSessionWorkingDirectory
-            SidebarHarnessContent(
-                repository: repo,
-                projectRoot: projectRoot,
-                onOpenFile: onOpenFile
-            )
-        } else {
-            sidebarEmptyState(icon: "shield.lefthalf.filled", message: "Harness unavailable")
-        }
+        let projectRoot = activeSessionWorkingDirectory
+        SidebarHarnessContent(
+            repository: projectContext.ruleFileRepository,
+            projectRoot: projectRoot,
+            onOpenFile: onOpenFile
+        )
     }
 
     var activeSessionWorkingDirectory: String {

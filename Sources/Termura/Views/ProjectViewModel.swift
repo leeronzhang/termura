@@ -10,6 +10,8 @@ final class ProjectViewModel: ObservableObject {
     @Published private(set) var tree: [FileTreeNode] = []
     @Published private(set) var gitResult: GitStatusResult = .notARepo
     @Published private(set) var isLoading = false
+    /// IDs of expanded folder nodes. Root-level folders are auto-expanded on first scan.
+    @Published var expandedNodeIDs: Set<String> = []
 
     /// True when there are uncommitted changes — drives the tab badge dot.
     var hasUncommittedChanges: Bool { !gitResult.files.isEmpty }
@@ -17,21 +19,27 @@ final class ProjectViewModel: ObservableObject {
     private let gitService: any GitServiceProtocol
     private let fileTreeService = FileTreeService()
     private let projectRoot: String
+    private weak var commandRouter: CommandRouter?
     private var refreshTask: Task<Void, Never>?
-    private var observers: [any NSObjectProtocol] = []
+    private var appActiveObserver: (any NSObjectProtocol)?
     private var debounceTask: Task<Void, Never>?
 
-    init(gitService: any GitServiceProtocol, projectRoot: String) {
+    init(
+        gitService: any GitServiceProtocol,
+        projectRoot: String,
+        commandRouter: CommandRouter? = nil
+    ) {
         self.gitService = gitService
         self.projectRoot = projectRoot
+        self.commandRouter = commandRouter
         setupObservers()
     }
 
     func tearDown() {
-        for observer in observers {
+        if let observer = appActiveObserver {
             NotificationCenter.default.removeObserver(observer)
         }
-        observers.removeAll()
+        appActiveObserver = nil
         refreshTask?.cancel()
         debounceTask?.cancel()
     }
@@ -67,28 +75,27 @@ final class ProjectViewModel: ObservableObject {
             gitResult = status
             isLoading = false
 
-            NotificationCenter.default.post(
-                name: .projectGitStatusChanged,
-                object: !status.files.isEmpty
-            )
+            // Auto-expand root directories on first scan
+            if expandedNodeIDs.isEmpty {
+                for node in annotated where node.isDirectory {
+                    expandedNodeIDs.insert(node.id)
+                }
+            }
+
+            commandRouter?.hasUncommittedChanges = !status.files.isEmpty
         }
     }
 
     // MARK: - Private
 
     private func setupObservers() {
-        let chunkObs = NotificationCenter.default.addObserver(
-            forName: .chunkCompleted,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.debouncedRefresh()
-            }
+        // Refresh git status when a terminal chunk completes (command may have changed files).
+        commandRouter?.onChunkCompleted { [weak self] _ in
+            self?.debouncedRefresh()
         }
-        observers.append(chunkObs)
 
-        let activeObs = NotificationCenter.default.addObserver(
+        // Refresh when the app becomes active (user may have edited files externally).
+        appActiveObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
@@ -97,7 +104,6 @@ final class ProjectViewModel: ObservableObject {
                 self?.refresh()
             }
         }
-        observers.append(activeObs)
     }
 
     private func debouncedRefresh() {
@@ -110,6 +116,7 @@ final class ProjectViewModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
+                logger.warning("Git refresh debounce sleep failed: \(error.localizedDescription)")
                 return
             }
             self?.refresh()

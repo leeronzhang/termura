@@ -17,7 +17,7 @@ extension TerminalViewModel {
     ///   *rendered* state; `getLine(row: cursorRow)` returns exactly what is shown.
 
     /// Characters used as AI tool prompts (Claude Code, Aider, etc.).
-    /// `>` (U+003E), `❯` (U+276F), and `›` (U+203A) are all common.
+    /// `>` (U+003E), U+276F, and U+203A are all common.
     static let aiPromptCharacters: Set<Character> = [">", "\u{276F}", "\u{203A}"]
 
     func detectPromptFromScreenBuffer() {
@@ -64,7 +64,7 @@ extension TerminalViewModel {
     }
 
     /// Returns true if the line is an AI tool prompt: a single prompt character
-    /// optionally followed by whitespace. Handles `>`, `❯`, `›` and variations.
+    /// optionally followed by whitespace. Handles `>`, U+276F, U+203A and variations.
     func isAIPromptLine(_ line: String) -> Bool {
         guard let first = line.first, Self.aiPromptCharacters.contains(first) else {
             return false

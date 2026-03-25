@@ -8,10 +8,11 @@ extension SidebarView {
         let root = sessionStore.projectRoot.isEmpty
             ? activeSessionWorkingDirectory
             : sessionStore.projectRoot
-        if let service = gitService, !root.isEmpty {
+        if !root.isEmpty {
             SidebarProjectContent(
-                gitService: service,
+                gitService: projectContext.gitService,
                 projectRoot: root,
+                commandRouter: commandRouter,
                 onOpenFile: onOpenFile
             )
         } else {
@@ -28,10 +29,15 @@ struct SidebarProjectContent: View {
     init(
         gitService: any GitServiceProtocol,
         projectRoot: String,
+        commandRouter: CommandRouter? = nil,
         onOpenFile: ((String, FileOpenMode) -> Void)? = nil
     ) {
         _viewModel = StateObject(
-            wrappedValue: ProjectViewModel(gitService: gitService, projectRoot: projectRoot)
+            wrappedValue: ProjectViewModel(
+                gitService: gitService,
+                projectRoot: projectRoot,
+                commandRouter: commandRouter
+            )
         )
         self.onOpenFile = onOpenFile
     }
@@ -82,6 +88,15 @@ struct SidebarProjectContent: View {
                 .font(AppUI.Font.labelMono)
                 .foregroundColor(.primary)
                 .lineLimit(1)
+            if !viewModel.gitResult.files.isEmpty {
+                Text("\(viewModel.gitResult.files.count)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.orange)
+                    .clipShape(Capsule())
+            }
             Spacer()
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
@@ -101,6 +116,7 @@ struct SidebarProjectContent: View {
                         FileTreeRowView(
                             node: node,
                             depth: 0,
+                            expandedIDs: $viewModel.expandedNodeIDs,
                             onOpenFile: onOpenFile
                         )
                     }
@@ -119,145 +135,5 @@ struct SidebarProjectContent: View {
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-// MARK: - File Tree Row
-
-private struct FileTreeRowView: View {
-    let node: FileTreeNode
-    let depth: Int
-    var onOpenFile: ((String, FileOpenMode) -> Void)?
-    @State private var isExpanded = false
-
-    /// Auto-expand root level on first appear.
-    init(node: FileTreeNode, depth: Int, onOpenFile: ((String, FileOpenMode) -> Void)? = nil) {
-        self.node = node
-        self.depth = depth
-        self.onOpenFile = onOpenFile
-        _isExpanded = State(initialValue: depth == 0 && node.isDirectory)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            rowContent
-            if node.isDirectory && isExpanded, let children = node.children {
-                ForEach(children) { child in
-                    FileTreeRowView(
-                        node: child,
-                        depth: depth + 1,
-                        onOpenFile: onOpenFile
-                    )
-                }
-            }
-        }
-    }
-
-    private var rowContent: some View {
-        Button {
-            if node.isDirectory {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isExpanded.toggle()
-                }
-            } else {
-                openFile()
-            }
-        } label: {
-            HStack(spacing: AppUI.Spacing.sm) {
-                // Indentation
-                if depth > 0 {
-                    Spacer()
-                        .frame(width: CGFloat(depth) * 16)
-                }
-
-                // Folder chevron or file icon
-                if node.isDirectory {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 12)
-                    Image(systemName: isExpanded ? "folder.fill" : "folder")
-                        .font(AppUI.Font.label)
-                        .foregroundColor(directoryColor)
-                } else {
-                    Spacer().frame(width: 12)
-                    Image(systemName: "doc")
-                        .font(AppUI.Font.label)
-                        .foregroundColor(fileColor)
-                }
-
-                Text(node.name)
-                    .font(AppUI.Font.labelMono)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                Spacer()
-
-                // Git status indicator
-                if let status = node.gitStatus, !node.isDirectory {
-                    gitBadge(status, staged: node.isGitStaged)
-                }
-            }
-            .padding(.horizontal, AppUI.Spacing.xxxl)
-            .padding(.vertical, AppUI.Spacing.xs)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Colors
-
-    private var directoryColor: Color {
-        node.gitStatus != nil ? .orange : .secondary
-    }
-
-    private var fileColor: Color {
-        guard let status = node.gitStatus else { return .secondary }
-        switch status {
-        case .added: return .green
-        case .deleted: return .red
-        case .untracked: return .secondary
-        default: return node.isGitStaged ? .green : .orange
-        }
-    }
-
-    // MARK: - Git badge
-
-    @ViewBuilder
-    private func gitBadge(_ kind: GitFileStatus.Kind, staged: Bool) -> some View {
-        switch kind {
-        case .modified:
-            Text("M")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(staged ? .green : .orange)
-        case .added:
-            Text("A")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(.green)
-        case .deleted:
-            Text("D")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(.red)
-        case .untracked:
-            Text("U")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(.secondary)
-        case .renamed, .copied:
-            Text("R")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(.blue)
-        }
-    }
-
-    // MARK: - Actions
-
-    private func openFile() {
-        if let status = node.gitStatus {
-            let untracked = status == .untracked
-            onOpenFile?(node.relativePath, .diff(staged: node.isGitStaged, untracked: untracked))
-        } else {
-            onOpenFile?(node.relativePath, .edit)
-        }
     }
 }

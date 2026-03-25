@@ -3,7 +3,7 @@ import SwiftUI
 /// Semantic search UI — queries across sessions and rule files using embeddings.
 /// Shown alongside the existing FTS5 search as a "Semantic" tab.
 struct SemanticSearchView: View {
-    let vectorService: VectorSearchService
+    let vectorService: any VectorSearchServiceProtocol
     let onSelectSession: (SessionID) -> Void
     @Binding var isPresented: Bool
 
@@ -94,7 +94,7 @@ struct SemanticSearchView: View {
         isSearching = true
         let service = vectorService
         Task {
-            let hits = await service.search(query: queryText)
+            let hits = await service.search(query: queryText, topK: AppConfig.SemanticSearch.topK)
             await MainActor.run {
                 results = hits
                 isSearching = false

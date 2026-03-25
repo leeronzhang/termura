@@ -100,7 +100,7 @@ private struct BranchPointIndicator: View {
     var body: some View {
         HStack(spacing: AppUI.Spacing.sm) {
             Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 9))
+                .font(AppUI.Font.micro)
                 .foregroundColor(.secondary)
             Text(marker.branchType.rawValue.capitalized)
                 .font(AppUI.Font.caption)

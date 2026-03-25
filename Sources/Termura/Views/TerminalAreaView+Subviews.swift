@@ -15,7 +15,7 @@ extension TerminalAreaView {
                 openDirectoryPicker()
             } label: {
                 Text(viewModel.currentMetadata.workingDirectory)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(AppUI.Font.pathMono)
                     .foregroundColor(.secondary.opacity(AppUI.Opacity.strong))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -61,7 +61,7 @@ extension TerminalAreaView {
                 } label: {
                     Image(systemName: "timeline.selection")
                         .symbolVariant(showTimeline ? .fill : .none)
-                        .font(.system(size: 13))
+                        .font(AppUI.Font.toolbarIcon)
                         .foregroundColor(showTimeline ? .accentColor : .secondary)
                 }
                 .buttonStyle(.plain)
@@ -72,7 +72,7 @@ extension TerminalAreaView {
                 withAnimation { showMetadata.toggle() }
             } label: {
                 Image(systemName: "inset.filled.rightthird.rectangle")
-                    .font(.system(size: 13))
+                    .font(AppUI.Font.toolbarIcon)
                     .foregroundColor(showMetadata ? .accentColor : .secondary)
             }
             .buttonStyle(.plain)
@@ -145,7 +145,13 @@ extension TerminalAreaView {
                 if !isCompact {
                     projectPathBar
                 }
-                TerminalContainerView(viewModel: viewModel, engine: engine, theme: theme, fontSize: fontSize)
+                TerminalContainerView(
+                    viewModel: viewModel,
+                    engine: engine,
+                    theme: themeManager.current,
+                    fontFamily: fontSettings.terminalFontFamily,
+                    fontSize: fontSettings.terminalFontSize
+                )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, AppUI.Spacing.xxl)
                     // Reserve space at the bottom so terminal content is not hidden behind the overlay.
@@ -154,10 +160,12 @@ extension TerminalAreaView {
 
             VStack(spacing: 0) {
                 Spacer()
+                    .allowsHitTesting(false)
                 // Intervention toolbar when agent is active
                 if let agentType = viewModel.currentMetadata.currentAgentType,
                    let agentStatus = viewModel.currentMetadata.currentAgentStatus {
                     interventionBar(agentType: agentType, status: agentStatus)
+                        .zIndex(1)
                 }
                 if modeController.mode == .editor {
                     editorOverlay
@@ -176,7 +184,7 @@ extension TerminalAreaView {
             editorOverlayHeight = height
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(theme.background)
+        .background(themeManager.current.background)
     }
 
 }
@@ -207,7 +215,7 @@ extension TerminalAreaView {
                 .padding(.horizontal, AppUI.Spacing.xxl)
                 .padding(.vertical, AppUI.Spacing.xl)
         }
-        .background(theme.background)
+        .background(themeManager.current.background)
     }
 
     /// Draggable divider between terminal and editor input.

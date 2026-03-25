@@ -9,22 +9,24 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalAre
 struct TerminalAreaView: View {
     let engine: SwiftTermEngine
     let sessionID: SessionID
-    let theme: ThemeColors
-    @ObservedObject var sessionStore: SessionStore
-    let tokenCountingService: TokenCountingService
-    var agentStateStore: AgentStateStore?
-    let isRestoredSession: Bool
-    var contextInjectionService: ContextInjectionService?
-    var sessionHandoffService: SessionHandoffService?
-    var fontSize: CGFloat = AppConfig.Fonts.terminalSize
     /// When true (split pane mode), hides side panels and toolbar to save space.
     var isCompact: Bool = false
 
-    @StateObject var outputStore: OutputStore
-    @StateObject var modeController: InputModeController
-    @StateObject var viewModel: TerminalViewModel
-    @StateObject var editorViewModel: EditorViewModel
-    @StateObject private var timeline: SessionTimeline
+    @EnvironmentObject var projectContext: ProjectContext
+    @EnvironmentObject var commandRouter: CommandRouter
+    @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var fontSettings: FontSettings
+    /// Per-session state container — owned by `ProjectContext.sessionViewStates`,
+    /// received here as `@ObservedObject` to avoid the fragile `@StateObject`-in-init pattern.
+    @ObservedObject var state: SessionViewState
+
+    // MARK: - Convenience accessors
+
+    var outputStore: OutputStore { state.outputStore }
+    var modeController: InputModeController { state.modeController }
+    var viewModel: TerminalViewModel { state.viewModel }
+    var editorViewModel: EditorViewModel { state.editorViewModel }
+    var timeline: SessionTimeline { state.timeline }
 
     @State var showTimeline = false
     @State var showMetadata = true
@@ -42,58 +44,6 @@ struct TerminalAreaView: View {
     let editorHandle = EditorViewHandle()
     /// Token returned by NSEvent.addLocalMonitorForEvents; retained for removal on disappear.
     @State private var keyEventMonitor: Any?
-
-    // MARK: - Init
-
-    init(
-        engine: SwiftTermEngine,
-        sessionID: SessionID,
-        theme: ThemeColors,
-        sessionStore: SessionStore,
-        tokenCountingService: TokenCountingService,
-        agentStateStore: AgentStateStore? = nil,
-        isRestoredSession: Bool = false,
-        contextInjectionService: ContextInjectionService? = nil,
-        sessionHandoffService: SessionHandoffService? = nil,
-        fontSize: CGFloat = AppConfig.Fonts.terminalSize,
-        isCompact: Bool = false
-    ) {
-        self.engine = engine
-        self.sessionID = sessionID
-        self.theme = theme
-        self.sessionStore = sessionStore
-        self.tokenCountingService = tokenCountingService
-        self.agentStateStore = agentStateStore
-        self.isRestoredSession = isRestoredSession
-        self.contextInjectionService = contextInjectionService
-        self.sessionHandoffService = sessionHandoffService
-        self.fontSize = fontSize
-        self.isCompact = isCompact
-
-        let store = OutputStore(sessionID: sessionID)
-        let modeCtrl = InputModeController()
-        let tl = SessionTimeline()
-
-        _outputStore = StateObject(wrappedValue: store)
-        _modeController = StateObject(wrappedValue: modeCtrl)
-        _timeline = StateObject(wrappedValue: tl)
-        _viewModel = StateObject(wrappedValue: TerminalViewModel(
-            sessionID: sessionID,
-            engine: engine,
-            sessionStore: sessionStore,
-            outputStore: store,
-            tokenCountingService: tokenCountingService,
-            modeController: modeCtrl,
-            agentStateStore: agentStateStore,
-            isRestoredSession: isRestoredSession,
-            contextInjectionService: contextInjectionService,
-            sessionHandoffService: sessionHandoffService
-        ))
-        _editorViewModel = StateObject(wrappedValue: EditorViewModel(
-            engine: engine,
-            modeController: modeCtrl
-        ))
-    }
 
     // MARK: - Body
 
@@ -125,13 +75,16 @@ struct TerminalAreaView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(theme.background)
+            .background(themeManager.current.background)
 
             // EditorInputView is rendered inside terminalAndOutputArea as a ZStack overlay.
         }
         .onAppear {
             installKeyRouter()
             checkContextFileExists()
+            editorViewModel.onCommandSubmit = { [weak viewModel] cmd in
+                viewModel?.detectAgentFromCommand(cmd)
+            }
             Task { @MainActor in
                 do {
                     try await Task.sleep(
@@ -146,44 +99,37 @@ struct TerminalAreaView: View {
                 editorHandle.textView?.window?.makeFirstResponder(editorHandle.textView)
             }
         }
-        .onDisappear { removeKeyRouter() }
-        .sheet(item: $viewModel.pendingRiskAlert) { risk in
+        .onDisappear {
+            removeKeyRouter()
+        }
+        .sheet(item: $state.viewModel.pendingRiskAlert) { risk in
             InterventionAlertView(
                 alert: risk,
-                onProceed: { viewModel.pendingRiskAlert = nil },
+                onProceed: { state.viewModel.pendingRiskAlert = nil },
                 onCancel: { [engine] in
-                    viewModel.pendingRiskAlert = nil
+                    state.viewModel.pendingRiskAlert = nil
                     Task { await engine.send("\u{03}") }
                 }
             )
         }
-        .sheet(item: $viewModel.contextWindowAlert) { alert in
+        .sheet(item: $state.viewModel.contextWindowAlert) { alert in
             ContextWindowAlertView(alert: alert) {
-                viewModel.contextWindowAlert = nil
+                state.viewModel.contextWindowAlert = nil
             }
         }
         .onChange(of: outputStore.chunks.count) { old, new in
             guard new > old, let latest = outputStore.chunks.last else { return }
             timeline.append(latest)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .showExport)) { notification in
-            if let targetID = notification.object as? SessionID, targetID == sessionID {
-                showExportSheet = true
-            } else if notification.object == nil {
-                showExportSheet = true
-            }
-        }
         .sheet(isPresented: $showExportSheet) {
-            if let session = sessionStore.sessions.first(where: { $0.id == sessionID }) {
+            if let session = projectContext.sessionStore.sessions
+                .first(where: { $0.id == sessionID }) {
                 ExportOptionsView(
                     session: session,
                     chunks: outputStore.chunks,
                     isPresented: $showExportSheet
                 )
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleTimeline)) { _ in
-            withAnimation { showTimeline.toggle() }
         }
         .sheet(isPresented: $showContextSheet) {
             ContextFileView(
@@ -193,6 +139,9 @@ struct TerminalAreaView: View {
         }
         .onChange(of: viewModel.currentMetadata.workingDirectory) { _, _ in
             checkContextFileExists()
+        }
+        .onChange(of: commandRouter.toggleTimelineTick) { _, _ in
+            withAnimation { showTimeline.toggle() }
         }
     }
 
@@ -215,18 +164,35 @@ struct TerminalAreaView: View {
 
     /// Ensures focus always lands on EditorTextView when a key is pressed.
     /// Ctrl+letter and Escape are handled by EditorTextView.keyDown → PTY directly.
+    ///
+    /// `NSEvent.addLocalMonitorForEvents` monitors the *current thread's* run loop.
+    /// Since we install from the main thread, the callback always fires on main.
+    /// `dispatchPrecondition` asserts this at runtime in DEBUG builds.
     private func installKeyRouter() {
         let handle = editorHandle
+        let modeCtrl = modeController
+        let termEngine = engine
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            dispatchPrecondition(condition: .onQueue(.main))
+
             guard let window = NSApp.keyWindow,
                   let editorView = handle.textView,
                   editorView.window == window else { return event }
-            // EditorTextView already has focus — pass through untouched.
-            if window.firstResponder is EditorTextView { return event }
-            // Let Cmd-key shortcuts (Cmd+Q, Cmd+W, etc.) pass through to the
-            // menu system instead of being swallowed by the editor.
+            // Let Cmd-key shortcuts (Cmd+Q, Cmd+W, etc.) always pass through to the
+            // menu system — regardless of input mode.
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if flags.contains(.command) { return event }
+            // In passthrough mode the editor is hidden — route keys to the terminal.
+            if modeCtrl.mode == .passthrough {
+                let termView = termEngine.terminalView
+                if window.firstResponder !== termView {
+                    window.makeFirstResponder(termView)
+                }
+                termView.keyDown(with: event)
+                return nil
+            }
+            // EditorTextView already has focus — pass through untouched.
+            if window.firstResponder is EditorTextView { return event }
             // Steal focus and forward the event directly so the first keystroke
             // is not lost to SwiftTerm. Return nil to consume the original dispatch.
             window.makeFirstResponder(editorView)

@@ -15,6 +15,7 @@ final class MockTerminalEngine: TerminalEngine {
     private(set) var sentBytes: [Data] = []
     private(set) var resizes: [(UInt16, UInt16)] = []
     private(set) var terminateCallCount = 0
+    var stubbedLinesNearCursor: [String] = []
 
     // MARK: - Continuations
 
@@ -24,19 +25,13 @@ final class MockTerminalEngine: TerminalEngine {
     // MARK: - Init
 
     init() {
-        var outputCap: AsyncStream<TerminalOutputEvent>.Continuation?
-        outputStream = AsyncStream { outputCap = $0 }
-        guard let outputCap else {
-            preconditionFailure("AsyncStream continuation must be set synchronously")
-        }
-        continuation = outputCap
+        let (outStream, outCont) = AsyncStream.makeStream(of: TerminalOutputEvent.self)
+        outputStream = outStream
+        continuation = outCont
 
-        var shellCap: AsyncStream<ShellIntegrationEvent>.Continuation?
-        shellEventsStream = AsyncStream { shellCap = $0 }
-        guard let shellCap else {
-            preconditionFailure("AsyncStream shell continuation must be set synchronously")
-        }
-        shellContinuation = shellCap
+        let (shellStream, shellCont) = AsyncStream.makeStream(of: ShellIntegrationEvent.self)
+        shellEventsStream = shellStream
+        shellContinuation = shellCont
     }
 
     // MARK: - Test helpers
@@ -67,7 +62,7 @@ final class MockTerminalEngine: TerminalEngine {
 
     func cursorLineContent() -> String? { nil }
 
-    func linesNearCursor(above count: Int) -> [String] { [] }
+    func linesNearCursor(above count: Int) -> [String] { stubbedLinesNearCursor }
 
     func terminate() async {
         isRunning = false

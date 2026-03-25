@@ -23,21 +23,13 @@ final class LibghosttyEngine: TerminalEngine {
     // MARK: - Init
 
     init(sessionID: SessionID) {
-        var outCap: AsyncStream<TerminalOutputEvent>.Continuation?
-        let outStream = AsyncStream<TerminalOutputEvent> { outCap = $0 }
-        guard let outCap else {
-            preconditionFailure("AsyncStream continuation must be set synchronously")
-        }
+        let (outStream, outCont) = AsyncStream.makeStream(of: TerminalOutputEvent.self)
         outputStream = outStream
-        outputContinuation = outCap
+        outputContinuation = outCont
 
-        var shellCap: AsyncStream<ShellIntegrationEvent>.Continuation?
-        let shellStream = AsyncStream<ShellIntegrationEvent> { shellCap = $0 }
-        guard let shellCap else {
-            preconditionFailure("AsyncStream shell continuation must be set synchronously")
-        }
+        let (shellStream, shellCont) = AsyncStream.makeStream(of: ShellIntegrationEvent.self)
         shellEventsStream = shellStream
-        shellContinuation = shellCap
+        shellContinuation = shellCont
 
         logger.debug("LibghosttyEngine stub created for session \(sessionID.rawValue)")
     }

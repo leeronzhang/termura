@@ -175,10 +175,10 @@ private struct DiffLine {
 
     var backgroundColor: Color {
         if raw.hasPrefix("+") && !raw.hasPrefix("+++") {
-            return Color.green.opacity(0.1)
+            return Color.green.opacity(AppUI.Opacity.diffAddition)
         }
         if raw.hasPrefix("-") && !raw.hasPrefix("---") {
-            return Color.red.opacity(0.1)
+            return Color.red.opacity(AppUI.Opacity.diffRemoval)
         }
         return .clear
     }

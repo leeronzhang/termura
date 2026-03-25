@@ -5,34 +5,28 @@ extension MainView {
     var exportSheet: some View {
         // Export is handled by TerminalAreaView which has access to OutputStore chunks.
         // This sheet is a fallback for sessions without an active terminal.
-        if let sid = exportSessionID,
+        if let sid = commandRouter.exportSessionID,
            let session = sessionStore.sessions.first(where: { $0.id == sid }) {
             ExportOptionsView(
                 session: session,
                 chunks: [],
-                isPresented: $showExport
+                isPresented: Binding(
+                    get: { commandRouter.exportSessionID != nil },
+                    set: { if !$0 { commandRouter.exportSessionID = nil } }
+                )
             )
         }
     }
 
     @ViewBuilder
     var harnessSheet: some View {
-        if let repo = ruleFileRepository {
-            let projectRoot = activeSessionWorkingDirectory
-            let vm = HarnessViewModel(repository: repo, projectRoot: projectRoot)
-            HarnessSidebarView(viewModel: vm, isPresented: $showHarness)
-                .frame(minWidth: 300, idealHeight: 500)
-        } else {
-            VStack(spacing: AppUI.Spacing.lg) {
-                Text("Harness Rules")
-                    .font(.headline)
-                Text("Database not available.")
-                    .foregroundColor(.secondary)
-                Button("Close") { showHarness = false }
-            }
-            .frame(minWidth: 300, minHeight: 200)
-            .padding(AppUI.Spacing.xxl)
-        }
+        let projectRoot = activeSessionWorkingDirectory
+        let vm = HarnessViewModel(
+            repository: projectContext.ruleFileRepository,
+            projectRoot: projectRoot
+        )
+        HarnessSidebarView(viewModel: vm, isPresented: $commandRouter.showHarness)
+            .frame(minWidth: 300, idealHeight: 500)
     }
 
     /// Working directory of the active session, falling back to home directory.
@@ -54,7 +48,7 @@ extension MainView {
                 branchSession: session,
                 chunks: [],
                 onMerge: { summary in
-                    let msgRepo = sessionMessageRepository
+                    let msgRepo = projectContext.sessionMessageRepository
                     Task {
                         await sessionStore.mergeBranchSummary(
                             branchID: activeID,
@@ -62,9 +56,9 @@ extension MainView {
                             messageRepo: msgRepo
                         )
                     }
-                    showBranchMerge = false
+                    commandRouter.showBranchMerge = false
                 },
-                onCancel: { showBranchMerge = false }
+                onCancel: { commandRouter.showBranchMerge = false }
             )
         }
     }
