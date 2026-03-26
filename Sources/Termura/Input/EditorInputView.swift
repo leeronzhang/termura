@@ -70,7 +70,7 @@ struct EditorInputView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.font = NSFont(name: AppConfig.Fonts.terminalFamily, size: AppConfig.Fonts.editorSize)
             ?? NSFont.monospacedSystemFont(ofSize: AppConfig.Fonts.editorSize, weight: .regular)
-        textView.placeholderString = "输入命令，Shift+Enter 换行，↑↓ 历史"
+        textView.placeholderString = "Type a command or prompt..."
         textView.delegate = coordinator
 
         // Register in handle so TerminalAreaView's key-routing monitor can find us
@@ -102,8 +102,8 @@ private extension NSColor {
     static var editorInputBackground: NSColor {
         NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? NSColor(white: 0.13, alpha: 1)
-                : NSColor(white: 0.97, alpha: 1)
+                ? NSColor(white: AppConfig.UI.editorBackgroundDark, alpha: 1)
+                : NSColor(white: AppConfig.UI.editorBackgroundLight, alpha: 1)
         }
     }
 }

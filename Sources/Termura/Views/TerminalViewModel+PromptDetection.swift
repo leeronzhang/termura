@@ -40,7 +40,6 @@ extension TerminalViewModel {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if isAIPromptLine(trimmed) {
                 isInteractivePrompt = true
-                modeController.switchToEditor()
                 injectContextIfNeeded()
                 return
             }
@@ -50,10 +49,6 @@ extension TerminalViewModel {
         let cursorLine = lines.last?.trimmingCharacters(in: .whitespaces) ?? ""
         if isShellPromptLine(cursorLine) {
             isInteractivePrompt = false
-            if modeController.mode == .passthrough {
-                modeController.switchToEditor()
-                injectContextIfNeeded()
-            }
         }
     }
 
@@ -86,6 +81,7 @@ extension TerminalViewModel {
             } catch is CancellationError {
                 return
             } catch {
+                // Non-critical: prompt recheck is a debounced UI hint; missing it is imperceptible.
                 logger.warning("Prompt recheck delay failed: \(error.localizedDescription)")
                 return
             }

@@ -1,30 +1,31 @@
 import Foundation
+import Observation
 import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "CommandRouter")
 
 /// Type-safe command router replacing NotificationCenter for menu → view communication.
-/// Owned per-project by `ProjectContext`; injected into the view hierarchy via `@EnvironmentObject`.
-@MainActor
-final class CommandRouter: ObservableObject {
+/// Owned per-project by `ProjectContext`; injected via `@Environment(\.commandRouter)`.
+@Observable @MainActor
+final class CommandRouter {
     // MARK: - Sheet presentation
 
-    @Published var showSearch = false
-    @Published var showNotes = false
-    @Published var showHarness = false
-    @Published var showBranchMerge = false
-    @Published var showShellOnboarding = false
+    var showSearch = false
+    var showNotes = false
+    var showHarness = false
+    var showBranchMerge = false
+    var showShellOnboarding = false
 
     /// Non-nil triggers export sheet for the specified session.
-    @Published var exportSessionID: SessionID?
+    var exportSessionID: SessionID?
 
     // MARK: - Sidebar
 
-    @Published var showSidebar = true
+    var showSidebar = true
 
     // MARK: - Split pane actions (consumed by MainView)
 
-    @Published var pendingSplitAction: SplitAction?
+    var pendingSplitAction: SplitAction?
 
     enum SplitAction: Equatable {
         case vertical, horizontal, closePane
@@ -32,12 +33,14 @@ final class CommandRouter: ObservableObject {
 
     // MARK: - Per-terminal toggles
 
-    @Published var toggleTimelineTick: UInt = 0
-    @Published var toggleAgentDashboardTick: UInt = 0
+    var toggleTimelineTick: UInt = 0
+    var toggleAgentDashboardTick: UInt = 0
+    var toggleComposerTick: UInt = 0
+    var showComposer: Bool = false
 
     // MARK: - Data signals
 
-    @Published var hasUncommittedChanges = false
+    var hasUncommittedChanges = false
 
     // MARK: - Chunk completed callbacks
 
@@ -73,7 +76,7 @@ final class CommandRouter: ObservableObject {
     }
 
     /// Incremented when user presses Cmd+W — MainView observes and closes the active tab.
-    @Published var closeTabTick: UInt = 0
+    var closeTabTick: UInt = 0
 
     func requestCloseTab() { closeTabTick &+= 1 }
     func requestSplitHorizontal() { pendingSplitAction = .horizontal }
@@ -90,5 +93,9 @@ final class CommandRouter: ObservableObject {
 
     func toggleAgentDashboard() {
         toggleAgentDashboardTick &+= 1
+    }
+
+    func toggleComposer() {
+        showComposer.toggle()
     }
 }

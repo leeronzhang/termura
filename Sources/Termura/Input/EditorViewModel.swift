@@ -39,9 +39,8 @@ final class EditorViewModel: ObservableObject {
         modeController.switchToPassthrough()
         logger.debug("Submitting command length=\(text.count)")
         onCommandSubmit?(text)
-        Task {
-            await engine.send(text + "\r")
-        }
+        // Lifecycle: single actor call — engine serializes internally; no cancellation needed.
+        Task { await engine.send(text + "\r") }
     }
 
     /// Insert a literal newline at the cursor position.
@@ -71,6 +70,7 @@ final class EditorViewModel: ObservableObject {
     /// Send raw bytes to the PTY without appending a newline.
     /// Used for control sequences: Ctrl+C (ETX), Escape, etc.
     func sendRaw(_ text: String) {
+        // Lifecycle: single actor call — engine serializes internally; no cancellation needed.
         Task { await engine.send(text) }
     }
 }

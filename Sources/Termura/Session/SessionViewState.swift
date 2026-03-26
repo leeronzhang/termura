@@ -13,6 +13,7 @@ final class SessionViewState: ObservableObject {
     var editorViewModel: EditorViewModel
     let modeController: InputModeController
     let timeline: SessionTimeline
+    let editorHandle = EditorViewHandle()
 
     init(
         outputStore: OutputStore,

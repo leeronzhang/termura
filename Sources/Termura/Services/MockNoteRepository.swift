@@ -6,7 +6,11 @@ actor MockNoteRepository: NoteRepositoryProtocol {
     private var order: [NoteID] = []
 
     func fetchAll() async throws -> [NoteRecord] {
-        order.compactMap { store[$0] }
+        order.compactMap { store[$0] }.filter { !$0.isSnippet }
+    }
+
+    func fetchSnippets() async throws -> [NoteRecord] {
+        order.compactMap { store[$0] }.filter { $0.isSnippet }
     }
 
     func save(_ note: NoteRecord) async throws {
@@ -22,8 +26,20 @@ actor MockNoteRepository: NoteRepositoryProtocol {
     func search(query: String) async throws -> [NoteRecord] {
         let lowered = query.lowercased()
         return order.compactMap { store[$0] }.filter {
-            $0.title.lowercased().contains(lowered) ||
+            !$0.isSnippet && (
+                $0.title.lowercased().contains(lowered) ||
                 $0.body.lowercased().contains(lowered)
+            )
+        }
+    }
+
+    func searchSnippets(query: String) async throws -> [NoteRecord] {
+        let lowered = query.lowercased()
+        return order.compactMap { store[$0] }.filter {
+            $0.isSnippet && (
+                $0.title.lowercased().contains(lowered) ||
+                $0.body.lowercased().contains(lowered)
+            )
         }
     }
 }

@@ -13,6 +13,7 @@ enum DatabaseMigrations {
         registerV5SessionTree(into: &migrator)
         registerV6RuleFiles(into: &migrator)
         registerV7AgentType(into: &migrator)
+        registerV8Snippets(into: &migrator)
     }
 
     // MARK: - v1: sessions table
@@ -175,6 +176,21 @@ enum DatabaseMigrations {
                     .defaults(to: "unknown")
             }
             logger.info("v7 migration complete: agent_type column")
+        }
+    }
+
+    // MARK: - v4: notes + FTS5
+
+    // MARK: - v8: snippets flag on notes
+
+    private static func registerV8Snippets(into migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v8_snippets") { db in
+            try db.alter(table: "notes") { table in
+                table.add(column: "is_snippet", .integer)
+                    .notNull()
+                    .defaults(to: 0)
+            }
+            logger.info("v8 migration complete: is_snippet column on notes")
         }
     }
 

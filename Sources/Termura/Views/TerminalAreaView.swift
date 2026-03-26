@@ -7,25 +7,28 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalAre
 /// Composes the terminal display, chunked output overlay, metadata panel, and editor input.
 /// All @StateObject lifetimes are tied to the session via `.id(sessionID)` in the parent.
 struct TerminalAreaView: View {
-    let engine: SwiftTermEngine
+    let engine: any TerminalEngine
     let sessionID: SessionID
     /// When true (split pane mode), hides side panels and toolbar to save space.
     var isCompact: Bool = false
 
     @EnvironmentObject var projectContext: ProjectContext
-    @EnvironmentObject var commandRouter: CommandRouter
-    @EnvironmentObject var themeManager: ThemeManager
-    @EnvironmentObject var fontSettings: FontSettings
+    @Environment(\.commandRouter) var commandRouter
+    @Environment(\.themeManager) var themeManager
+    @Environment(\.fontSettings) var fontSettings
     /// Per-session state container — owned by `ProjectContext.sessionViewStates`,
     /// received here as `@ObservedObject` to avoid the fragile `@StateObject`-in-init pattern.
     @ObservedObject var state: SessionViewState
 
     // MARK: - Convenience accessors
 
+    var showComposer: Bool { commandRouter.showComposer }
+
     var outputStore: OutputStore { state.outputStore }
     var modeController: InputModeController { state.modeController }
     var viewModel: TerminalViewModel { state.viewModel }
     var editorViewModel: EditorViewModel { state.editorViewModel }
+    var notesViewModel: NotesViewModel { projectContext.notesViewModel }
     var timeline: SessionTimeline { state.timeline }
 
     @State var showTimeline = false
@@ -34,14 +37,9 @@ struct TerminalAreaView: View {
     @State var showContextSheet = false
     @State var contextFileExists = false
     @State private var metadataPanelWidth: Double = AppConfig.UI.metadataPanelWidth
-    /// Tracks the measured height of the editor overlay so the terminal can add matching bottom padding.
-    @State var editorOverlayHeight: CGFloat = 0
-    /// User-adjustable editor height, draggable via the divider.
-    @State var editorHeight: CGFloat = AppConfig.UI.editorMinHeightPoints
-    @State var editorDragStart: CGFloat?
 
-    /// Shared handle so the key-routing monitor can find the live EditorTextView.
-    let editorHandle = EditorViewHandle()
+    /// Shared handle — lives in SessionViewState so MainView can access it for the Composer.
+    var editorHandle: EditorViewHandle { state.editorHandle }
     /// Token returned by NSEvent.addLocalMonitorForEvents; retained for removal on disappear.
     @State private var keyEventMonitor: Any?
 
@@ -72,6 +70,7 @@ struct TerminalAreaView: View {
             .onChange(of: commandRouter.toggleTimelineTick) { _, _ in
                 withAnimation { showTimeline.toggle() }
             }
+            // Composer toggle is handled directly in the key router and toolbar button.
     }
 
     // MARK: - Extracted layout
@@ -79,13 +78,6 @@ struct TerminalAreaView: View {
     private var mainLayout: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                if !isCompact {
-                    if showTimeline && !outputStore.chunks.isEmpty {
-                        TimelineView(timeline: timeline) { _ in }
-                        Divider()
-                    }
-                }
-
                 terminalAndOutputArea
 
                 if !isCompact && showMetadata {
@@ -95,13 +87,18 @@ struct TerminalAreaView: View {
                         maxWidth: AppConfig.UI.metadataPanelMaxWidth,
                         dragFactor: -1.0
                     )
-                    SessionMetadataBarView(metadata: viewModel.currentMetadata)
-                        .frame(width: metadataPanelWidth)
+                    SessionMetadataBarView(
+                        metadata: viewModel.currentMetadata,
+                        timeline: timeline,
+                        onSelectChunkID: { _ in }
+                    )
+                    .frame(width: metadataPanelWidth)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(themeManager.current.background)
         }
+        // Composer overlay is rendered inside terminalAndOutputArea as a bottom sheet.
     }
 
     // MARK: - Lifecycle
@@ -111,19 +108,6 @@ struct TerminalAreaView: View {
         checkContextFileExists()
         editorViewModel.onCommandSubmit = { [weak viewModel] cmd in
             viewModel?.detectAgentFromCommand(cmd)
-        }
-        Task { @MainActor in
-            do {
-                try await Task.sleep(
-                    nanoseconds: AppConfig.UI.editorFocusDelayNanoseconds
-                )
-            } catch is CancellationError {
-                return
-            } catch {
-                logger.warning("Editor focus delay failed: \(error.localizedDescription)")
-                return
-            }
-            editorHandle.textView?.window?.makeFirstResponder(editorHandle.textView)
         }
     }
 
@@ -136,6 +120,7 @@ struct TerminalAreaView: View {
         let path = (dir as NSString)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
             .appending("/\(AppConfig.SessionHandoff.contextFileName)")
+        // Lifecycle: one-shot file check — result is cosmetic UI state, no cleanup needed.
         Task.detached {
             let exists = FileManager.default.fileExists(atPath: path)
             await MainActor.run { contextFileExists = exists }
@@ -151,35 +136,35 @@ struct TerminalAreaView: View {
     /// Since we install from the main thread, the callback always fires on main.
     /// `dispatchPrecondition` asserts this at runtime in DEBUG builds.
     private func installKeyRouter() {
-        let handle = editorHandle
         let modeCtrl = modeController
         let termEngine = engine
+        let router = commandRouter
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             dispatchPrecondition(condition: .onQueue(.main))
 
-            guard let window = NSApp.keyWindow,
-                  let editorView = handle.textView,
-                  editorView.window == window else { return event }
-            // Let Cmd-key shortcuts (Cmd+Q, Cmd+W, etc.) always pass through to the
-            // menu system — regardless of input mode.
+            guard let window = NSApp.keyWindow else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            // Intercept Cmd+K directly to toggle composer — prevents NSView from consuming it.
+            if flags == .command, event.charactersIgnoringModifiers == "k" {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    router.showComposer.toggle()
+                }
+                return nil
+            }
+            // Let other Cmd-key shortcuts pass through to the menu system.
             if flags.contains(.command) { return event }
-            // In passthrough mode the editor is hidden — route keys to the terminal.
+            // When Composer is open, let all events flow to the Composer's views.
+            if router.showComposer { return event }
+            // In passthrough mode route keys to the terminal.
             if modeCtrl.mode == .passthrough {
-                let termView = termEngine.terminalView
+                let termView = termEngine.terminalNSView
                 if window.firstResponder !== termView {
                     window.makeFirstResponder(termView)
                 }
                 termView.keyDown(with: event)
                 return nil
             }
-            // EditorTextView already has focus — pass through untouched.
-            if window.firstResponder is EditorTextView { return event }
-            // Steal focus and forward the event directly so the first keystroke
-            // is not lost to SwiftTerm. Return nil to consume the original dispatch.
-            window.makeFirstResponder(editorView)
-            editorView.keyDown(with: event)
-            return nil
+            return event
         }
     }
 
@@ -198,21 +183,22 @@ private struct TerminalAreaSheets: ViewModifier {
     @Binding var contextWindowAlert: ContextWindowAlert?
     @Binding var showExportSheet: Bool
     @Binding var showContextSheet: Bool
-    let engine: SwiftTermEngine
+    let engine: any TerminalEngine
     let sessionID: SessionID
     let projectContext: ProjectContext
     let outputStore: OutputStore
     let viewModel: TerminalViewModel
 
     func body(content: Content) -> some View {
+        let eng = engine
         content
             .sheet(item: $riskAlert) { risk in
                 InterventionAlertView(
                     alert: risk,
                     onProceed: { riskAlert = nil },
-                    onCancel: { [engine] in
+                    onCancel: {
                         riskAlert = nil
-                        Task { await engine.send("\u{03}") }
+                        Task { await eng.send("\u{03}") }
                     }
                 )
             }
@@ -240,11 +226,4 @@ private struct TerminalAreaSheets: ViewModifier {
     }
 }
 
-// MARK: - PreferenceKey for editor overlay height
-
-struct EditorOverlayHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
+// EditorOverlayHeightKey removed — editor overlay replaced by on-demand ComposerOverlayView.

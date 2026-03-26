@@ -37,12 +37,12 @@ struct AppCommands: Commands {
             Divider()
 
             Button("Search\u{2026}") {
-                appDelegate?.commandRouter?.requestSearch()
+                appDelegate?.activeContext?.commandRouter.requestSearch()
             }
             .keyboardShortcut("f", modifiers: [.command, .shift])
 
             Button("New Note") {
-                appDelegate?.commandRouter?.requestNotes()
+                appDelegate?.activeContext?.commandRouter.requestNotes()
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
 
@@ -50,7 +50,7 @@ struct AppCommands: Commands {
 
             Button("Export Session\u{2026}") {
                 guard let id = appDelegate?.activeContext?.sessionStore.activeSessionID else { return }
-                appDelegate?.commandRouter?.requestExport(sessionID: id)
+                appDelegate?.activeContext?.commandRouter.requestExport(sessionID: id)
             }
             .keyboardShortcut("e", modifiers: [.command, .shift])
 
@@ -61,7 +61,7 @@ struct AppCommands: Commands {
             Divider()
 
             Button("Harness Rules\u{2026}") {
-                appDelegate?.commandRouter?.requestHarness()
+                appDelegate?.activeContext?.commandRouter.requestHarness()
             }
             .keyboardShortcut("h", modifiers: [.command, .shift])
 
@@ -74,31 +74,36 @@ struct AppCommands: Commands {
     @ViewBuilder
     private var splitAndToggleButtons: some View {
         Button("Split Horizontally") {
-            appDelegate?.commandRouter?.requestSplitHorizontal()
+            appDelegate?.activeContext?.commandRouter.requestSplitHorizontal()
         }
         .keyboardShortcut("d", modifiers: .command)
 
         Button("Split Vertically") {
-            appDelegate?.commandRouter?.requestSplitVertical()
+            appDelegate?.activeContext?.commandRouter.requestSplitVertical()
         }
         .keyboardShortcut("d", modifiers: [.command, .shift])
 
         Button("Close Split Pane") {
-            appDelegate?.commandRouter?.requestCloseSplitPane()
+            appDelegate?.activeContext?.commandRouter.requestCloseSplitPane()
         }
         .keyboardShortcut("w", modifiers: [.command, .shift])
 
         Divider()
 
         Button("Toggle Timeline") {
-            appDelegate?.commandRouter?.toggleTimeline()
+            appDelegate?.activeContext?.commandRouter.toggleTimeline()
         }
         .keyboardShortcut("l", modifiers: [.command, .shift])
 
         Button("Toggle Agent Dashboard") {
-            appDelegate?.commandRouter?.toggleAgentDashboard()
+            appDelegate?.activeContext?.commandRouter.toggleAgentDashboard()
         }
         .keyboardShortcut("a", modifiers: [.command, .shift])
+
+        Button("Toggle Composer") {
+            appDelegate?.activeContext?.commandRouter.toggleComposer()
+        }
+        .keyboardShortcut("k", modifiers: [.command])
     }
 
     // MARK: - View commands (zoom, after toolbar)
@@ -145,7 +150,7 @@ struct AppCommands: Commands {
             Divider()
 
             Button("Merge Branch Summary\u{2026}") {
-                appDelegate?.commandRouter?.requestBranchMerge()
+                appDelegate?.activeContext?.commandRouter.requestBranchMerge()
             }
             .keyboardShortcut("m", modifiers: [.command, .shift])
         }

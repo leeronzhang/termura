@@ -58,34 +58,24 @@ extension TerminalAreaView {
 
     @ViewBuilder
     private var toolbarButtons: some View {
-        if isAgentBusy {
-            HStack(spacing: AppUI.Spacing.sm) {
-                Circle()
-                    .fill(.orange)
-                    .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
-                Text("Agent active")
-                    .font(AppUI.Font.caption)
-                    .foregroundColor(.secondary)
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                commandRouter.showComposer.toggle()
             }
+        } label: {
+            Image(systemName: "menubar.dock.rectangle")
+                .font(AppUI.Font.toolbarIcon)
+                .foregroundColor(commandRouter.showComposer ? .accentColor : .secondary)
         }
+        .buttonStyle(.plain)
+        .help("Composer (Cmd+K)")
 
-        if !outputStore.chunks.isEmpty {
-            Button {
-                withAnimation { showTimeline.toggle() }
-            } label: {
-                Image(systemName: "timeline.selection")
-                    .symbolVariant(showTimeline ? .fill : .none)
-                    .font(AppUI.Font.toolbarIcon)
-                    .foregroundColor(showTimeline ? .accentColor : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Toggle Timeline")
-        }
+        Spacer().frame(width: AppUI.Spacing.lg)
 
         Button {
             withAnimation { showMetadata.toggle() }
         } label: {
-            Image(systemName: "inset.filled.rightthird.rectangle")
+            Image(systemName: "info.windshield")
                 .font(AppUI.Font.toolbarIcon)
                 .foregroundColor(showMetadata ? .accentColor : .secondary)
         }
@@ -149,11 +139,11 @@ extension TerminalAreaView {
 
     @ViewBuilder
     var terminalAndOutputArea: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                if !isCompact {
-                    projectPathBar
-                }
+        VStack(spacing: 0) {
+            if !isCompact {
+                projectPathBar
+            }
+            ZStack(alignment: .bottom) {
                 TerminalContainerView(
                     viewModel: viewModel,
                     engine: engine,
@@ -161,36 +151,34 @@ extension TerminalAreaView {
                     fontFamily: fontSettings.terminalFontFamily,
                     fontSize: fontSettings.terminalFontSize
                 )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, AppUI.Spacing.xxl)
-                    // Reserve space at the bottom so terminal content is not hidden behind the overlay.
-                    .padding(.bottom, modeController.mode == .editor ? editorOverlayHeight : 0)
-            }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            VStack(spacing: 0) {
-                Spacer()
-                    .allowsHitTesting(false)
-                // Intervention toolbar when agent is active
-                if let agentType = viewModel.currentMetadata.currentAgentType,
-                   let agentStatus = viewModel.currentMetadata.currentAgentStatus {
-                    interventionBar(agentType: agentType, status: agentStatus)
-                        .zIndex(1)
-                }
-                if modeController.mode == .editor {
-                    editorOverlay
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear.preference(
-                                    key: EditorOverlayHeightKey.self,
-                                    value: geo.size.height
-                                )
+                if commandRouter.showComposer {
+                    // Backdrop — covers exactly the terminal content area.
+                    themeManager.current.background.opacity(AppUI.Opacity.strong)
+                        .transition(.opacity.animation(.easeOut(duration: AppUI.Animation.fadeOut)))
+                        .onTapGesture {
+                            withAnimation(.easeOut(duration: AppUI.Animation.panel)) {
+                                commandRouter.showComposer = false
                             }
-                        )
+                        }
+
+                    ComposerOverlayView(
+                        editorViewModel: editorViewModel,
+                        notesViewModel: notesViewModel,
+                        editorHandle: editorHandle,
+                        onDismiss: {
+                            withAnimation(.easeOut(duration: AppUI.Animation.panel)) {
+                                commandRouter.showComposer = false
+                            }
+                        }
+                    )
+                    .transition(
+                        .move(edge: .bottom)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.85))
+                    )
                 }
             }
-        }
-        .onPreferenceChange(EditorOverlayHeightKey.self) { height in
-            editorOverlayHeight = height
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(themeManager.current.background)
@@ -205,56 +193,4 @@ extension String {
     }
 }
 
-extension TerminalAreaView {
-    /// EditorInputView floating at the bottom of the terminal area.
-    ///
-    /// When `isInteractivePrompt` is true (Claude Code `>` visible), the overlay uses
-    /// an opaque background matching the terminal colour — this physically covers the
-    /// tool's own cursor line, giving a single-input-area experience identical to Warp's
-    /// block-based layout but without any PTY resize side-effects.
-    ///
-    /// When false (shell prompt or idle), the background is semi-transparent with a
-    /// top divider so the overlay reads as a floating card above the terminal.
-    @ViewBuilder
-    var editorOverlay: some View {
-        VStack(spacing: 0) {
-            editorDividerHandle
-            EditorInputView(viewModel: editorViewModel, viewHandle: editorHandle)
-                .frame(height: editorHeight)
-                .padding(.horizontal, AppUI.Spacing.xxl)
-                .padding(.vertical, AppUI.Spacing.xl)
-        }
-        .background(themeManager.current.background)
-    }
-
-    /// Draggable divider between terminal and editor input.
-    private var editorDividerHandle: some View {
-        ZStack {
-            Divider()
-            Color.clear
-                .frame(height: AppConfig.UI.editorDividerHandleHeight)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                        .onChanged { value in
-                            if editorDragStart == nil { editorDragStart = editorHeight }
-                            // Dragging up → negative translation → increase editor height
-                            let proposed = (editorDragStart ?? editorHeight) - value.translation.height
-                            var transaction = Transaction()
-                            transaction.disablesAnimations = true
-                            withTransaction(transaction) {
-                                editorHeight = min(max(proposed, AppConfig.UI.editorMinHeightPoints), AppConfig.UI.editorMaxHeightPoints)
-                            }
-                        }
-                        .onEnded { _ in editorDragStart = nil }
-                )
-                .onHover { hovering in
-                    if hovering {
-                        NSCursor.resizeUpDown.push()
-                    } else {
-                        NSCursor.pop()
-                    }
-                }
-        }
-    }
-}
+// Editor overlay and divider handle removed — replaced by on-demand ComposerOverlayView.

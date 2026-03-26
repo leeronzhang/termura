@@ -12,12 +12,14 @@ private struct NoteRow: FetchableRecord, PersistableRecord, Sendable {
     var id: String
     var title: String
     var body: String
+    var isSnippet: Int
     var createdAt: Double
     var updatedAt: Double
     var archivedAt: Double?
 
     enum Columns: String, ColumnExpression {
         case id, title, body
+        case isSnippet = "is_snippet"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case archivedAt = "archived_at"
@@ -27,6 +29,7 @@ private struct NoteRow: FetchableRecord, PersistableRecord, Sendable {
         id = row[Columns.id]
         title = row[Columns.title]
         body = row[Columns.body]
+        isSnippet = row[Columns.isSnippet]
         createdAt = row[Columns.createdAt]
         updatedAt = row[Columns.updatedAt]
         archivedAt = row[Columns.archivedAt]
@@ -36,6 +39,7 @@ private struct NoteRow: FetchableRecord, PersistableRecord, Sendable {
         id = note.id.rawValue.uuidString
         title = note.title
         body = note.body
+        isSnippet = note.isSnippet ? 1 : 0
         createdAt = note.createdAt.timeIntervalSince1970
         updatedAt = note.updatedAt.timeIntervalSince1970
         archivedAt = nil
@@ -45,6 +49,7 @@ private struct NoteRow: FetchableRecord, PersistableRecord, Sendable {
         container[Columns.id] = id
         container[Columns.title] = title
         container[Columns.body] = body
+        container[Columns.isSnippet] = isSnippet
         container[Columns.createdAt] = createdAt
         container[Columns.updatedAt] = updatedAt
         container[Columns.archivedAt] = archivedAt
@@ -54,7 +59,7 @@ private struct NoteRow: FetchableRecord, PersistableRecord, Sendable {
         guard let uuid = UUID(uuidString: id) else {
             throw RepositoryError.invalidID(rawValue: id, entity: "Note")
         }
-        var note = NoteRecord(id: NoteID(rawValue: uuid), title: title, body: body)
+        var note = NoteRecord(id: NoteID(rawValue: uuid), title: title, body: body, isSnippet: isSnippet != 0)
         note.createdAt = Date(timeIntervalSince1970: createdAt)
         note.updatedAt = Date(timeIntervalSince1970: updatedAt)
         return note
@@ -71,9 +76,38 @@ actor NoteRepository: NoteRepositoryProtocol {
     func fetchAll() async throws -> [NoteRecord] {
         try await db.read { database in
             let rows = try NoteRow
-                .filter(sql: "archived_at IS NULL")
+                .filter(sql: "archived_at IS NULL AND is_snippet = 0")
                 .order(sql: "updated_at DESC")
                 .fetchAll(database)
+            return try rows.map { try $0.toNote() }
+        }
+    }
+
+    func fetchSnippets() async throws -> [NoteRecord] {
+        try await db.read { database in
+            let rows = try NoteRow
+                .filter(sql: "archived_at IS NULL AND is_snippet = 1")
+                .order(sql: "updated_at DESC")
+                .fetchAll(database)
+            return try rows.map { try $0.toNote() }
+        }
+    }
+
+    func searchSnippets(query: String) async throws -> [NoteRecord] {
+        guard query.count >= AppConfig.Search.minQueryLength else { return [] }
+        let escaped = query.replacingOccurrences(of: "\"", with: "\"\"")
+        let ftsQuery = "\"\(escaped)\"*"
+        return try await db.read { database in
+            let rows = try NoteRow.fetchAll(
+                database,
+                sql: """
+                SELECT n.* FROM notes n
+                JOIN notes_fts fts ON n.rowid = fts.rowid
+                WHERE notes_fts MATCH ? AND n.archived_at IS NULL AND n.is_snippet = 1
+                ORDER BY rank LIMIT ?
+                """,
+                arguments: [ftsQuery, AppConfig.Search.maxResults]
+            )
             return try rows.map { try $0.toNote() }
         }
     }

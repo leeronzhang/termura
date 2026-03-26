@@ -3,9 +3,13 @@ import SwiftUI
 /// Root layout: horizontal split between sidebar and terminal area.
 struct MainView: View {
     @EnvironmentObject var projectContext: ProjectContext
-    @EnvironmentObject var themeManager: ThemeManager
-    @EnvironmentObject var commandRouter: CommandRouter
-    @EnvironmentObject var notesViewModel: NotesViewModel
+    @Environment(\.themeManager) var themeManager
+    @Environment(\.commandRouter) var commandRouter
+    @Environment(\.notesViewModel) var notesViewModel
+
+    /// Bindable accessors for creating two-way bindings to @Observable environment objects.
+    var router: Bindable<CommandRouter> { Bindable(commandRouter) }
+    var notes: Bindable<NotesViewModel> { Bindable(notesViewModel) }
 
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
     @State var showCloseSessionConfirm = false
@@ -51,14 +55,14 @@ struct MainView: View {
             await ensureInitialSession()
             restoreOpenTabs()
         }
-        .sheet(isPresented: $commandRouter.showShellOnboarding) {
-            ShellIntegrationOnboardingView(isPresented: $commandRouter.showShellOnboarding)
+        .sheet(isPresented: router.showShellOnboarding) {
+            ShellIntegrationOnboardingView(isPresented: router.showShellOnboarding)
         }
-        .sheet(isPresented: $commandRouter.showSearch) { searchSheet }
-        .sheet(isPresented: $commandRouter.showNotes) { notesSheet }
+        .sheet(isPresented: router.showSearch) { searchSheet }
+        .sheet(isPresented: router.showNotes) { notesSheet }
         .sheet(isPresented: showExportBinding) { exportSheet }
-        .sheet(isPresented: $commandRouter.showHarness) { harnessSheet }
-        .sheet(isPresented: $commandRouter.showBranchMerge) { branchMergeSheet }
+        .sheet(isPresented: router.showHarness) { harnessSheet }
+        .sheet(isPresented: router.showBranchMerge) { branchMergeSheet }
         .alert("Close Session", isPresented: $showCloseSessionConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Close", role: .destructive) { confirmCloseActiveSession() }
