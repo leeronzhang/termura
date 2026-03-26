@@ -43,6 +43,7 @@ struct SidebarHarnessContent: View {
             header
             ScrollView(.vertical, showsIndicators: false) {
                 fileList
+                    .padding(.horizontal, AppUI.Spacing.lg)
                 if !viewModel.corruptionResults.isEmpty {
                     corruptionSection
                 }
@@ -75,6 +76,7 @@ struct SidebarHarnessContent: View {
     private var fileList: some View {
         LazyVStack(spacing: 0) {
             ForEach(viewModel.ruleFiles) { file in
+                let isSelected = viewModel.selectedFilePath == file.filePath
                 Button {
                     Task { await viewModel.selectFile(file.filePath) }
                     onOpenFile?(file.filePath, .edit)
@@ -86,19 +88,25 @@ struct SidebarHarnessContent: View {
                             .frame(width: 13, height: 13)
                             .foregroundColor(.secondary)
                         Text(file.fileName)
-                            .font(AppUI.Font.body)
+                            .font(isSelected ? AppUI.Font.title3Medium : AppUI.Font.body)
+                            .foregroundColor(isSelected ? .primary : .secondary)
                             .lineLimit(1)
                         Spacer()
                         Text("v\(file.version)")
                             .font(AppUI.Font.captionMono)
                             .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, AppUI.Spacing.xxxl)
+                    .padding(.horizontal, AppUI.Spacing.lg)
                     .padding(.vertical, AppUI.Spacing.smMd)
                     .background(
-                        viewModel.selectedFilePath == file.filePath
+                        isSelected
                             ? Color.accentColor.opacity(AppUI.Opacity.selected)
                             : Color.clear
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppUI.Radius.md)
+                            .stroke(isSelected ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)

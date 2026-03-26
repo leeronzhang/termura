@@ -55,6 +55,7 @@ extension SidebarView {
                     )
                 }
             }
+            .padding(.horizontal, AppUI.Spacing.lg)
         }
     }
 

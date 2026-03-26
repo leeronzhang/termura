@@ -79,9 +79,14 @@ struct FileTreeRowView: View {
                 .allowsHitTesting(false)
             }
         }
-        .padding(.horizontal, AppUI.Spacing.xxxl)
+        .padding(.horizontal, AppUI.Spacing.lg)
         .padding(.vertical, AppUI.Spacing.smMd)
-        .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
+        .background(isActive ? Color.accentColor.opacity(AppUI.Opacity.selected) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppUI.Radius.md)
+                .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
+        )
         .contentShape(Rectangle())
         .onTapGesture {
             if node.isDirectory {

@@ -159,6 +159,7 @@ struct SidebarProjectContent: View {
                         )
                     }
                 }
+                .padding(.horizontal, AppUI.Spacing.lg)
             }
         }
     }

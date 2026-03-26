@@ -67,8 +67,9 @@ extension SidebarView {
                     ? Color.accentColor.opacity(AppUI.Opacity.selected)
                     : Color.clear
             )
+            .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
             .overlay(
-                Rectangle()
+                RoundedRectangle(cornerRadius: AppUI.Radius.md)
                     .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
             )
         }
