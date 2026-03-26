@@ -64,4 +64,49 @@ final class SearchViewModelTests: XCTestCase {
         viewModel.query = ""
         XCTAssertTrue(viewModel.results.sessions.isEmpty && viewModel.results.notes.isEmpty)
     }
+
+    // MARK: - Additional query edge cases
+
+    func testSearchBelowMinLengthClearsResults() async throws {
+        // Pre-populate a match.
+        let session = SessionRecord(title: "TargetSession")
+        try await sessionRepo.save(session)
+
+        // Search with a valid query first.
+        viewModel.query = "TargetSession"
+        try await yieldForDuration(seconds: 0.6)
+
+        // Now set query below minQueryLength (1 char).
+        viewModel.query = "a"
+        try await yieldForDuration(seconds: 0.6)
+
+        XCTAssertTrue(viewModel.results.sessions.isEmpty)
+        XCTAssertTrue(viewModel.results.notes.isEmpty)
+    }
+
+    func testClearQueryClearsResults() async throws {
+        let session = SessionRecord(title: "ClearableMatch")
+        try await sessionRepo.save(session)
+
+        viewModel.query = "ClearableMatch"
+        try await yieldForDuration(seconds: 0.6)
+
+        // Clear the query entirely.
+        viewModel.query = ""
+        try await yieldForDuration(seconds: 0.6)
+
+        XCTAssertTrue(viewModel.results.sessions.isEmpty)
+        XCTAssertTrue(viewModel.results.notes.isEmpty)
+    }
+
+    func testEmptyQueryShowsNoResults() async throws {
+        let session = SessionRecord(title: "ShouldNotAppear")
+        try await sessionRepo.save(session)
+
+        viewModel.query = ""
+        try await yieldForDuration(seconds: 0.6)
+
+        XCTAssertTrue(viewModel.results.sessions.isEmpty)
+        XCTAssertTrue(viewModel.results.notes.isEmpty)
+    }
 }

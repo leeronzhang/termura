@@ -174,3 +174,46 @@ struct AgentStateDetectorTests {
         #expect(completed == .completed)
     }
 }
+
+// MARK: - XCTest-based command detection tests
+
+import XCTest
+
+@MainActor
+final class AgentStateDetectorXCTests: XCTestCase {
+    override func setUp() async throws {}
+
+    func testDetectClaudeCodeFromCommand() async throws {
+        let detector = AgentStateDetector(sessionID: SessionID())
+        let result = await detector.detectFromCommand("claude")
+        let unwrapped = try XCTUnwrap(result)
+        XCTAssertEqual(unwrapped, .claudeCode)
+    }
+
+    func testDetectCodexFromCommand() async throws {
+        let detector = AgentStateDetector(sessionID: SessionID())
+        let result = await detector.detectFromCommand("codex")
+        let unwrapped = try XCTUnwrap(result)
+        XCTAssertEqual(unwrapped, .codex)
+    }
+
+    func testDetectAiderFromCommand() async throws {
+        let detector = AgentStateDetector(sessionID: SessionID())
+        let result = await detector.detectFromCommand("aider")
+        let unwrapped = try XCTUnwrap(result)
+        XCTAssertEqual(unwrapped, .aider)
+    }
+
+    func testDetectOpenCodeFromCommand() async throws {
+        let detector = AgentStateDetector(sessionID: SessionID())
+        let result = await detector.detectFromCommand("opencode")
+        let unwrapped = try XCTUnwrap(result)
+        XCTAssertEqual(unwrapped, .openCode)
+    }
+
+    func testUnknownCommandReturnsNil() async {
+        let detector = AgentStateDetector(sessionID: SessionID())
+        let result = await detector.detectFromCommand("ls")
+        XCTAssertNil(result)
+    }
+}
