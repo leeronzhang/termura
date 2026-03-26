@@ -30,54 +30,8 @@ struct FontSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Terminal") {
-                Picker("Font Family", selection: $fontSettings.terminalFontFamily) {
-                    // Always include the current selection + bundled font
-                    Text(FontSettings.defaultFamily).tag(FontSettings.defaultFamily)
-                    ForEach(monoFamilies.filter { $0 != FontSettings.defaultFamily }, id: \.self) { family in
-                        Text(family).tag(family)
-                    }
-                }
-
-                HStack {
-                    Text("Font Size")
-                    Spacer()
-                    Button("-") { fontSettings.zoomOut() }
-                        .disabled(fontSettings.terminalFontSize <= FontSettings.minSize)
-                    Text("\(Int(fontSettings.terminalFontSize)) pt")
-                        .frame(width: 50, alignment: .center)
-                        .monospacedDigit()
-                    Button("+") { fontSettings.zoomIn() }
-                        .disabled(fontSettings.terminalFontSize >= FontSettings.maxSize)
-                    Button("Reset") { fontSettings.resetZoom() }
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Section("Editor / Notes") {
-                HStack {
-                    Text("Font Size")
-                    Spacer()
-                    Button("-") {
-                        fontSettings.editorFontSize = max(
-                            fontSettings.editorFontSize - FontSettings.zoomStep,
-                            FontSettings.minSize
-                        )
-                    }
-                    .disabled(fontSettings.editorFontSize <= FontSettings.minSize)
-                    Text("\(Int(fontSettings.editorFontSize)) pt")
-                        .frame(width: 50, alignment: .center)
-                        .monospacedDigit()
-                    Button("+") {
-                        fontSettings.editorFontSize = min(
-                            fontSettings.editorFontSize + FontSettings.zoomStep,
-                            FontSettings.maxSize
-                        )
-                    }
-                    .disabled(fontSettings.editorFontSize >= FontSettings.maxSize)
-                }
-            }
-
+            terminalSection
+            editorSection
             Section("Preview") {
                 fontPreview
             }
@@ -86,6 +40,57 @@ struct FontSettingsView: View {
         .padding(AppUI.Spacing.xxl)
         .onAppear {
             monoFamilies = FontSettings.availableMonospacedFamilies
+        }
+    }
+
+    private var terminalSection: some View {
+        Section("Terminal") {
+            Picker("Font Family", selection: $fontSettings.terminalFontFamily) {
+                Text(FontSettings.defaultFamily).tag(FontSettings.defaultFamily)
+                ForEach(monoFamilies.filter { $0 != FontSettings.defaultFamily }, id: \.self) { family in
+                    Text(family).tag(family)
+                }
+            }
+
+            HStack {
+                Text("Font Size")
+                Spacer()
+                Button("-") { fontSettings.zoomOut() }
+                    .disabled(fontSettings.terminalFontSize <= FontSettings.minSize)
+                Text("\(Int(fontSettings.terminalFontSize)) pt")
+                    .frame(width: AppConfig.UI.settingsFontSizeFieldWidth, alignment: .center)
+                    .monospacedDigit()
+                Button("+") { fontSettings.zoomIn() }
+                    .disabled(fontSettings.terminalFontSize >= FontSettings.maxSize)
+                Button("Reset") { fontSettings.resetZoom() }
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var editorSection: some View {
+        Section("Editor / Notes") {
+            HStack {
+                Text("Font Size")
+                Spacer()
+                Button("-") {
+                    fontSettings.editorFontSize = max(
+                        fontSettings.editorFontSize - FontSettings.zoomStep,
+                        FontSettings.minSize
+                    )
+                }
+                .disabled(fontSettings.editorFontSize <= FontSettings.minSize)
+                Text("\(Int(fontSettings.editorFontSize)) pt")
+                    .frame(width: AppConfig.UI.settingsFontSizeFieldWidth, alignment: .center)
+                    .monospacedDigit()
+                Button("+") {
+                    fontSettings.editorFontSize = min(
+                        fontSettings.editorFontSize + FontSettings.zoomStep,
+                        FontSettings.maxSize
+                    )
+                }
+                .disabled(fontSettings.editorFontSize >= FontSettings.maxSize)
+            }
         }
     }
 

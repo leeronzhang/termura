@@ -22,7 +22,7 @@ struct InterventionAlertView: View {
             }
         }
         .padding(AppUI.Spacing.xxxl)
-        .frame(width: 340)
+        .frame(width: AppConfig.UI.interventionAlertWidth)
     }
 
     private var icon: some View {

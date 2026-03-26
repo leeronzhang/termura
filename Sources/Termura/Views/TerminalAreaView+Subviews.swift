@@ -11,25 +11,7 @@ extension TerminalAreaView {
 
     var projectPathBar: some View {
         HStack(spacing: 0) {
-            Button {
-                openDirectoryPicker()
-            } label: {
-                Text(viewModel.currentMetadata.workingDirectory)
-                    .font(AppUI.Font.pathMono)
-                    .foregroundColor(.secondary.opacity(AppUI.Opacity.strong))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .buttonStyle(.plain)
-            .disabled(isAgentBusy)
-            .onHover { hovering in
-                if hovering && !isAgentBusy {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            .help(isAgentBusy ? "Agent is running" : "Switch working directory")
+            pathLabel
 
             if contextFileExists {
                 Button { showContextSheet = true } label: {
@@ -44,44 +26,71 @@ extension TerminalAreaView {
 
             Spacer()
 
-            if isAgentBusy {
-                HStack(spacing: AppUI.Spacing.sm) {
-                    Circle()
-                        .fill(.orange)
-                        .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
-                    Text("Agent active")
-                        .font(AppUI.Font.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            if !outputStore.chunks.isEmpty {
-                Button {
-                    withAnimation { showTimeline.toggle() }
-                } label: {
-                    Image(systemName: "timeline.selection")
-                        .symbolVariant(showTimeline ? .fill : .none)
-                        .font(AppUI.Font.toolbarIcon)
-                        .foregroundColor(showTimeline ? .accentColor : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Toggle Timeline")
-            }
-
-            Button {
-                withAnimation { showMetadata.toggle() }
-            } label: {
-                Image(systemName: "inset.filled.rightthird.rectangle")
-                    .font(AppUI.Font.toolbarIcon)
-                    .foregroundColor(showMetadata ? .accentColor : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help(showMetadata ? "Hide Session Info" : "Show Session Info")
+            toolbarButtons
         }
         .frame(height: AppConfig.UI.projectPathBarHeight)
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.top, AppUI.Spacing.md)
         .padding(.bottom, AppUI.Spacing.smMd)
+    }
+
+    private var pathLabel: some View {
+        Button {
+            openDirectoryPicker()
+        } label: {
+            Text(viewModel.currentMetadata.workingDirectory)
+                .font(AppUI.Font.pathMono)
+                .foregroundColor(.secondary.opacity(AppUI.Opacity.strong))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .buttonStyle(.plain)
+        .disabled(isAgentBusy)
+        .onHover { hovering in
+            if hovering && !isAgentBusy {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .help(isAgentBusy ? "Agent is running" : "Switch working directory")
+    }
+
+    @ViewBuilder
+    private var toolbarButtons: some View {
+        if isAgentBusy {
+            HStack(spacing: AppUI.Spacing.sm) {
+                Circle()
+                    .fill(.orange)
+                    .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
+                Text("Agent active")
+                    .font(AppUI.Font.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+
+        if !outputStore.chunks.isEmpty {
+            Button {
+                withAnimation { showTimeline.toggle() }
+            } label: {
+                Image(systemName: "timeline.selection")
+                    .symbolVariant(showTimeline ? .fill : .none)
+                    .font(AppUI.Font.toolbarIcon)
+                    .foregroundColor(showTimeline ? .accentColor : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Toggle Timeline")
+        }
+
+        Button {
+            withAnimation { showMetadata.toggle() }
+        } label: {
+            Image(systemName: "inset.filled.rightthird.rectangle")
+                .font(AppUI.Font.toolbarIcon)
+                .foregroundColor(showMetadata ? .accentColor : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help(showMetadata ? "Hide Session Info" : "Show Session Info")
     }
 
     func revealInFinder() {

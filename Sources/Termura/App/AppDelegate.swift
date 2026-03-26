@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var projectWindows: [URL: ProjectWindowController] = [:]
 
     /// The context of the most recently focused project window.
-    private(set) var activeContext: ProjectContext?
+    var activeContext: ProjectContext?
 
     // MARK: - Convenience accessors (route through activeContext)
 
@@ -52,12 +52,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - UI controllers
 
     var visorController: VisorWindowController?
-    @Published private(set) var showShellOnboarding = false
-    private var windowObserver: NSObjectProtocol?
+    @Published var showShellOnboarding = false
+    var windowObserver: NSObjectProtocol?
 
     // MARK: - Init
 
     override init() {
+        // Register bundled fonts FIRST, before any UI or FontSettings init.
+        Self.registerBundledFonts()
+
         let factory: any TerminalEngineFactory = LiveTerminalEngineFactory()
         engineFactory = factory
         themeManager = ThemeManager()
@@ -88,6 +91,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observeWindowFocus()
         openLastProjectOrShowPicker()
         logger.info("Termura launched")
+    }
+
+    /// Explicitly register bundled fonts via CoreText.
+    /// Called as a static method so it can run before `self` is fully initialized.
+    /// `ATSApplicationFontsPath` in Info.plist is unreliable on some macOS versions.
+    private static func registerBundledFonts() {
+        // Xcode flattens Resources/Fonts/ into Resources/ at build time,
+        // so search the resource directory directly for font files.
+        guard let resourceURL = Bundle.main.resourceURL else {
+            logger.warning("Bundle resource URL not found")
+            return
+        }
+        let fm = FileManager.default
+        let urls: [URL]
+        do {
+            urls = try fm.contentsOfDirectory(
+                at: resourceURL,
+                includingPropertiesForKeys: nil,
+                options: .skipsHiddenFiles
+            )
+        } catch {
+            logger.warning("Could not list Resources directory: \(error)")
+            return
+        }
+        var registered = 0
+        for url in urls where url.pathExtension == "ttf" || url.pathExtension == "otf" {
+            var error: Unmanaged<CFError>?
+            if CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
+                registered += 1
+            } else {
+                let desc = error?.takeRetainedValue().localizedDescription ?? "unknown"
+                logger.debug("Font \(url.lastPathComponent) note: \(desc)")
+            }
+        }
+        logger.info("Registered \(registered) bundled font(s)")
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -208,83 +246,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Shell Integration Onboarding
-
-    private func checkShellIntegrationOnboarding() {
-        let installed = UserDefaults.standard.bool(
-            forKey: AppConfig.ShellIntegration.installedDefaultsKey
-        )
-        if !installed {
-            showShellOnboarding = true
-        }
-    }
-
-    // MARK: - Private
-
-    private func persistOpenProjects() {
-        let paths = projectWindows.keys.map(\.path)
-        UserDefaults.standard.set(paths, forKey: "openProjectPaths")
-    }
-
-    private func openLastProjectOrShowPicker() {
-        Task { @MainActor in
-            await ProjectMigrationService.migrateIfNeeded()
-            if let lastURL = recentProjects.lastOpened() {
-                openProject(at: lastURL)
-            } else {
-                showProjectPicker()
-            }
-        }
-    }
-
-    private func observeWindowFocus() {
-        windowObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let window = notification.object as? NSWindow else { return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                for (_, controller) in projectWindows where controller.window === window {
-                    activeContext = controller.projectContext
-                    return
-                }
-            }
-        }
-    }
-
-    private func setupMenuBarActivation() {
-        menuBarService.configure { [weak self] in
-            self?.bringMainWindowToFront()
-        }
-    }
-
-    private func bringMainWindowToFront() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.windows.first { $0.isVisible }?.makeKeyAndOrderFront(nil)
-    }
-
-    private func setupChunkHandler(for context: ProjectContext) {
-        context.commandRouter.onChunkCompleted { [weak self] chunk in
-            guard let self else { return }
-            if let code = chunk.exitCode, code != 0 {
-                menuBarService.recordFailure()
-            }
-            let service = notificationService
-            Task { await service.notifyIfLong(chunk) }
-        }
-    }
-
-    func setupVisorShortcut() {
-        KeyboardShortcuts.setShortcut(
-            .init(.backtick, modifiers: .command),
-            for: .toggleVisor
-        )
-        KeyboardShortcuts.onKeyUp(for: .toggleVisor) { [weak self] in
-            self?.toggleVisor()
-        }
-    }
     // MARK: - Termination Handoff
 
     /// Captures per-project state needed for session handoff during app termination.

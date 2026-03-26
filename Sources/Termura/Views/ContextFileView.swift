@@ -24,14 +24,14 @@ struct ContextFileView: View {
                 errorView(error)
             } else {
                 TextEditor(text: $content)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minWidth: 500, minHeight: 300)
+                    .font(AppUI.Font.bodyMono)
+                    .frame(minWidth: AppConfig.UI.contextFileMinWidth, minHeight: AppConfig.UI.contextFileMinHeight)
             }
 
             Divider()
             footer
         }
-        .frame(minWidth: 550, minHeight: 400)
+        .frame(minWidth: AppConfig.UI.contextFileEditMinWidth, minHeight: AppConfig.UI.contextFileEditMinHeight)
         .onAppear { loadFile() }
     }
 

@@ -85,7 +85,7 @@ struct SidebarHarnessContent: View {
                         FileTypeIcon.image(for: file.fileName)
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 13, height: 13)
+                            .frame(width: AppUI.Size.fileTypeIcon, height: AppUI.Size.fileTypeIcon)
                             .foregroundColor(.secondary)
                         Text(file.fileName)
                             .font(isSelected ? AppUI.Font.title3Medium : AppUI.Font.body)

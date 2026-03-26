@@ -31,7 +31,7 @@
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
 	<key>ATSApplicationFontsPath</key>
-	<string>Fonts</string>
+	<string>.</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>Termura notifies you when a long-running command finishes so you can stay focused on other work.</string>
 </dict>

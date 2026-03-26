@@ -22,33 +22,16 @@ struct MainView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            if commandRouter.showSidebar {
-                SidebarView(
-                    isFullScreen: isFullScreen,
-                    activeContentTab: resolvedSelectedTab,
-                    onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) },
-                    onOpenFile: { path, mode in openProjectFile(relativePath: path, mode: mode) }
-                )
-                .frame(width: sidebarWidth)
-
-                ResizableDivider(
-                    width: $sidebarWidth,
-                    minWidth: AppConfig.UI.sidebarMinWidth,
-                    maxWidth: AppConfig.UI.sidebarMaxWidth
-                )
-            }
-
+            sidebarPanel
             contentArea
         }
         .background(themeManager.current.background)
-        // System-level notifications — Apple convention, kept as-is.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
             isFullScreen = true
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
             isFullScreen = false
         }
-        // React to CommandRouter split actions.
         .onChange(of: commandRouter.pendingSplitAction) { _, action in
             guard let action else { return }
             commandRouter.pendingSplitAction = nil
@@ -58,11 +41,8 @@ struct MainView: View {
             case .closePane: performCloseSplitPane()
             }
         }
-        // React to export requests with session ID payload.
         .onChange(of: commandRouter.exportSessionID) { _, newID in
             guard newID != nil else { return }
-            // exportSessionID stays non-nil while sheet is shown;
-            // sheet binding resets it on dismiss.
         }
         .onChange(of: commandRouter.closeTabTick) { _, _ in
             handleCloseTab()
@@ -74,32 +54,37 @@ struct MainView: View {
         .sheet(isPresented: $commandRouter.showShellOnboarding) {
             ShellIntegrationOnboardingView(isPresented: $commandRouter.showShellOnboarding)
         }
-        .sheet(isPresented: $commandRouter.showSearch) {
-            SearchView(
-                searchService: projectContext.searchService,
-                isPresented: $commandRouter.showSearch,
-                onSelectSession: { id in sessionStore.activateSession(id: id) },
-                vectorService: projectContext.vectorSearchService
-            )
-        }
-        .sheet(isPresented: $commandRouter.showNotes) {
-            NotesSplitView(viewModel: notesViewModel)
-                .frame(minWidth: 600, minHeight: 400)
-        }
-        .sheet(isPresented: showExportBinding) {
-            exportSheet
-        }
-        .sheet(isPresented: $commandRouter.showHarness) {
-            harnessSheet
-        }
-        .sheet(isPresented: $commandRouter.showBranchMerge) {
-            branchMergeSheet
-        }
+        .sheet(isPresented: $commandRouter.showSearch) { searchSheet }
+        .sheet(isPresented: $commandRouter.showNotes) { notesSheet }
+        .sheet(isPresented: showExportBinding) { exportSheet }
+        .sheet(isPresented: $commandRouter.showHarness) { harnessSheet }
+        .sheet(isPresented: $commandRouter.showBranchMerge) { branchMergeSheet }
         .alert("Close Session", isPresented: $showCloseSessionConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Close", role: .destructive) { confirmCloseActiveSession() }
         } message: {
             Text("Are you sure you want to close the active session?")
+        }
+    }
+
+    // MARK: - Sidebar panel
+
+    @ViewBuilder
+    private var sidebarPanel: some View {
+        if commandRouter.showSidebar {
+            SidebarView(
+                isFullScreen: isFullScreen,
+                activeContentTab: resolvedSelectedTab,
+                onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) },
+                onOpenFile: { path, mode in openProjectFile(relativePath: path, mode: mode) }
+            )
+            .frame(width: sidebarWidth)
+
+            ResizableDivider(
+                width: $sidebarWidth,
+                minWidth: AppConfig.UI.sidebarMinWidth,
+                maxWidth: AppConfig.UI.sidebarMaxWidth
+            )
         }
     }
 

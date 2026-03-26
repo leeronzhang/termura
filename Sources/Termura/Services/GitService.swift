@@ -8,6 +8,8 @@ private let logger = Logger(subsystem: "com.termura.app", category: "GitService"
 protocol GitServiceProtocol: Sendable {
     func status(at directory: String) async throws -> GitStatusResult
     func diff(file: String, staged: Bool, at directory: String) async throws -> String
+    /// Returns the set of file paths tracked by git (relative to the repo root).
+    func trackedFiles(at directory: String) async throws -> Set<String>
 }
 
 // MARK: - Live Implementation
@@ -57,6 +59,12 @@ actor GitService: GitServiceProtocol {
         args.append("--")
         args.append(file)
         return try await run(args, at: directory)
+    }
+
+    func trackedFiles(at directory: String) async throws -> Set<String> {
+        let output = try await run(["ls-files"], at: directory)
+        let paths = output.components(separatedBy: "\n").filter { !$0.isEmpty }
+        return Set(paths)
     }
 
     /// Returns the full file content for untracked files (no diff available).
@@ -135,23 +143,38 @@ actor GitService: GitServiceProtocol {
             return .notARepo
         }
 
-        // Parse branch: "## main...origin/main [ahead 2, behind 1]"
         let branchInfo = String(firstLine.dropFirst(3))
+        let header = parseBranchHeader(branchInfo)
+        let files = parseFileStatuses(lines.dropFirst())
+
+        return GitStatusResult(
+            branch: header.branch, files: files, isGitRepo: true,
+            ahead: header.ahead, behind: header.behind
+        )
+    }
+
+    // MARK: - Parse Helpers
+
+    private struct BranchHeader {
         let branch: String
+        let ahead: Int
+        let behind: Int
+    }
+
+    private static func parseBranchHeader(_ branchInfo: String) -> BranchHeader {
         var ahead = 0
         var behind = 0
 
-        // Split off tracking info in square brackets
         let bracketParts = branchInfo.components(separatedBy: " [")
         let branchPart = bracketParts[0]
 
+        let branch: String
         if let dotDot = branchPart.range(of: "...") {
             branch = String(branchPart[branchPart.startIndex..<dotDot.lowerBound])
         } else {
             branch = branchPart
         }
 
-        // Parse [ahead N, behind N] or [ahead N] or [behind N]
         if bracketParts.count > 1 {
             let info = bracketParts[1].replacingOccurrences(of: "]", with: "")
             for part in info.components(separatedBy: ", ") {
@@ -166,9 +189,16 @@ actor GitService: GitServiceProtocol {
             }
         }
 
+        return BranchHeader(branch: branch, ahead: ahead, behind: behind)
+    }
+
+    private static func parseFileStatuses(
+        _ lines: some Collection<String>
+    ) -> [GitFileStatus] {
         var files: [GitFileStatus] = []
-        let fileLines = lines.dropFirst().prefix(AppConfig.Git.maxDisplayedFiles)
-        for line in fileLines {
+        let capped = lines.prefix(AppConfig.Git.maxDisplayedFiles)
+
+        for line in capped {
             guard line.count >= 4 else { continue }
             let index = line.index(line.startIndex, offsetBy: 0)
             let workTree = line.index(line.startIndex, offsetBy: 1)
@@ -182,23 +212,18 @@ actor GitService: GitServiceProtocol {
                 continue
             }
 
-            // Staged change (index column)
             if x != " " && x != "?" {
-                let kind = Self.mapStatusChar(x)
+                let kind = mapStatusChar(x)
                 files.append(GitFileStatus(path: path, kind: kind, isStaged: true))
             }
 
-            // Unstaged change (work-tree column)
             if y != " " && y != "?" {
-                let kind = Self.mapStatusChar(y)
+                let kind = mapStatusChar(y)
                 files.append(GitFileStatus(path: path, kind: kind, isStaged: false))
             }
         }
 
-        return GitStatusResult(
-            branch: branch, files: files, isGitRepo: true,
-            ahead: ahead, behind: behind
-        )
+        return files
     }
 
     /// Extract a short host label from a remote URL.

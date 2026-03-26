@@ -18,7 +18,7 @@ struct BranchIndicatorView: View {
             ForEach(0 ..< depth, id: \.self) { level in
                 Rectangle()
                     .fill(Color.secondary.opacity(AppUI.Opacity.softBorder))
-                    .frame(width: 1)
+                    .frame(width: AppUI.Size.branchIndicatorLine)
                     .padding(.leading, firstLineOffset + CGFloat(level) * Self.indentPerLevel)
             }
         }

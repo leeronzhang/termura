@@ -9,6 +9,10 @@ struct FileTreeNode: Identifiable, Sendable {
     var children: [FileTreeNode]?
     var gitStatus: GitFileStatus.Kind?
     var isGitStaged: Bool
+    /// True when the file is not tracked by git (e.g. listed in .gitignore).
+    var isGitIgnored: Bool
+    /// For directories: aggregated count of each git status kind among all descendants.
+    var gitChildStats: [GitFileStatus.Kind: Int] = [:]
 
     init(
         name: String,
@@ -16,7 +20,8 @@ struct FileTreeNode: Identifiable, Sendable {
         isDirectory: Bool,
         children: [FileTreeNode]? = nil,
         gitStatus: GitFileStatus.Kind? = nil,
-        isGitStaged: Bool = false
+        isGitStaged: Bool = false,
+        isGitIgnored: Bool = false
     ) {
         self.id = relativePath.isEmpty ? name : relativePath
         self.name = name
@@ -25,5 +30,6 @@ struct FileTreeNode: Identifiable, Sendable {
         self.children = children
         self.gitStatus = gitStatus
         self.isGitStaged = isGitStaged
+        self.isGitIgnored = isGitIgnored
     }
 }

@@ -37,7 +37,7 @@ struct SearchView: View {
                 )
             }
         }
-        .frame(width: 500, height: 400)
+        .frame(width: AppConfig.UI.searchDialogWidth, height: AppConfig.UI.searchDialogHeight)
     }
 
     private var searchModePicker: some View {
@@ -46,7 +46,7 @@ struct SearchView: View {
             Text("Semantic").tag(SearchMode.semantic)
         }
         .pickerStyle(.segmented)
-        .frame(width: 200)
+        .frame(width: AppConfig.UI.fieldPickerWidth)
         .padding(AppUI.Spacing.md)
     }
 

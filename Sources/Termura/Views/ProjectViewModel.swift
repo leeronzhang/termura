@@ -10,8 +10,21 @@ final class ProjectViewModel: ObservableObject {
     @Published private(set) var tree: [FileTreeNode] = []
     @Published private(set) var gitResult: GitStatusResult = .notARepo
     @Published private(set) var isLoading = false
-    /// IDs of expanded folder nodes. Root-level folders are auto-expanded on first scan.
-    @Published var expandedNodeIDs: Set<String> = []
+    /// IDs of expanded folder nodes. Persisted per project via UserDefaults.
+    @Published var expandedNodeIDs: Set<String> = [] {
+        didSet { persistExpandedIDs() }
+    }
+    /// When true, files/directories marked as gitignored are hidden from the tree.
+    @Published var hideIgnoredFiles: Bool = true {
+        didSet { UserDefaults.standard.set(hideIgnoredFiles, forKey: hideIgnoredKey) }
+    }
+
+    /// Flattened list of visible tree items based on expansion and ignore filter.
+    var flatVisibleItems: [FlatTreeItem] {
+        let items = tree.flattenVisible(expandedIDs: expandedNodeIDs)
+        guard hideIgnoredFiles else { return items }
+        return items.filter { !$0.node.isGitIgnored }
+    }
 
     /// True when there are uncommitted changes — drives the tab badge dot.
     var hasUncommittedChanges: Bool { !gitResult.files.isEmpty }
@@ -35,6 +48,9 @@ final class ProjectViewModel: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var appActiveObserver: (any NSObjectProtocol)?
     private var debounceTask: Task<Void, Never>?
+    private var persistTask: Task<Void, Never>?
+    /// Tracks whether we've already handled initial expansion (persisted or auto).
+    private var hasRestoredExpandState = false
 
     init(
         gitService: any GitServiceProtocol,
@@ -44,6 +60,7 @@ final class ProjectViewModel: ObservableObject {
         self.gitService = gitService
         self.projectRoot = projectRoot
         self.commandRouter = commandRouter
+        restoreExpandedIDs()
         setupObservers()
     }
 
@@ -54,9 +71,23 @@ final class ProjectViewModel: ObservableObject {
         appActiveObserver = nil
         refreshTask?.cancel()
         debounceTask?.cancel()
+        persistTask?.cancel()
+        // Flush expansion state immediately on teardown
+        let array = Array(expandedNodeIDs)
+        UserDefaults.standard.set(array, forKey: expandedIDsKey)
     }
 
     // MARK: - Public
+
+    /// Toggle the expand/collapse state of a directory node.
+    func toggleExpand(_ node: FileTreeNode) {
+        guard node.isDirectory else { return }
+        if expandedNodeIDs.contains(node.id) {
+            expandedNodeIDs.remove(node.id)
+        } else {
+            expandedNodeIDs.insert(node.id)
+        }
+    }
 
     func refresh() {
         refreshTask?.cancel()
@@ -64,7 +95,7 @@ final class ProjectViewModel: ObservableObject {
         refreshTask = Task { [weak self] in
             guard let self else { return }
 
-            // Scan file tree and git status in parallel
+            // Scan file tree, git status, and tracked files in parallel
             async let scannedTree = fileTreeService.scan(at: projectRoot)
             async let gitStatus = {
                 do {
@@ -74,21 +105,33 @@ final class ProjectViewModel: ObservableObject {
                     return GitStatusResult.notARepo
                 }
             }()
+            async let tracked = {
+                do {
+                    return try await self.gitService.trackedFiles(at: self.projectRoot)
+                } catch {
+                    logger.warning("Tracked files fetch failed: \(error.localizedDescription)")
+                    return Set<String>()
+                }
+            }()
 
             let rawTree = await scannedTree
             let status = await gitStatus
+            let trackedFiles = await tracked
             guard !Task.isCancelled else { return }
 
-            // Annotate tree with git status
-            let annotated = await fileTreeService.annotate(tree: rawTree, with: status)
+            // Annotate tree with git status and ignored file detection
+            let annotated = await fileTreeService.annotate(
+                tree: rawTree, with: status, trackedFiles: trackedFiles
+            )
             guard !Task.isCancelled else { return }
 
             tree = annotated
             gitResult = status
             isLoading = false
 
-            // Auto-expand root directories on first scan
-            if expandedNodeIDs.isEmpty {
+            // Auto-expand root directories only on very first scan (no persisted state)
+            if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
+                hasRestoredExpandState = true
                 for node in annotated where node.isDirectory {
                     expandedNodeIDs.insert(node.id)
                 }
@@ -118,12 +161,47 @@ final class ProjectViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Expansion Persistence
+
+    private var expandedIDsKey: String {
+        "fileTree.expandedIDs-\(projectRoot)"
+    }
+
+    private var hideIgnoredKey: String {
+        "fileTree.hideIgnored-\(projectRoot)"
+    }
+
+    private func persistExpandedIDs() {
+        persistTask?.cancel()
+        persistTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+            let array = Array(self.expandedNodeIDs)
+            UserDefaults.standard.set(array, forKey: self.expandedIDsKey)
+        }
+    }
+
+    private func restoreExpandedIDs() {
+        if let saved = UserDefaults.standard.stringArray(forKey: expandedIDsKey) {
+            expandedNodeIDs = Set(saved)
+            hasRestoredExpandState = !saved.isEmpty
+        }
+        // Restore ignore filter (defaults to true if not set)
+        if UserDefaults.standard.object(forKey: hideIgnoredKey) != nil {
+            hideIgnoredFiles = UserDefaults.standard.bool(forKey: hideIgnoredKey)
+        }
+    }
+
     private func debouncedRefresh() {
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
             do {
                 try await Task.sleep(
-                    nanoseconds: UInt64(AppConfig.Git.refreshDebounceSeconds * 1_000_000_000)
+                    nanoseconds: AppConfig.Git.refreshDebounceNanoseconds
                 )
             } catch is CancellationError {
                 return

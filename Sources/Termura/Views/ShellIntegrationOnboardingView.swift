@@ -23,7 +23,7 @@ struct ShellIntegrationOnboardingView: View {
             actionSection
         }
         .padding(AppUI.Spacing.xxxl)
-        .frame(width: 480)
+        .frame(width: AppConfig.UI.shellOnboardingSheetWidth)
     }
 
     // MARK: - Header
@@ -55,7 +55,7 @@ struct ShellIntegrationOnboardingView: View {
         HStack(spacing: AppUI.Spacing.md) {
             Image(systemName: icon)
                 .foregroundColor(.accentColor)
-                .frame(width: 18)
+                .frame(width: AppUI.Size.iconFrameLarge)
             Text(text)
                 .font(.callout)
         }
@@ -129,7 +129,7 @@ struct ShellIntegrationOnboardingView: View {
                 try await installer.install(into: shell)
                 UserDefaults.standard.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
                 installState = .done
-                try await Task.sleep(for: .seconds(1))
+                try await Task.sleep(for: .seconds(AppConfig.Runtime.onboardingDismissDelaySeconds))
                 isPresented = false
             } catch {
                 installError = error.localizedDescription

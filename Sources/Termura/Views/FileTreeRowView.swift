@@ -1,49 +1,56 @@
 import SwiftUI
 
-// MARK: - File Tree Row
+// MARK: - Flat Tree Item (pre-computed for single-level rendering)
+
+/// A flattened representation of a visible tree node, carrying its depth for indentation.
+struct FlatTreeItem: Identifiable {
+    let node: FileTreeNode
+    let depth: Int
+    var id: String { node.id }
+}
+
+// MARK: - Flatten helper
+
+extension Array where Element == FileTreeNode {
+    /// Walk the tree and return only nodes that are currently visible
+    /// (i.e. all ancestors are expanded). Each item carries its depth.
+    func flattenVisible(expandedIDs: Set<String>) -> [FlatTreeItem] {
+        var result: [FlatTreeItem] = []
+        func walk(_ nodes: [FileTreeNode], depth: Int) {
+            for node in nodes {
+                result.append(FlatTreeItem(node: node, depth: depth))
+                if node.isDirectory, expandedIDs.contains(node.id),
+                   let children = node.children {
+                    walk(children, depth: depth + 1)
+                }
+            }
+        }
+        walk(self, depth: 0)
+        return result
+    }
+}
+
+// MARK: - File Tree Row (non-recursive, single row)
 
 struct FileTreeRowView: View {
     let node: FileTreeNode
     let depth: Int
-    @Binding var expandedIDs: Set<String>
-    var activeFilePath: String?
-    var onOpenFile: ((String, FileOpenMode) -> Void)?
-
-    private var isExpanded: Bool {
-        expandedIDs.contains(node.id)
-    }
-
-    private var isActive: Bool {
-        guard let active = activeFilePath, !node.isDirectory else { return false }
-        return node.relativePath == active
-    }
+    let isExpanded: Bool
+    var isActive: Bool = false
+    var onTap: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            rowContent
-            if node.isDirectory && isExpanded, let children = node.children {
-                ForEach(children) { child in
-                    FileTreeRowView(
-                        node: child,
-                        depth: depth + 1,
-                        expandedIDs: $expandedIDs,
-                        activeFilePath: activeFilePath,
-                        onOpenFile: onOpenFile
-                    )
-                }
-            }
-        }
-    }
-
-    private var rowContent: some View {
         HStack(spacing: AppUI.Spacing.sm) {
-            // Indentation
+            // Indentation (fixed-width invisible block)
             if depth > 0 {
-                Spacer()
-                    .frame(width: CGFloat(depth) * AppConfig.UI.fileTreeIndentPerLevel)
+                Color.clear
+                    .frame(
+                        width: CGFloat(depth) * AppConfig.UI.fileTreeIndentPerLevel,
+                        height: 1
+                    )
             }
 
-            // Directory: arrow only (no folder icon); File: file icon only (no arrow)
+            // Directory: arrow only; File: file icon only
             if node.isDirectory {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(AppUI.Font.chevron)
@@ -53,7 +60,7 @@ struct FileTreeRowView: View {
                 FileTypeIcon.image(for: node.name)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 13, height: 13)
+                    .frame(width: AppUI.Size.fileTypeIcon, height: AppUI.Size.fileTypeIcon)
                     .foregroundColor(fileColor)
             }
 
@@ -63,22 +70,16 @@ struct FileTreeRowView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            // Git status: folders get a colored dot, files get a letter badge
-            if let status = node.gitStatus {
-                Group {
-                    if node.isDirectory {
-                        Circle()
-                            .fill(directoryDotColor)
-                            .frame(width: 7, height: 7)
-                    } else {
-                        gitBadge(status, staged: node.isGitStaged)
-                    }
-                }
-                .allowsHitTesting(false)
+            // Git status badges
+            if node.isDirectory && !node.gitChildStats.isEmpty {
+                directoryStatsBadges
+            } else if let status = node.gitStatus, !node.isDirectory {
+                gitBadge(status, staged: node.isGitStaged)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, AppUI.Spacing.lg)
         .padding(.vertical, AppUI.Spacing.smMd)
         .background(isActive ? Color.accentColor.opacity(AppUI.Opacity.selected) : Color.clear)
@@ -88,24 +89,12 @@ struct FileTreeRowView: View {
                 .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
-        .onTapGesture {
-            if node.isDirectory {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    if expandedIDs.contains(node.id) {
-                        expandedIDs.remove(node.id)
-                    } else {
-                        expandedIDs.insert(node.id)
-                    }
-                }
-            } else {
-                openFile()
-            }
-        }
     }
 
     // MARK: - Colors (Xcode-style: modified=orange, untracked/added=green, deleted=red)
 
     private var nameColor: Color {
+        if node.isGitIgnored { return .secondary }
         guard let status = node.gitStatus else { return .primary }
         switch status {
         case .modified: return node.isGitStaged ? .green : .orange
@@ -121,6 +110,7 @@ struct FileTreeRowView: View {
     }
 
     private var fileColor: Color {
+        if node.isGitIgnored { return .secondary }
         guard let status = node.gitStatus else { return .secondary }
         switch status {
         case .modified: return node.isGitStaged ? .green : .orange
@@ -134,13 +124,32 @@ struct FileTreeRowView: View {
         .orange
     }
 
+    // MARK: - Directory stats badges (dot + count for each status kind)
+
+    /// Display order for directory stat badges.
+    private static let statDisplayOrder: [GitFileStatus.Kind] = [
+        .modified, .added, .untracked, .deleted, .renamed, .copied
+    ]
+
+    private var directoryStatsBadges: some View {
+        HStack(spacing: AppUI.Spacing.mdLg) {
+            ForEach(Self.statDisplayOrder, id: \.rawValue) { kind in
+                if let total = node.gitChildStats[kind], total > 0 {
+                    Text("\(badgeLetter(kind))\(total)")
+                        .font(AppUI.Font.labelMono.weight(.semibold))
+                        .foregroundColor(badgeColor(kind, staged: false))
+                }
+            }
+        }
+    }
+
     // MARK: - Git badge (monospaced, right-aligned)
 
     private func gitBadge(_ kind: GitFileStatus.Kind, staged: Bool) -> some View {
         Text(badgeLetter(kind))
-            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .font(AppUI.Font.labelMono.weight(.semibold))
             .foregroundColor(badgeColor(kind, staged: staged))
-            .frame(width: 16, alignment: .trailing)
+            .frame(width: AppUI.Size.iconFrame, alignment: .trailing)
     }
 
     private func badgeLetter(_ kind: GitFileStatus.Kind) -> String {
@@ -163,33 +172,4 @@ struct FileTreeRowView: View {
         }
     }
 
-    // MARK: - Actions
-
-    /// File extensions that should open in the code editor (text-based).
-    private static let textExtensions: Set<String> = [
-        "swift", "m", "h", "c", "cpp", "rs", "go", "py", "rb", "js", "ts",
-        "jsx", "tsx", "json", "yaml", "yml", "toml", "xml", "plist",
-        "html", "css", "scss", "less", "sh", "bash", "zsh", "fish",
-        "md", "markdown", "txt", "log", "env", "gitignore", "editorconfig",
-        "lock", "resolved", "cfg", "ini", "conf", "sql", "graphql",
-        "vue", "svelte", "astro", "r", "lua", "zig", "nim", "ex", "exs",
-        "java", "kt", "scala", "dart", "php", "pl", "pm"
-    ]
-
-    private var isTextFile: Bool {
-        let ext = URL(fileURLWithPath: node.name).pathExtension.lowercased()
-        // Files without an extension are likely text (Makefile, Dockerfile, etc.)
-        return ext.isEmpty || Self.textExtensions.contains(ext)
-    }
-
-    private func openFile() {
-        if let status = node.gitStatus {
-            let untracked = status == .untracked
-            onOpenFile?(node.relativePath, .diff(staged: node.isGitStaged, untracked: untracked))
-        } else if isTextFile {
-            onOpenFile?(node.relativePath, .edit)
-        } else {
-            onOpenFile?(node.relativePath, .preview)
-        }
-    }
 }

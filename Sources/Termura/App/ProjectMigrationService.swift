@@ -75,43 +75,31 @@ enum ProjectMigrationService {
         }
         guard !sessionIDs.isEmpty else { return }
 
-        // Copy all data using async writes on the new pool
-        try await newPool.write { target in
-            try copyTable(
-                "sessions",
-                where: "working_directory = ?",
-                args: [projectPath],
-                from: legacyPool,
-                into: target
-            )
-            let placeholders = sessionIDs.map { _ in "?" }.joined(separator: ",")
-            let idArgs = sessionIDs.map { $0 as any DatabaseValueConvertible }
-            try copyTable(
-                "session_messages",
-                where: "session_id IN (\(placeholders))",
-                args: idArgs,
-                from: legacyPool,
-                into: target
-            )
-            try copyTable(
-                "harness_events",
-                where: "session_id IN (\(placeholders))",
-                args: idArgs,
-                from: legacyPool,
-                into: target
-            )
-            try copyTable(
-                "session_snapshots",
-                where: "session_id IN (\(placeholders))",
-                args: idArgs,
-                from: legacyPool,
-                into: target
-            )
-            // Notes have no project field — copy all to each project
-            try copyTable("notes", where: "1=1", args: [], from: legacyPool, into: target)
-        }
+        try await copySessionData(
+            sessionIDs: sessionIDs,
+            projectPath: projectPath,
+            legacyPool: legacyPool,
+            targetPool: newPool
+        )
 
         logger.info("Migrated \(sessionIDs.count) sessions to \(projectPath)")
+    }
+
+    private static func copySessionData(
+        sessionIDs: [String],
+        projectPath: String,
+        legacyPool: DatabasePool,
+        targetPool: DatabasePool
+    ) async throws {
+        try await targetPool.write { target in
+            try copyTable("sessions", where: "working_directory = ?", args: [projectPath], from: legacyPool, into: target)
+            let placeholders = sessionIDs.map { _ in "?" }.joined(separator: ",")
+            let idArgs = sessionIDs.map { $0 as any DatabaseValueConvertible }
+            for table in ["session_messages", "harness_events", "session_snapshots"] {
+                try copyTable(table, where: "session_id IN (\(placeholders))", args: idArgs, from: legacyPool, into: target)
+            }
+            try copyTable("notes", where: "1=1", args: [], from: legacyPool, into: target)
+        }
     }
 
     /// Copies rows from a table in the legacy DB to the target database.

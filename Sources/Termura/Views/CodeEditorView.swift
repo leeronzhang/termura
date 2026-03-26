@@ -1,4 +1,5 @@
 import AppKit
+import Highlightr
 import OSLog
 import SwiftUI
 
@@ -30,6 +31,30 @@ struct CodeEditorView: View {
         return filePath
     }
 
+    /// Map file extension to highlight.js language identifier.
+    private var highlightLanguage: String? {
+        let ext = URL(fileURLWithPath: filePath).pathExtension.lowercased()
+        return Self.extensionToLanguage[ext]
+    }
+
+    private static let extensionToLanguage: [String: String] = [
+        "swift": "swift", "m": "objectivec", "h": "objectivec",
+        "c": "c", "cpp": "cpp", "cc": "cpp", "cxx": "cpp",
+        "rs": "rust", "go": "go", "py": "python", "rb": "ruby",
+        "js": "javascript", "ts": "typescript", "jsx": "javascript", "tsx": "typescript",
+        "json": "json", "yaml": "yaml", "yml": "yaml", "toml": "ini",
+        "xml": "xml", "plist": "xml", "html": "xml",
+        "css": "css", "scss": "scss", "less": "less",
+        "sh": "bash", "bash": "bash", "zsh": "bash", "fish": "fish",
+        "sql": "sql", "graphql": "graphql",
+        "java": "java", "kt": "kotlin", "scala": "scala",
+        "dart": "dart", "php": "php", "lua": "lua",
+        "r": "r", "zig": "zig", "nim": "nim",
+        "ex": "elixir", "exs": "elixir",
+        "vue": "xml", "svelte": "xml",
+        "md": "markdown", "markdown": "markdown",
+    ]
+
     var body: some View {
         VStack(spacing: 0) {
             editorHeader(title: displayPath, isModified: isModified, onSave: saveFile)
@@ -45,7 +70,8 @@ struct CodeEditorView: View {
                     isModified: $isModified,
                     onSave: saveFile,
                     fontFamily: fontSettings.terminalFontFamily,
-                    fontSize: fontSettings.editorFontSize
+                    fontSize: fontSettings.editorFontSize,
+                    language: highlightLanguage
                 )
             }
         }
@@ -125,7 +151,7 @@ private func editorHeader(title: String, isModified: Bool, onSave: (() -> Void)?
         if isModified {
             Circle()
                 .fill(Color.orange)
-                .frame(width: 6, height: 6)
+                .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
         }
         Spacer()
         if isModified, let onSave {
@@ -159,13 +185,25 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
     let onSave: () -> Void
     let fontFamily: String
     let fontSize: CGFloat
+    /// highlight.js language identifier (e.g. "swift", "python"). Nil = plain text.
+    var language: String?
 
-    /// Line height multiplier shared between text view and ruler.
-    static let lineHeightMultiple: CGFloat = 1.4
+    /// Extra spacing between lines (points). Uses lineSpacing instead of
+    /// lineHeightMultiple so the cursor height matches the font, not the full line.
+    static let lineSpacingExtra: CGFloat = 6
     /// Horizontal inset inside the text container.
     static let textInsetWidth: CGFloat = 8
     /// Vertical inset inside the text container.
     static let textInsetHeight: CGFloat = 8
+
+    /// Shared Highlightr instance (heavy to create, reuse across views).
+    private static let sharedHighlightr: Highlightr? = {
+        let h = Highlightr()
+        h?.setTheme(to: "atom-one-dark")
+        // Make theme background transparent — we use the text view's own background.
+        h?.theme.themeBackgroundColor = .clear
+        return h
+    }()
 
     private func resolvedFont() -> NSFont {
         NSFont(name: fontFamily, size: fontSize)
@@ -177,6 +215,8 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
+        scrollView.wantsLayer = true
+        scrollView.layer?.masksToBounds = true
 
         let textView = SaveableTextView()
         textView.isEditable = true
@@ -196,7 +236,7 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
             height: Self.textInsetHeight
         )
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineHeightMultiple = Self.lineHeightMultiple
+        paragraphStyle.lineSpacing = Self.lineSpacingExtra
         textView.defaultParagraphStyle = paragraphStyle
         textView.autoresizingMask = [.width]
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
@@ -207,10 +247,16 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = false
-        textView.delegate = context.coordinator
         textView.onSave = onSave
+
+        // Set text and apply highlighting BEFORE setting delegate.
+        // This prevents textDidChange from firing during view creation,
+        // which would mutate SwiftUI state during a view update (illegal).
         textView.string = text
-        MarkdownSyntaxDimmer.apply(to: textView)
+        context.coordinator.isHighlighting = true
+        applySyntaxHighlighting(to: textView)
+        context.coordinator.isHighlighting = false
+        textView.delegate = context.coordinator
 
         scrollView.documentView = textView
 
@@ -220,7 +266,7 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
             textView: textView,
             fontFamily: fontFamily,
             fontSize: fontSize,
-            lineHeightMultiple: Self.lineHeightMultiple
+            lineSpacing: Self.lineSpacingExtra
         )
         scrollView.verticalRulerView = ruler
         scrollView.hasVerticalRuler = true
@@ -231,8 +277,11 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
         if textView.string != text {
+            // Temporarily remove delegate to prevent textDidChange during programmatic update
+            textView.delegate = nil
             textView.string = text
-            MarkdownSyntaxDimmer.apply(to: textView)
+            applySyntaxHighlighting(to: textView)
+            textView.delegate = context.coordinator
         }
         textView.isEditable = true
 
@@ -240,16 +289,14 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
         let newFont = resolvedFont()
         if textView.font != newFont {
             textView.font = newFont
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.lineHeightMultiple = Self.lineHeightMultiple
-            textView.defaultParagraphStyle = paragraphStyle
-            // Re-apply paragraph style to existing text
-            if let textStorage = textView.textStorage, textStorage.length > 0 {
-                let fullRange = NSRange(location: 0, length: textStorage.length)
-                textStorage.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
-                textStorage.addAttribute(.font, value: newFont, range: fullRange)
-            }
-            MarkdownSyntaxDimmer.apply(to: textView)
+            textView.defaultParagraphStyle = {
+                let p = NSMutableParagraphStyle()
+                p.lineSpacing = Self.lineSpacingExtra
+                return p
+            }()
+            textView.delegate = nil
+            applySyntaxHighlighting(to: textView)
+            textView.delegate = context.coordinator
         }
 
         // Sync ruler font
@@ -258,17 +305,73 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
         }
     }
 
+    // MARK: - Syntax Highlighting
+
+    private func applySyntaxHighlighting(to textView: NSTextView) {
+        guard let textStorage = textView.textStorage else { return }
+        let text = textStorage.string
+        guard !text.isEmpty else { return }
+
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+        let baseFont = resolvedFont()
+        let baseColor = NSColor.textColor
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = Self.lineSpacingExtra
+
+        textStorage.beginEditing()
+
+        // 1. Apply baseline attributes (addAttributes preserves NSTextView internal attrs;
+        //    setAttributes strips them and causes invisible text)
+        textStorage.addAttributes([
+            .font: baseFont,
+            .foregroundColor: baseColor,
+            .paragraphStyle: paragraphStyle
+        ], range: fullRange)
+
+        // 2. Apply syntax colors from Highlightr (if available)
+        if let highlightr = Self.sharedHighlightr, let lang = language {
+            highlightr.theme.setCodeFont(baseFont)
+            if let highlighted = highlightr.highlight(text, as: lang),
+               highlighted.length == textStorage.length {
+                // Copy only foreground colors from Highlightr — our baseline handles font/spacing
+                let hlRange = NSRange(location: 0, length: highlighted.length)
+                highlighted.enumerateAttribute(
+                    .foregroundColor, in: hlRange, options: []
+                ) { value, range, _ in
+                    if let color = value as? NSColor {
+                        textStorage.addAttribute(.foregroundColor, value: color, range: range)
+                    }
+                }
+            }
+        } else {
+            // No Highlightr or no language — use Markdown dimmer colors
+            MarkdownSyntaxDimmer.applyColors(to: textStorage, range: fullRange)
+        }
+
+        textStorage.endEditing()
+    }
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     class Coordinator: NSObject, NSTextViewDelegate {
         let parent: CodeEditorTextViewRepresentable
+        /// Prevents infinite loop: applySyntaxHighlighting modifies textStorage,
+        /// which fires textDidChange, which would call applySyntaxHighlighting again.
+        var isHighlighting = false
+
         init(_ parent: CodeEditorTextViewRepresentable) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            parent.text = textView.string
+            guard !isHighlighting,
+                  let textView = notification.object as? NSTextView else { return }
+            let newText = textView.string
+            // Only react to actual content changes, not attribute-only changes
+            guard newText != parent.text else { return }
+            parent.text = newText
             parent.isModified = true
-            MarkdownSyntaxDimmer.apply(to: textView)
+            isHighlighting = true
+            parent.applySyntaxHighlighting(to: textView)
+            isHighlighting = false
         }
     }
 }

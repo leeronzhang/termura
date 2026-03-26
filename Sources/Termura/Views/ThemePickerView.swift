@@ -118,11 +118,11 @@ private struct ThemeCard: View {
     private var colorSwatches: some View {
         let keys = ["ansiBlack", "ansiRed", "ansiGreen", "ansiYellow",
                     "ansiBlue", "ansiMagenta", "ansiCyan", "ansiWhite"]
-        return LazyVGrid(columns: Array(repeating: GridItem(.fixed(14)), count: 4), spacing: 3) {
+        return LazyVGrid(columns: Array(repeating: GridItem(.fixed(AppUI.Size.themeCheckbox)), count: 4), spacing: 3) {
             ForEach(keys, id: \.self) { key in
                 Rectangle()
                     .fill(ThemeDefinition.color(fromHex: definition.colors[key]) ?? .gray)
-                    .frame(width: 14, height: 14)
+                    .frame(width: AppUI.Size.themeCheckbox, height: AppUI.Size.themeCheckbox)
                     .cornerRadius(AppUI.Radius.xs)
             }
         }

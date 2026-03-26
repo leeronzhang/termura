@@ -56,179 +56,179 @@ enum FileTypeIcon {
         }
     }
 
-    // swiftlint:disable function_body_length
     private static let extensionMap: [String: String] = {
-        var m: [String: String] = [:]
+        var map: [String: String] = [:]
         let ns = "FileTypeIcons/"
 
         // Swift
-        m["swift"] = ns + "filetype-swift"
+        map["swift"] = ns + "filetype-swift"
 
         // C family
-        let c = ns + "filetype-c"
+        let cfamily = ns + "filetype-c"
         let ch = ns + "filetype-c-header"
         let cpp = ns + "filetype-cpp"
-        m["c"] = c; m["m"] = c
-        m["h"] = ch; m["hpp"] = ch; m["hh"] = ch
-        m["cpp"] = cpp; m["cc"] = cpp; m["cxx"] = cpp; m["mm"] = cpp
+        map["c"] = cfamily; map["m"] = cfamily
+        map["h"] = ch; map["hpp"] = ch; map["hh"] = ch
+        map["cpp"] = cpp; map["cc"] = cpp; map["cxx"] = cpp; map["mm"] = cpp
 
         // Python
         let py = ns + "filetype-python"
-        m["py"] = py; m["pyw"] = py; m["pyi"] = py
+        map["py"] = py; map["pyw"] = py; map["pyi"] = py
 
         // JavaScript / TypeScript
         let js = ns + "filetype-javascript"
-        m["js"] = js; m["mjs"] = js; m["cjs"] = js
+        map["js"] = js; map["mjs"] = js; map["cjs"] = js
         let ts = ns + "filetype-typescript"
-        m["ts"] = ts
+        map["ts"] = ts
         let tsx = ns + "filetype-typescript-react"
-        m["tsx"] = tsx; m["jsx"] = tsx
+        map["tsx"] = tsx; map["jsx"] = tsx
 
         // Rust
-        m["rs"] = ns + "filetype-rust"
+        map["rs"] = ns + "filetype-rust"
 
         // Go
-        m["go"] = ns + "filetype-go"
+        map["go"] = ns + "filetype-go"
 
         // Java / JVM
         let java = ns + "filetype-java"
-        m["java"] = java; m["jar"] = java
-        m["kt"] = ns + "filetype-kotlin"
-        m["scala"] = ns + "filetype-scala"
+        map["java"] = java; map["jar"] = java
+        map["kt"] = ns + "filetype-kotlin"
+        map["scala"] = ns + "filetype-scala"
 
         // Ruby
         let rb = ns + "filetype-ruby"
-        m["rb"] = rb; m["rake"] = rb; m["gemspec"] = rb
+        map["rb"] = rb; map["rake"] = rb; map["gemspec"] = rb
 
         // PHP
-        m["php"] = ns + "filetype-php"
+        map["php"] = ns + "filetype-php"
 
         // Dart
-        m["dart"] = ns + "filetype-dart"
+        map["dart"] = ns + "filetype-dart"
 
         // Lua
-        m["lua"] = ns + "filetype-lua"
+        map["lua"] = ns + "filetype-lua"
 
         // Zig
-        m["zig"] = ns + "filetype-zig"
+        map["zig"] = ns + "filetype-zig"
 
         // Nim
-        m["nim"] = ns + "filetype-nim"
+        map["nim"] = ns + "filetype-nim"
 
         // R
-        m["r"] = ns + "filetype-r"
+        map["r"] = ns + "filetype-r"
 
         // Perl
         let pl = ns + "filetype-perl"
-        m["pl"] = pl; m["pm"] = pl
+        map["pl"] = pl; map["pm"] = pl
 
         // Elixir
         let ex = ns + "filetype-elixir"
-        m["ex"] = ex; m["exs"] = ex
+        map["ex"] = ex; map["exs"] = ex
 
         // Assembly
         let asm = ns + "filetype-assembly"
-        m["asm"] = asm; m["s"] = asm
+        map["asm"] = asm; map["s"] = asm
 
         // Web markup
-        m["html"] = ns + "filetype-html"; m["htm"] = ns + "filetype-html"
-        m["css"] = ns + "filetype-css"
+        map["html"] = ns + "filetype-html"; map["htm"] = ns + "filetype-html"
+        map["css"] = ns + "filetype-css"
         let sass = ns + "filetype-sass"
-        m["scss"] = sass; m["sass"] = sass; m["less"] = sass
+        map["scss"] = sass; map["sass"] = sass; map["less"] = sass
 
         // Frameworks
-        m["vue"] = ns + "filetype-vue"
-        m["svelte"] = ns + "filetype-svelte"
-        m["astro"] = ns + "filetype-astro"
+        map["vue"] = ns + "filetype-vue"
+        map["svelte"] = ns + "filetype-svelte"
+        map["astro"] = ns + "filetype-astro"
 
         // Data / config (structured)
-        m["json"] = ns + "filetype-json"
+        map["json"] = ns + "filetype-json"
         let yaml = ns + "filetype-yaml"
-        m["yaml"] = yaml; m["yml"] = yaml
-        m["toml"] = ns + "filetype-toml"
-        m["xml"] = ns + "filetype-xml"; m["plist"] = ns + "filetype-xml"
-        m["csv"] = ns + "filetype-csv"
-        m["graphql"] = ns + "filetype-graphql"; m["gql"] = ns + "filetype-graphql"
-        m["proto"] = ns + "filetype-proto"
+        map["yaml"] = yaml; map["yml"] = yaml
+        map["toml"] = ns + "filetype-toml"
+        map["xml"] = ns + "filetype-xml"; map["plist"] = ns + "filetype-xml"
+        map["csv"] = ns + "filetype-csv"
+        map["graphql"] = ns + "filetype-graphql"; map["gql"] = ns + "filetype-graphql"
+        map["proto"] = ns + "filetype-proto"
 
         // Config
         let cfg = ns + "filetype-config"
-        m["ini"] = cfg; m["cfg"] = cfg; m["conf"] = cfg
-        m["editorconfig"] = cfg
+        map["ini"] = cfg; map["cfg"] = cfg; map["conf"] = cfg
+        map["editorconfig"] = cfg
 
-        m["env"] = ns + "filetype-env"
+        map["env"] = ns + "filetype-env"
 
         // Shell
         let bash = ns + "filetype-bash"
-        m["sh"] = bash; m["bash"] = bash; m["zsh"] = bash; m["fish"] = bash; m["nu"] = bash
-        m["ps1"] = ns + "filetype-powershell"
+        map["sh"] = bash; map["bash"] = bash; map["zsh"] = bash; map["fish"] = bash; map["nu"] = bash
+        map["ps1"] = ns + "filetype-powershell"
 
         // Docker
-        m["dockerfile"] = ns + "filetype-docker"
+        map["dockerfile"] = ns + "filetype-docker"
 
         // Database
         let sql = ns + "filetype-sql"
-        m["sql"] = sql; m["sqlite"] = sql; m["db"] = sql
+        map["sql"] = sql; map["sqlite"] = sql; map["db"] = sql
 
         // Markdown / text
         let md = ns + "filetype-markdown"
-        m["md"] = md; m["markdown"] = md; m["mdx"] = md
+        map["md"] = md; map["markdown"] = md; map["mdx"] = md
         let txt = ns + "filetype-text"
-        m["txt"] = txt; m["rst"] = txt; m["adoc"] = txt; m["tex"] = txt
+        map["txt"] = txt; map["rst"] = txt; map["adoc"] = txt; map["tex"] = txt
 
         // PDF / documents
-        m["pdf"] = ns + "filetype-pdf"
+        map["pdf"] = ns + "filetype-pdf"
 
         // Images
         let img = ns + "filetype-image"
-        for ext in ["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico",
-                     "tiff", "heic"] {
-            m[ext] = img
+        for ext in [
+            "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico",
+            "tiff", "heic"
+        ] {
+            map[ext] = img
         }
-        m["svg"] = ns + "filetype-svg"
+        map["svg"] = ns + "filetype-svg"
 
         // Audio / Video
         let audio = ns + "filetype-audio"
         for ext in ["mp3", "wav", "aac", "flac", "ogg", "m4a"] {
-            m[ext] = audio
+            map[ext] = audio
         }
         let video = ns + "filetype-video"
         for ext in ["mp4", "mov", "avi", "mkv", "webm"] {
-            m[ext] = video
+            map[ext] = video
         }
 
         // Archives
         let zip = ns + "filetype-zip"
         for ext in ["zip", "tar", "gz", "bz2", "xz", "rar", "7z"] {
-            m[ext] = zip
+            map[ext] = zip
         }
 
         // Lock files
         let lock = ns + "filetype-lock"
-        m["lock"] = lock; m["resolved"] = lock
+        map["lock"] = lock; map["resolved"] = lock
 
         // Git
         let git = ns + "filetype-git"
-        m["gitignore"] = git; m["gitattributes"] = git
+        map["gitignore"] = git; map["gitattributes"] = git
 
         // npm
-        m["npmrc"] = ns + "filetype-npm"
+        map["npmrc"] = ns + "filetype-npm"
 
         // Log
-        m["log"] = ns + "filetype-log"
+        map["log"] = ns + "filetype-log"
 
         // Diff
-        m["diff"] = ns + "filetype-diff"; m["patch"] = ns + "filetype-diff"
+        map["diff"] = ns + "filetype-diff"; map["patch"] = ns + "filetype-diff"
 
         // Binary
         let bin = ns + "filetype-binary"
-        m["bin"] = bin; m["exe"] = bin; m["dylib"] = bin; m["so"] = bin
+        map["bin"] = bin; map["exe"] = bin; map["dylib"] = bin; map["so"] = bin
 
         // Certificates
         let cert = ns + "filetype-certificate"
-        m["pem"] = cert; m["crt"] = cert; m["key"] = cert; m["cer"] = cert
+        map["pem"] = cert; map["crt"] = cert; map["key"] = cert; map["cer"] = cert
 
-        return m
+        return map
     }()
-    // swiftlint:enable function_body_length
 }

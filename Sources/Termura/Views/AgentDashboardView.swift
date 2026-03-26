@@ -74,7 +74,7 @@ struct AgentDashboardView: View {
                         estimatedTokens: agent.tokenCount,
                         contextLimit: agent.contextWindowLimit
                     )
-                    .frame(width: 60)
+                    .frame(width: AppConfig.UI.agentDashboardLabelWidth)
                 }
             }
             .padding(.horizontal, AppUI.Spacing.md)

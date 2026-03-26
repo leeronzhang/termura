@@ -18,7 +18,7 @@ struct ContextWindowAlertView: View {
             dismissButton
         }
         .padding(AppUI.Spacing.xxl)
-        .frame(width: 320)
+        .frame(width: AppConfig.UI.contextWindowAlertWidth)
     }
 
     // MARK: - Subviews

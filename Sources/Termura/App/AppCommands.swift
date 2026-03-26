@@ -3,6 +3,16 @@ import SwiftUI
 
 struct AppCommands: Commands {
     var body: some Commands {
+        sessionCommands
+        toolCommands
+        viewCommands
+        sessionSwitchCommands
+        alertAndMergeCommands
+    }
+
+    // MARK: - Session commands (new item replacement)
+
+    private var sessionCommands: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Session") {
                 appDelegate?.activeContext?.sessionStore.createSession(title: "Terminal")
@@ -10,10 +20,14 @@ struct AppCommands: Commands {
             .keyboardShortcut("t", modifiers: .command)
 
             // Cmd+W is handled by TabAwareWindow.performClose() to close the active tab.
-            // Do NOT add a .keyboardShortcut("w") here — it conflicts with the system
+            // Do NOT add a .keyboardShortcut("w") here -- it conflicts with the system
             // "Close" menu item and causes the window to close instead of the tab.
         }
+    }
 
+    // MARK: - Tool commands (after new item)
+
+    private var toolCommands: some Commands {
         CommandGroup(after: .newItem) {
             Button("Open Project\u{2026}") {
                 appDelegate?.showProjectPicker()
@@ -53,34 +67,43 @@ struct AppCommands: Commands {
 
             Divider()
 
-            Button("Split Horizontally") {
-                appDelegate?.commandRouter?.requestSplitHorizontal()
-            }
-            .keyboardShortcut("d", modifiers: .command)
-
-            Button("Split Vertically") {
-                appDelegate?.commandRouter?.requestSplitVertical()
-            }
-            .keyboardShortcut("d", modifiers: [.command, .shift])
-
-            Button("Close Split Pane") {
-                appDelegate?.commandRouter?.requestCloseSplitPane()
-            }
-            .keyboardShortcut("w", modifiers: [.command, .shift])
-
-            Divider()
-
-            Button("Toggle Timeline") {
-                appDelegate?.commandRouter?.toggleTimeline()
-            }
-            .keyboardShortcut("l", modifiers: [.command, .shift])
-
-            Button("Toggle Agent Dashboard") {
-                appDelegate?.commandRouter?.toggleAgentDashboard()
-            }
-            .keyboardShortcut("a", modifiers: [.command, .shift])
+            splitAndToggleButtons
         }
+    }
 
+    @ViewBuilder
+    private var splitAndToggleButtons: some View {
+        Button("Split Horizontally") {
+            appDelegate?.commandRouter?.requestSplitHorizontal()
+        }
+        .keyboardShortcut("d", modifiers: .command)
+
+        Button("Split Vertically") {
+            appDelegate?.commandRouter?.requestSplitVertical()
+        }
+        .keyboardShortcut("d", modifiers: [.command, .shift])
+
+        Button("Close Split Pane") {
+            appDelegate?.commandRouter?.requestCloseSplitPane()
+        }
+        .keyboardShortcut("w", modifiers: [.command, .shift])
+
+        Divider()
+
+        Button("Toggle Timeline") {
+            appDelegate?.commandRouter?.toggleTimeline()
+        }
+        .keyboardShortcut("l", modifiers: [.command, .shift])
+
+        Button("Toggle Agent Dashboard") {
+            appDelegate?.commandRouter?.toggleAgentDashboard()
+        }
+        .keyboardShortcut("a", modifiers: [.command, .shift])
+    }
+
+    // MARK: - View commands (zoom, after toolbar)
+
+    private var viewCommands: some Commands {
         CommandGroup(after: .toolbar) {
             Button("Zoom In") {
                 (NSApp.delegate as? AppDelegate)?.fontSettings.zoomIn()
@@ -97,12 +120,20 @@ struct AppCommands: Commands {
             }
             .keyboardShortcut("0", modifiers: .command)
         }
+    }
 
+    // MARK: - Session switch commands
+
+    private var sessionSwitchCommands: some Commands {
         CommandGroup(after: .undoRedo) {
             Divider()
             SessionSwitchCommands()
         }
+    }
 
+    // MARK: - Alert and merge commands
+
+    private var alertAndMergeCommands: some Commands {
         CommandGroup(after: .undoRedo) {
             Button("Jump to Next Alert") {
                 guard let ctx = appDelegate?.activeContext,

@@ -22,7 +22,7 @@ struct BranchMergeSheet: View {
             actionBar
         }
         .padding(AppUI.Spacing.xxl)
-        .frame(width: 480)
+        .frame(width: AppConfig.UI.branchMergeSheetWidth)
         .frame(minHeight: 350)
         .onAppear { generateSummary() }
     }

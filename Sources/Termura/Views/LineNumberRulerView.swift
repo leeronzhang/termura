@@ -9,34 +9,31 @@ final class LineNumberRulerView: NSRulerView {
     private weak var textView: NSTextView?
     private var fontFamily: String
     private var fontSize: CGFloat
-    private var lineHeightMultiple: CGFloat
-
-    /// Right-side padding between line number text and the ruler edge.
-    private static let trailingPadding: CGFloat = 6
+    private var lineSpacing: CGFloat
 
     init(
         textView: NSTextView,
         fontFamily: String,
         fontSize: CGFloat,
-        lineHeightMultiple: CGFloat
+        lineSpacing: CGFloat
     ) {
         self.textView = textView
         self.fontFamily = fontFamily
         self.fontSize = fontSize
-        self.lineHeightMultiple = lineHeightMultiple
+        self.lineSpacing = lineSpacing
         super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
-        ruleThickness = 40
+        ruleThickness = 60
         clientView = textView
 
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(textDidChange),
+            selector: #selector(needsRedraw),
             name: NSText.didChangeNotification,
             object: textView
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(boundsDidChange),
+            selector: #selector(needsRedraw),
             name: NSView.boundsDidChangeNotification,
             object: textView.enclosingScrollView?.contentView
         )
@@ -47,7 +44,6 @@ final class LineNumberRulerView: NSRulerView {
         preconditionFailure("init(coder:) is not supported")
     }
 
-    /// Called from `updateNSView` when font settings change.
     func updateFont(family: String, size: CGFloat) {
         guard family != fontFamily || size != fontSize else { return }
         fontFamily = family
@@ -55,22 +51,21 @@ final class LineNumberRulerView: NSRulerView {
         needsDisplay = true
     }
 
-    @objc private func textDidChange(_ notification: Notification) {
+    @objc private func needsRedraw(_ notification: Notification) {
         needsDisplay = true
     }
 
-    @objc private func boundsDidChange(_ notification: Notification) {
-        needsDisplay = true
-    }
+    // MARK: - Drawing
 
-    private func rulerAttributes() -> [NSAttributedString.Key: Any] {
-        let rulerFontSize = max(fontSize - 3, FontSettings.minSize)
-        let rulerFont = NSFont(name: fontFamily, size: rulerFontSize)
-            ?? NSFont.monospacedDigitSystemFont(ofSize: rulerFontSize, weight: .regular)
-        return [
-            .font: rulerFont,
-            .foregroundColor: NSColor.secondaryLabelColor
-        ]
+    override func draw(_ dirtyRect: NSRect) {
+        // Clip to bounds to prevent drawing outside the ruler area
+        let clippedRect = dirtyRect.intersection(bounds)
+        guard !clippedRect.isEmpty else { return }
+        // Fill background to hide the default ruler separator line.
+        let bg = textView?.backgroundColor ?? .textBackgroundColor
+        bg.setFill()
+        clippedRect.fill()
+        drawHashMarksAndLabels(in: clippedRect)
     }
 
     override func drawHashMarksAndLabels(in rect: NSRect) {
@@ -83,111 +78,112 @@ final class LineNumberRulerView: NSRulerView {
 
         layoutManager.ensureLayout(for: textContainer)
 
-        let ctx = DrawingContext(
-            textView: textView,
-            layoutManager: layoutManager,
-            textContainer: textContainer,
-            attrs: rulerAttributes(),
-            containerOrigin: textView.textContainerOrigin
-        )
+        let attrs = rulerAttributes()
+        let containerOrigin = textView.textContainerOrigin
+        let visibleRect = textView.visibleRect
+        let margin: CGFloat = (fontSize + lineSpacing) * 2
 
-        let margin = fontSize * lineHeightMultiple * 2
-        let visibleRange = computeVisibleRange(text: text, context: ctx, margin: margin)
-        drawLineNumbers(text: text, visibleRange: visibleRange, context: ctx)
-    }
-}
+        // Pre-build a char-offset → line-number lookup (O(n) once, O(1) per query)
+        let lineNumberAt = buildLineNumberLookup(text: text)
 
-// MARK: - Drawing helpers
+        // Use enumerateLineFragments to get exact Y positions for every visual line.
+        let fullGlyphRange = layoutManager.glyphRange(for: textContainer)
+        var lastDrawnLine = -1
 
-@MainActor
-private extension LineNumberRulerView {
+        layoutManager.enumerateLineFragments(
+            forGlyphRange: fullGlyphRange
+        ) { lineRect, _, _, glyphRange, stop in
+            let yInTextView = lineRect.origin.y + containerOrigin.y
 
-    struct DrawingContext {
-        let textView: NSTextView
-        let layoutManager: NSLayoutManager
-        let textContainer: NSTextContainer
-        let attrs: [NSAttributedString.Key: Any]
-        let containerOrigin: NSPoint
-    }
-
-    func computeVisibleRange(text: NSString, context: DrawingContext, margin: CGFloat) -> NSRange {
-        let visibleRect = context.textView.visibleRect
-        let topY = max(visibleRect.origin.y - context.containerOrigin.y - margin, 0)
-        let bottomY = visibleRect.maxY - context.containerOrigin.y + margin
-
-        let topCharIdx = context.layoutManager.characterIndex(
-            for: NSPoint(x: 0, y: topY),
-            in: context.textContainer,
-            fractionOfDistanceBetweenInsertionPoints: nil
-        )
-        let bottomCharIdx = context.layoutManager.characterIndex(
-            for: NSPoint(x: 0, y: bottomY),
-            in: context.textContainer,
-            fractionOfDistanceBetweenInsertionPoints: nil
-        )
-
-        let startLine = text.lineRange(for: NSRange(location: topCharIdx, length: 0))
-        let endLine = text.lineRange(for: NSRange(
-            location: min(bottomCharIdx, text.length - 1), length: 0
-        ))
-        return NSRange(location: startLine.location, length: NSMaxRange(endLine) - startLine.location)
-    }
-
-    func drawLineNumbers(text: NSString, visibleRange: NSRange, context: DrawingContext) {
-        var lineNumber = countNewlines(in: text, upTo: visibleRange.location)
-        var index = visibleRange.location
-
-        while index < NSMaxRange(visibleRange) {
-            let lineRange = text.lineRange(for: NSRange(location: index, length: 0))
-            let glyphRange = context.layoutManager.glyphRange(
-                forCharacterRange: lineRange, actualCharacterRange: nil
-            )
-            guard glyphRange.length > 0 else {
-                lineNumber += 1
-                index = NSMaxRange(lineRange)
-                continue
+            // Skip fragments well above visible area
+            if yInTextView + lineRect.height < visibleRect.origin.y - margin { return }
+            // Stop well below visible area
+            if yInTextView > visibleRect.maxY + margin {
+                stop.pointee = true
+                return
             }
 
-            drawSingleNumber(lineNumber, glyphIndex: glyphRange.location, context: context)
+            let charRange = layoutManager.characterRange(
+                forGlyphRange: glyphRange, actualGlyphRange: nil
+            )
+            let charIdx = min(charRange.location, lineNumberAt.count - 1)
+            let lineNumber = charIdx >= 0 ? lineNumberAt[charIdx] : 1
 
-            lineNumber += 1
-            index = NSMaxRange(lineRange)
+            // Only draw for the first fragment of each logical line (skip soft-wrapped continuations)
+            guard lineNumber != lastDrawnLine else { return }
+            lastDrawnLine = lineNumber
+
+            self.drawNumber(
+                lineNumber,
+                lineRect: lineRect,
+                containerOrigin: containerOrigin,
+                attrs: attrs
+            )
+        }
+
+        // Handle the extra line fragment (empty line after trailing \n)
+        let extraRect = layoutManager.extraLineFragmentRect
+        if extraRect.height > 0 {
+            let yInTextView = extraRect.origin.y + containerOrigin.y
+            if yInTextView >= visibleRect.origin.y - margin,
+               yInTextView <= visibleRect.maxY + margin {
+                let lastLine = (lastDrawnLine > 0 ? lastDrawnLine : 0) + 1
+                drawNumber(lastLine, lineRect: extraRect, containerOrigin: containerOrigin, attrs: attrs)
+            }
         }
     }
 
-    func countNewlines(in text: NSString, upTo location: Int) -> Int {
-        var count = 1
-        guard location > 0 else { return count }
-        let prefix = text.substring(to: location) as NSString
-        var sr = NSRange(location: 0, length: prefix.length)
-        while sr.length > 0 {
-            let found = prefix.range(of: "\n", options: [], range: sr)
-            if found.location == NSNotFound { break }
-            count += 1
-            let next = found.location + found.length
-            sr = NSRange(location: next, length: prefix.length - next)
+    // MARK: - Helpers
+
+    /// Builds an array mapping each character offset to its 1-based logical line number.
+    /// Index i holds the line number for character at offset i. O(n) construction, O(1) lookup.
+    private func buildLineNumberLookup(text: NSString) -> [Int] {
+        let len = text.length
+        guard len > 0 else { return [] }
+        var lookup = [Int](repeating: 1, count: len)
+        var line = 1
+        for i in 0..<len {
+            lookup[i] = line
+            if text.character(at: i) == 0x0A { line += 1 }
         }
-        return count
+        return lookup
     }
 
-    func drawSingleNumber(_ lineNumber: Int, glyphIndex: Int, context: DrawingContext) {
-        let lineRect = context.layoutManager.lineFragmentRect(
-            forGlyphAt: glyphIndex, effectiveRange: nil
-        )
-        let baseline = context.layoutManager.location(forGlyphAt: glyphIndex)
+    private func drawNumber(
+        _ lineNumber: Int,
+        lineRect: NSRect,
+        containerOrigin: NSPoint,
+        attrs: [NSAttributedString.Key: Any]
+    ) {
+        guard let textView else { return }
 
-        let yInTextView = lineRect.origin.y + context.containerOrigin.y
-        let yInRuler = convert(NSPoint(x: 0, y: yInTextView), from: context.textView).y
+        let yInTextView = lineRect.origin.y + containerOrigin.y
+        let yInRuler = convert(NSPoint(x: 0, y: yInTextView), from: textView).y
 
         let numStr = "\(lineNumber)" as NSString
-        let strSize = numStr.size(withAttributes: context.attrs)
-        let rulerFont = context.attrs[.font] as? NSFont
-        let ascender = rulerFont?.ascender ?? strSize.height
-        let baselineInRuler = yInRuler + baseline.y
-        let drawPoint = NSPoint(
-            x: ruleThickness - strSize.width - Self.trailingPadding,
-            y: baselineInRuler - ascender
-        )
-        numStr.draw(at: drawPoint, withAttributes: context.attrs)
+        let strSize = numStr.size(withAttributes: attrs)
+
+        // Vertically center in the line fragment
+        let drawY = yInRuler + (lineRect.height - strSize.height) / 2
+
+        // Right-align within a 3-digit block, centered across the full visual gutter
+        // (ruler width + text container inset up to the level-0 guide line)
+        let insetWidth = textView.textContainerInset.width
+        let totalGutter = ruleThickness + insetWidth
+        let refWidth = NSString("000").size(withAttributes: attrs).width
+        let blockX = (totalGutter - refWidth) / 2
+        let drawX = blockX + refWidth - strSize.width
+
+        numStr.draw(at: NSPoint(x: drawX, y: drawY), withAttributes: attrs)
+    }
+
+    private func rulerAttributes() -> [NSAttributedString.Key: Any] {
+        let rulerFontSize = max(fontSize - 3, FontSettings.minSize)
+        let rulerFont = NSFont(name: fontFamily, size: rulerFontSize)
+            ?? NSFont.monospacedDigitSystemFont(ofSize: rulerFontSize, weight: .regular)
+        return [
+            .font: rulerFont,
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
     }
 }

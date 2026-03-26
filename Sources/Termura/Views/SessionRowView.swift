@@ -25,32 +25,9 @@ struct SessionRowView: View {
 
     var body: some View {
         HStack(spacing: AppUI.Spacing.smMd) {
-            colorDot
-            if let type = agentType, type != .unknown {
-                AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
-            }
-            sessionTitle
+            sessionInfo
             Spacer(minLength: AppUI.Spacing.sm)
-            if let status = agentStatus, let type = agentType {
-                AgentStatusBadgeView(status: status, agentType: type)
-            }
-            if hasUnreadFailure {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
-            }
-            if let toggle = onToggleExpand {
-                Button {
-                    toggle()
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(AppUI.Font.micro)
-                        .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
+            actionButtons
             closeButton
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
@@ -75,6 +52,39 @@ struct SessionRowView: View {
                     glowOpacity = 0.0
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var sessionInfo: some View {
+        colorDot
+        if let type = agentType, type != .unknown {
+            AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
+        }
+        sessionTitle
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        if let status = agentStatus, let type = agentType {
+            AgentStatusBadgeView(status: status, agentType: type)
+        }
+        if hasUnreadFailure {
+            Circle()
+                .fill(Color.red)
+                .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
+        }
+        if let toggle = onToggleExpand {
+            Button {
+                toggle()
+            } label: {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(AppUI.Font.micro)
+                    .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
+                    .frame(width: AppUI.Size.iconFrame, height: AppUI.Size.iconFrame)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 

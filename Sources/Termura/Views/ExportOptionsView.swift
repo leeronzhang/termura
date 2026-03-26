@@ -26,7 +26,7 @@ struct ExportOptionsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 200)
+            .frame(width: AppConfig.UI.fieldPickerWidth)
 
             Text("\(chunks.count) output blocks")
                 .font(.caption)
@@ -48,7 +48,7 @@ struct ExportOptionsView: View {
             }
         }
         .padding(AppUI.Spacing.xxxl)
-        .frame(width: 320)
+        .frame(width: AppConfig.UI.exportOptionsSheetWidth)
     }
 
     private func performExport() {

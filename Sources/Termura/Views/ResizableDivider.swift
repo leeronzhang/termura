@@ -15,7 +15,7 @@ struct ResizableDivider: View {
         Group {
             if showLine {
                 Color(nsColor: .separatorColor)
-                    .frame(width: 1)
+                    .frame(width: AppConfig.UI.dividerLineWidth)
             }
         }
         // Zero layout width when hidden, 1pt when visible.
@@ -23,7 +23,7 @@ struct ResizableDivider: View {
         .frame(maxHeight: .infinity)
         .overlay {
             Color.clear
-                .frame(width: 9)
+                .frame(width: AppConfig.UI.dividerHitTarget)
                 .contentShape(Rectangle())
                 .gesture(resizeGesture)
                 .onHover { hovering in

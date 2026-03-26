@@ -40,6 +40,8 @@ enum AppConfig {
         static let longCommandThresholdSeconds: Double = 30.0
         /// Visor animation duration
         static let visorAnimationSeconds: Double = 0.2
+        /// Delay before dismissing onboarding sheet after install.
+        static let onboardingDismissDelaySeconds: Double = 1.0
     }
 
     enum SLO {
@@ -254,6 +256,8 @@ enum AppConfig {
         static let maxDisplayedFiles = 200
         /// Timeout for git CLI commands (nanoseconds). 5 seconds.
         static let commandTimeoutNanoseconds: UInt64 = 5_000_000_000
+        /// Debounce interval in nanoseconds (derived from refreshDebounceSeconds).
+        static let refreshDebounceNanoseconds: UInt64 = 500_000_000
     }
 
     enum RecentProjects {

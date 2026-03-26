@@ -49,6 +49,28 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         let projectRoot = session.workingDirectory
         guard !projectRoot.isEmpty else { return }
 
+        let context = await buildHandoffContext(
+            session: session,
+            chunks: chunks,
+            agentState: agentState
+        )
+
+        try await persistHandoff(
+            context: context,
+            session: session,
+            projectRoot: projectRoot
+        )
+
+        logger.info("Session handoff generated for \(session.id) at \(projectRoot)")
+    }
+
+    // MARK: - Private Helpers
+
+    private func buildHandoffContext(
+        session: SessionRecord,
+        chunks: [OutputChunk],
+        agentState: AgentState
+    ) async -> HandoffContext {
         let summary = await summarizer.summarize(
             chunks: chunks,
             branchType: session.branchType
@@ -61,7 +83,7 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         let errors = extractErrors(from: chunks)
         let duration = session.lastActiveAt.timeIntervalSince(session.createdAt)
 
-        let existing = await readExistingContext(projectRoot: projectRoot)
+        let existing = await readExistingContext(projectRoot: session.workingDirectory)
 
         var mergedDecisions = (existing?.decisions ?? []) + decisions
         if mergedDecisions.count > AppConfig.SessionHandoff.maxDecisionEntries {
@@ -70,7 +92,7 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
             )
         }
 
-        let context = HandoffContext(
+        return HandoffContext(
             taskStatus: truncatedSummary,
             decisions: mergedDecisions,
             errors: errors,
@@ -78,10 +100,15 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
             sessionDuration: duration,
             lastUpdated: Date()
         )
+    }
 
+    private func persistHandoff(
+        context: HandoffContext,
+        session: SessionRecord,
+        projectRoot: String
+    ) async throws {
         try await writeContextFile(context: context, projectRoot: projectRoot)
 
-        // Record metadata message
         let path = "\(projectRoot)/\(AppConfig.SessionHandoff.directoryName)/\(AppConfig.SessionHandoff.contextFileName)"
         let message = SessionMessage(
             sessionID: session.id,
@@ -91,15 +118,12 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         )
         try await messageRepo.save(message)
 
-        // Record harness event
         let event = HarnessEvent(
             sessionID: session.id,
             eventType: .sessionHandoff,
-            payload: "{\"agentType\":\"\(agentState.agentType.rawValue)\",\"decisionsCount\":\(mergedDecisions.count)}"
+            payload: "{\"agentType\":\"\(context.agentType?.rawValue ?? "unknown")\",\"decisionsCount\":\(context.decisions.count)}"
         )
         try await harnessEventRepo.save(event)
-
-        logger.info("Session handoff generated for \(session.id) at \(projectRoot)")
     }
 
     func readExistingContext(projectRoot: String) async -> HandoffContext? {

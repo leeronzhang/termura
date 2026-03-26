@@ -49,7 +49,7 @@ struct CodifyRuleSheet: View {
             }
         }
         .padding(AppUI.Spacing.xxl)
-        .frame(width: 500)
+        .frame(width: AppConfig.UI.codifyRuleSheetWidth)
         .frame(minHeight: 400)
     }
 

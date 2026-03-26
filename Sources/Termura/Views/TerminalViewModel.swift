@@ -174,38 +174,7 @@ final class TerminalViewModel: ObservableObject {
     private func handleOutputEvent(_ event: TerminalOutputEvent) async {
         switch event {
         case let .data(data):
-            guard let text = String(data: data, encoding: .utf8) else { return }
-            let stripped = ANSIStripper.strip(text)
-            let sid = sessionID
-            let detector = chunkDetector
-            let fallback = fallbackDetector
-            let store = outputStore
-            let service = tokenCountingService
-            let agentDet = agentDetector
-            let intervention = interventionService
-            Task.detached {
-                await detector.appendRawOutput(text)
-                let chunks = await fallback.processOutput(stripped, raw: text)
-                await MainActor.run {
-                    for chunk in chunks {
-                        store.append(chunk)
-                    }
-                }
-                await service.accumulate(for: sid, text: stripped)
-                // Agent status analysis
-                _ = await agentDet.analyzeOutput(stripped)
-                // Risk detection
-                if let risk = await intervention.detectRisk(in: stripped) {
-                    await MainActor.run { [weak self] in
-                        self?.pendingRiskAlert = risk
-                    }
-                }
-            }
-            detectPromptFromScreenBuffer()
-            schedulePromptRecheck()
-            detectAgentFromOutput(stripped)
-            await updateAgentState()
-            await refreshMetadata()
+            await handleDataOutput(data)
 
         case let .processExited(code):
             let sid = sessionID
@@ -213,7 +182,6 @@ final class TerminalViewModel: ObservableObject {
             await generateHandoffIfNeeded(exitCode: code)
 
         case let .titleChanged(title):
-            // Don't let generic OSC title changes override an agent-detected name.
             if !hasDetectedAgentFromOutput {
                 sessionStore.renameSession(id: sessionID, title: Self.stripAgentPrefixes(title))
             }
@@ -222,6 +190,39 @@ final class TerminalViewModel: ObservableObject {
             sessionStore.updateWorkingDirectory(id: sessionID, path: path)
             await refreshMetadata(workingDirectory: path)
         }
+    }
+
+    private func handleDataOutput(_ data: Data) async {
+        guard let text = String(data: data, encoding: .utf8) else { return }
+        let stripped = ANSIStripper.strip(text)
+        let sid = sessionID
+        let detector = chunkDetector
+        let fallback = fallbackDetector
+        let store = outputStore
+        let service = tokenCountingService
+        let agentDet = agentDetector
+        let intervention = interventionService
+        Task.detached {
+            await detector.appendRawOutput(text)
+            let chunks = await fallback.processOutput(stripped, raw: text)
+            await MainActor.run {
+                for chunk in chunks {
+                    store.append(chunk)
+                }
+            }
+            await service.accumulate(for: sid, text: stripped)
+            _ = await agentDet.analyzeOutput(stripped)
+            if let risk = await intervention.detectRisk(in: stripped) {
+                await MainActor.run { [weak self] in
+                    self?.pendingRiskAlert = risk
+                }
+            }
+        }
+        detectPromptFromScreenBuffer()
+        schedulePromptRecheck()
+        detectAgentFromOutput(stripped)
+        await updateAgentState()
+        await refreshMetadata()
     }
 
     // MARK: - Context injection

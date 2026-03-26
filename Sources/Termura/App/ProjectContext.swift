@@ -44,11 +44,7 @@ final class ProjectContext: ObservableObject {
 
     /// Per-project file tree ViewModel — owned here so expanded state survives
     /// sidebar re-evaluations. Views receive it as @ObservedObject.
-    lazy var projectViewModel: ProjectViewModel = ProjectViewModel(
-        gitService: gitService,
-        projectRoot: projectURL.path,
-        commandRouter: commandRouter
-    )
+    let projectViewModel: ProjectViewModel
 
     // MARK: - Init (private — use open(at:engineFactory:))
 
@@ -75,7 +71,8 @@ final class ProjectContext: ObservableObject {
         gitService: GitService,
         commandRouter: CommandRouter,
         tokenCountingService: any TokenCountingServiceProtocol,
-        notesViewModel: NotesViewModel
+        notesViewModel: NotesViewModel,
+        projectViewModel: ProjectViewModel
     ) {
         self.projectURL = projectURL
         self.databaseService = databaseService
@@ -100,6 +97,7 @@ final class ProjectContext: ObservableObject {
         self.commandRouter = commandRouter
         self.tokenCountingService = tokenCountingService
         self.notesViewModel = notesViewModel
+        self.projectViewModel = projectViewModel
     }
 
     /// Project display name (directory basename).
@@ -113,180 +111,127 @@ final class ProjectContext: ObservableObject {
         engineFactory: any TerminalEngineFactory,
         tokenCountingService: TokenCountingService
     ) throws -> ProjectContext {
-        let pool = try DatabaseService.makePool(at: projectURL)
-        let db = try DatabaseService(pool: pool)
-
-        let sessionRepo = SessionRepository(db: db)
-        let noteRepo = NoteRepository(db: db)
-        let msgRepo = SessionMessageRepository(db: db)
-        let harnessRepo = HarnessEventRepository(db: db)
-        let ruleRepo = RuleFileRepository(db: db)
-        let snapshotRepo = SessionSnapshotRepository(db: db)
-
-        let engineStore = TerminalEngineStore(factory: engineFactory)
-        let sessionStore = SessionStore(
-            engineStore: engineStore,
-            projectRoot: projectURL.path,
-            repository: sessionRepo
-        )
-
-        let agentState = AgentStateStore()
-        let search = SearchService(
-            sessionRepository: sessionRepo,
-            noteRepository: noteRepo
-        )
-        let archive = SessionArchiveService(repository: sessionRepo)
-        let summarizer = BranchSummarizer()
-        let handoff = SessionHandoffService(
-            messageRepo: msgRepo,
-            harnessEventRepo: harnessRepo,
-            summarizer: summarizer
-        )
-        let injection = ContextInjectionService(handoffService: handoff)
-        let codifier = ExperienceCodifier(harnessEventRepo: harnessRepo)
-        let embedding = EmbeddingService()
-        let vector = VectorSearchService(embeddingService: embedding)
-        let git = GitService()
-        let router = CommandRouter()
+        let db = try DatabaseService(pool: DatabaseService.makePool(at: projectURL))
+        let repos = makeRepositories(db: db)
+        let services = makeServices(repos: repos, projectURL: projectURL, engineFactory: engineFactory)
 
         let url = projectURL
-        Task.detached { await Self.ensureGitignore(at: url) }
+        Task.detached { ensureProjectGitignore(at: url) }
         logger.info("Opened project at \(projectURL.path)")
 
         return ProjectContext(
             projectURL: projectURL,
             databaseService: db,
-            engineStore: engineStore,
-            sessionRepository: sessionRepo,
-            noteRepository: noteRepo,
-            sessionMessageRepository: msgRepo,
-            harnessEventRepository: harnessRepo,
-            ruleFileRepository: ruleRepo,
-            sessionSnapshotRepository: snapshotRepo,
-            sessionStore: sessionStore,
-            agentStateStore: agentState,
-            searchService: search,
-            sessionArchiveService: archive,
-            sessionHandoffService: handoff,
-            contextInjectionService: injection,
-            experienceCodifier: codifier,
-            branchSummarizer: summarizer,
-            embeddingService: embedding,
-            vectorSearchService: vector,
-            gitService: git,
-            commandRouter: router,
+            engineStore: services.engineStore,
+            sessionRepository: repos.session,
+            noteRepository: repos.note,
+            sessionMessageRepository: repos.message,
+            harnessEventRepository: repos.harness,
+            ruleFileRepository: repos.rule,
+            sessionSnapshotRepository: repos.snapshot,
+            sessionStore: services.sessionStore,
+            agentStateStore: services.agentState,
+            searchService: services.search,
+            sessionArchiveService: services.archive,
+            sessionHandoffService: services.handoff,
+            contextInjectionService: services.injection,
+            experienceCodifier: services.codifier,
+            branchSummarizer: services.summarizer,
+            embeddingService: services.embedding,
+            vectorSearchService: services.vector,
+            gitService: services.git,
+            commandRouter: services.router,
             tokenCountingService: tokenCountingService,
-            notesViewModel: NotesViewModel(repository: noteRepo)
+            notesViewModel: NotesViewModel(repository: repos.note),
+            projectViewModel: ProjectViewModel(
+                gitService: services.git,
+                projectRoot: projectURL.path,
+                commandRouter: services.router
+            )
         )
     }
 
     // MARK: - Per-session view state cache
 
     /// Cached per-session view objects. Lazily created on first access, removed on session close.
-    /// This avoids the fragile `@StateObject`-in-init pattern — views receive these
-    /// as `@ObservedObject`, and the cache owns the lifecycle.
     private(set) var sessionViewStates: [SessionID: SessionViewState] = [:]
-
-    /// Returns (or lazily creates) the per-session view state for the given session.
-    func viewState(
-        for sessionID: SessionID,
-        engine: any TerminalEngine
-    ) -> SessionViewState {
-        if let existing = sessionViewStates[sessionID] { return existing }
-
-        let outputStore = OutputStore(sessionID: sessionID, commandRouter: commandRouter)
-        let modeCtrl = InputModeController()
-        let timeline = SessionTimeline()
-        let vm = TerminalViewModel(
-            sessionID: sessionID,
-            engine: engine,
-            sessionStore: sessionStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenCountingService,
-            modeController: modeCtrl,
-            agentStateStore: agentStateStore,
-            isRestoredSession: sessionStore.isRestoredSession(id: sessionID),
-            contextInjectionService: contextInjectionService,
-            sessionHandoffService: sessionHandoffService
-        )
-        let editorVM = EditorViewModel(engine: engine, modeController: modeCtrl)
-
-        let state = SessionViewState(
-            outputStore: outputStore,
-            viewModel: vm,
-            editorViewModel: editorVM,
-            modeController: modeCtrl,
-            timeline: timeline
-        )
-        sessionViewStates[sessionID] = state
-        outputStores[sessionID] = outputStore
-        return state
-    }
-
-    /// Remove cached view state when a session is closed.
-    func removeViewState(for sessionID: SessionID) {
-        sessionViewStates.removeValue(forKey: sessionID)
-        outputStores.removeValue(forKey: sessionID)
-    }
-
-    // MARK: - OutputStore registry
 
     /// Per-session OutputStore references — used by AppDelegate for termination handoff.
     private(set) var outputStores: [SessionID: OutputStore] = [:]
 
-    func registerOutputStore(_ store: OutputStore, for sessionID: SessionID) {
-        outputStores[sessionID] = store
+    // MARK: - View state mutation API (for cross-file extensions)
+
+    func setViewState(_ state: SessionViewState?, for id: SessionID) {
+        sessionViewStates[id] = state
     }
 
-    func unregisterOutputStore(for sessionID: SessionID) {
-        outputStores.removeValue(forKey: sessionID)
+    func setOutputStore(_ store: OutputStore?, for id: SessionID) {
+        outputStores[id] = store
     }
 
-    // MARK: - Teardown
-
-    func close() {
+    func clearAllCaches() {
         sessionViewStates.removeAll()
         outputStores.removeAll()
-        engineStore.terminateAll()
-        let path = projectURL.path
-        logger.info("Closed project at \(path)")
     }
 
-    // MARK: - .gitignore management
+    // MARK: - Factory helpers
 
-    /// Appends `.termura/` to the project's `.gitignore` if not already present.
-    private static func ensureGitignore(at projectURL: URL) {
-        let gitignoreURL = projectURL.appendingPathComponent(".gitignore")
-        let entry = ".termura/"
+    private struct Repos {
+        let session: SessionRepository
+        let note: NoteRepository
+        let message: SessionMessageRepository
+        let harness: HarnessEventRepository
+        let rule: RuleFileRepository
+        let snapshot: SessionSnapshotRepository
+    }
 
-        if FileManager.default.fileExists(atPath: gitignoreURL.path) {
-            let contents: String
-            do {
-                contents = try String(contentsOf: gitignoreURL, encoding: .utf8)
-            } catch {
-                logger.warning("Could not read .gitignore: \(error)")
-                return
-            }
-            let lines = contents.components(separatedBy: .newlines)
-            if lines.contains(where: { line in line.trimmingCharacters(in: .whitespaces) == entry }) { return }
-            // Append with newline safety
-            let suffix = contents.hasSuffix("\n") ? entry + "\n" : "\n" + entry + "\n"
-            do {
-                try (contents + suffix).write(to: gitignoreURL, atomically: true, encoding: .utf8)
-                logger.info("Appended \(entry) to .gitignore")
-            } catch {
-                logger.warning("Could not update .gitignore: \(error)")
-            }
-        } else {
-            // Only create .gitignore if a .git directory exists (i.e., it's a git repo)
-            let gitDir = projectURL.appendingPathComponent(".git")
-            guard FileManager.default.fileExists(atPath: gitDir.path) else { return }
-            do {
-                try (entry + "\n").write(to: gitignoreURL, atomically: true, encoding: .utf8)
-                logger.info("Created .gitignore with \(entry)")
-            } catch {
-                logger.warning("Could not create .gitignore: \(error)")
-            }
-        }
+    private static func makeRepositories(db: DatabaseService) -> Repos {
+        Repos(
+            session: SessionRepository(db: db),
+            note: NoteRepository(db: db),
+            message: SessionMessageRepository(db: db),
+            harness: HarnessEventRepository(db: db),
+            rule: RuleFileRepository(db: db),
+            snapshot: SessionSnapshotRepository(db: db)
+        )
+    }
+
+    private struct Svc {
+        let engineStore: TerminalEngineStore
+        let sessionStore: SessionStore
+        let agentState: AgentStateStore
+        let search: SearchService
+        let archive: SessionArchiveService
+        let summarizer: BranchSummarizer
+        let handoff: SessionHandoffService
+        let injection: ContextInjectionService
+        let codifier: ExperienceCodifier
+        let embedding: EmbeddingService
+        let vector: VectorSearchService
+        let git: GitService
+        let router: CommandRouter
+    }
+
+    private static func makeServices(
+        repos: Repos, projectURL: URL, engineFactory: any TerminalEngineFactory
+    ) -> Svc {
+        let eng = TerminalEngineStore(factory: engineFactory)
+        let sum = BranchSummarizer()
+        let hoff = SessionHandoffService(
+            messageRepo: repos.message, harnessEventRepo: repos.harness, summarizer: sum
+        )
+        let emb = EmbeddingService()
+        return Svc(
+            engineStore: eng,
+            sessionStore: SessionStore(engineStore: eng, projectRoot: projectURL.path, repository: repos.session),
+            agentState: AgentStateStore(),
+            search: SearchService(sessionRepository: repos.session, noteRepository: repos.note),
+            archive: SessionArchiveService(repository: repos.session),
+            summarizer: sum, handoff: hoff,
+            injection: ContextInjectionService(handoffService: hoff),
+            codifier: ExperienceCodifier(harnessEventRepo: repos.harness),
+            embedding: emb, vector: VectorSearchService(embeddingService: emb),
+            git: GitService(), router: CommandRouter()
+        )
     }
 }

@@ -1,6 +1,20 @@
 import SwiftUI
 
 extension MainView {
+    var searchSheet: some View {
+        SearchView(
+            searchService: projectContext.searchService,
+            isPresented: $commandRouter.showSearch,
+            onSelectSession: { id in sessionStore.activateSession(id: id) },
+            vectorService: projectContext.vectorSearchService
+        )
+    }
+
+    var notesSheet: some View {
+        NotesSplitView(viewModel: notesViewModel)
+            .frame(minWidth: 600, minHeight: 400)
+    }
+
     @ViewBuilder
     var exportSheet: some View {
         // Export is handled by TerminalAreaView which has access to OutputStore chunks.
@@ -26,7 +40,7 @@ extension MainView {
             projectRoot: projectRoot
         )
         HarnessSidebarView(viewModel: vm, isPresented: $commandRouter.showHarness)
-            .frame(minWidth: 300, idealHeight: 500)
+            .frame(minWidth: AppConfig.UI.mainSheetMinWidth, idealHeight: AppConfig.UI.mainSheetIdealHeight)
     }
 
     /// Working directory of the active session, falling back to home directory.

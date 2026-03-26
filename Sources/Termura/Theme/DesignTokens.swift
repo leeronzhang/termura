@@ -91,11 +91,11 @@ enum AppUI {
         /// 13pt — toolbar toggle icons (timeline, metadata panel)
         static let toolbarIcon = SwiftUI.Font.system(size: 13)
         /// 13pt monospaced — project path, working directory display
-        static let pathMono = SwiftUI.Font.system(size: 13, design: .monospaced)
+        static let pathMono = SwiftUI.Font.custom(AppConfig.Fonts.terminalFamily, size: 13)
         /// 9pt semibold — folder / tree chevrons
         static let chevron = SwiftUI.Font.system(size: 9, weight: .semibold)
         /// 10pt bold monospaced — git status badges (M, A, D, U, R)
-        static let gitBadge = SwiftUI.Font.system(size: 10, weight: .bold, design: .monospaced)
+        static let gitBadge = SwiftUI.Font.custom(AppConfig.Fonts.terminalFamily, size: 10).bold()
         /// 15pt — sidebar tab bar icons
         static let tabBarIcon = SwiftUI.Font.system(size: 15)
     }
@@ -148,6 +148,14 @@ enum AppUI {
         static let iconFrameLarge: CGFloat = 18
         /// Divider height inside toolbars
         static let toolbarDivider: CGFloat = 16
+        /// 13pt — file type icon in sidebar rows
+        static let fileTypeIcon: CGFloat = 13
+        /// 14pt — theme checkbox indicator
+        static let themeCheckbox: CGFloat = 14
+        /// 7pt — directory expansion chevron
+        static let directoryChevron: CGFloat = 7
+        /// 1pt — branch indicator line width
+        static let branchIndicatorLine: CGFloat = 1
     }
 
     // MARK: - Shadow

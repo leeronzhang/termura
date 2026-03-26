@@ -83,7 +83,7 @@ struct InterventionToolbarView: View {
                 .foregroundColor(.secondary)
             TextField("Type instruction\u{2026}", text: $directiveText)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
+                .frame(width: AppConfig.UI.fieldPickerWidth)
                 .onSubmit {
                     let text = directiveText.trimmingCharacters(in: .whitespaces)
                     guard !text.isEmpty else { return }

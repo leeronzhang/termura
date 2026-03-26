@@ -77,7 +77,7 @@ struct FilePreviewView: View {
             Text("\(Int(zoomScale * 100))%")
                 .font(AppUI.Font.captionMono)
                 .foregroundColor(.secondary)
-                .frame(width: 36, alignment: .center)
+                .frame(width: AppConfig.UI.filePreviewLineNumberWidth, alignment: .center)
 
             Button {
                 zoomScale = min(zoomScale + 0.25, 4.0)

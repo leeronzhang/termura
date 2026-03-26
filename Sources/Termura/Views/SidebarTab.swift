@@ -75,7 +75,7 @@ struct SidebarTabBar: View {
                 if tab == .project && hasUncommittedChanges {
                     Circle()
                         .fill(Color.accentColor)
-                        .frame(width: 6, height: 6)
+                        .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
                         .offset(x: 3, y: -1)
                 }
             }

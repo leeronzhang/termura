@@ -17,4 +17,10 @@ actor MockGitService: GitServiceProtocol {
     func diff(file: String, staged: Bool, at directory: String) async throws -> String {
         stubbedDiff
     }
+
+    var stubbedTrackedFiles: Set<String> = []
+
+    func trackedFiles(at directory: String) async throws -> Set<String> {
+        stubbedTrackedFiles
+    }
 }

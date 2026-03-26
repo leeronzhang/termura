@@ -13,10 +13,11 @@ actor FileTreeService {
     }
 
     /// Annotates tree nodes with git status from a `GitStatusResult`.
-    /// Also propagates status up to parent directories.
+    /// Also propagates status up to parent directories and marks ignored files.
     func annotate(
         tree: [FileTreeNode],
-        with gitResult: GitStatusResult
+        with gitResult: GitStatusResult,
+        trackedFiles: Set<String> = []
     ) -> [FileTreeNode] {
         guard gitResult.isGitRepo else { return tree }
 
@@ -26,7 +27,7 @@ actor FileTreeService {
             lookup[file.path] = (file.kind, file.isStaged)
         }
 
-        return annotateNodes(tree, lookup: lookup)
+        return annotateNodes(tree, lookup: lookup, trackedFiles: trackedFiles)
     }
 
     // MARK: - Private scanning
@@ -38,10 +39,9 @@ actor FileTreeService {
     ) -> [FileTreeNode] {
         guard depth < AppConfig.FileTree.maxDepth else { return [] }
 
-        let fm = FileManager.default
         let contents: [URL]
         do {
-            contents = try fm.contentsOfDirectory(
+            contents = try FileManager.default.contentsOfDirectory(
                 at: directoryURL,
                 includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
                 options: [.skipsPackageDescendants]
@@ -51,13 +51,37 @@ actor FileTreeService {
             return []
         }
 
-        var dirs: [FileTreeNode] = []
-        var files: [FileTreeNode] = []
+        let (dirURLs, fileURLs) = classifyEntries(contents, relativeTo: rootURL)
+        var dirs = dirURLs.map { entry in
+            let children = buildChildren(at: entry.url, relativeTo: rootURL, depth: depth + 1)
+            return FileTreeNode(name: entry.name, relativePath: entry.relativePath, isDirectory: true, children: children)
+        }
+        var files = fileURLs.map { entry in
+            FileTreeNode(name: entry.name, relativePath: entry.relativePath, isDirectory: false)
+        }
+
+        dirs.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        files.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        return dirs + files
+    }
+
+    private struct ClassifiedEntry {
+        let url: URL
+        let name: String
+        let relativePath: String
+    }
+
+    /// Classifies directory contents into directories and files, filtering out hidden/ignored entries.
+    private func classifyEntries(
+        _ contents: [URL],
+        relativeTo rootURL: URL
+    ) -> (dirs: [ClassifiedEntry], files: [ClassifiedEntry]) {
+        var dirs: [ClassifiedEntry] = []
+        var files: [ClassifiedEntry] = []
 
         for url in contents {
             let name = url.lastPathComponent
-
-            // Skip hidden files and ignored directories
             if name.hasPrefix(".") && AppConfig.FileTree.ignoredDotfiles { continue }
             if AppConfig.FileTree.ignoredDirectories.contains(name) { continue }
 
@@ -68,55 +92,59 @@ actor FileTreeService {
                 logger.warning("Failed to read resource values for \(url.path): \(error.localizedDescription)")
                 isDir = false
             }
-            let relativePath = url.path.replacingOccurrences(
-                of: rootURL.path + "/",
-                with: ""
-            )
+            let relativePath = url.path.replacingOccurrences(of: rootURL.path + "/", with: "")
+            let entry = ClassifiedEntry(url: url, name: name, relativePath: relativePath)
 
             if isDir {
-                let children = buildChildren(at: url, relativeTo: rootURL, depth: depth + 1)
-                dirs.append(FileTreeNode(
-                    name: name,
-                    relativePath: relativePath,
-                    isDirectory: true,
-                    children: children
-                ))
+                dirs.append(entry)
             } else {
-                files.append(FileTreeNode(
-                    name: name,
-                    relativePath: relativePath,
-                    isDirectory: false
-                ))
+                files.append(entry)
             }
         }
-
-        // Sort: directories first, then files, both alphabetically
-        dirs.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        files.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-
-        return dirs + files
+        return (dirs, files)
     }
 
     // MARK: - Private annotation
 
     private func annotateNodes(
         _ nodes: [FileTreeNode],
-        lookup: [String: (GitFileStatus.Kind, Bool)]
+        lookup: [String: (GitFileStatus.Kind, Bool)],
+        trackedFiles: Set<String>
     ) -> [FileTreeNode] {
         nodes.map { node in
             var annotated = node
             if node.isDirectory, let children = node.children {
-                annotated.children = annotateNodes(children, lookup: lookup)
-                // Propagate: directory has changes if any child does
-                let hasChanges = annotated.children?.contains(where: {
-                    $0.gitStatus != nil || ($0.isDirectory && $0.gitStatus != nil)
-                }) ?? false
-                if hasChanges {
+                annotated.children = annotateNodes(
+                    children, lookup: lookup, trackedFiles: trackedFiles
+                )
+                // Aggregate git stats from all descendants
+                var stats: [GitFileStatus.Kind: Int] = [:]
+                for child in annotated.children ?? [] {
+                    if child.isDirectory {
+                        // Merge child directory's aggregated stats
+                        for (kind, count) in child.gitChildStats {
+                            stats[kind, default: 0] += count
+                        }
+                    } else if let kind = child.gitStatus {
+                        stats[kind, default: 0] += 1
+                    }
+                }
+                annotated.gitChildStats = stats
+                if !stats.isEmpty {
                     annotated.gitStatus = .modified
+                }
+                // Directory is ignored if ALL children are ignored
+                let allIgnored = annotated.children?.allSatisfy(\.isGitIgnored) ?? false
+                if allIgnored && !(annotated.children?.isEmpty ?? true) {
+                    annotated.isGitIgnored = true
                 }
             } else if let status = lookup[node.relativePath] {
                 annotated.gitStatus = status.0
                 annotated.isGitStaged = status.1
+            } else if !trackedFiles.isEmpty
+                        && !trackedFiles.contains(node.relativePath) {
+                // File has no git status and is not tracked → ignored
+                annotated.isGitIgnored = true
             }
             return annotated
         }

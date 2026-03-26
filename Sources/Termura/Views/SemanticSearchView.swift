@@ -17,7 +17,7 @@ struct SemanticSearchView: View {
             Divider()
             resultsList
         }
-        .frame(width: 500, height: 400)
+        .frame(width: AppConfig.UI.searchDialogWidth, height: AppConfig.UI.searchDialogHeight)
     }
 
     // MARK: - Search field

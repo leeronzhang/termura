@@ -48,20 +48,46 @@ struct TerminalAreaView: View {
     // MARK: - Body
 
     var body: some View {
+        mainLayout
+            .onAppear { onViewAppear() }
+            .onDisappear { removeKeyRouter() }
+            .modifier(TerminalAreaSheets(
+                riskAlert: $state.viewModel.pendingRiskAlert,
+                contextWindowAlert: $state.viewModel.contextWindowAlert,
+                showExportSheet: $showExportSheet,
+                showContextSheet: $showContextSheet,
+                engine: engine,
+                sessionID: sessionID,
+                projectContext: projectContext,
+                outputStore: outputStore,
+                viewModel: viewModel
+            ))
+            .onChange(of: outputStore.chunks.count) { old, new in
+                guard new > old, let latest = outputStore.chunks.last else { return }
+                timeline.append(latest)
+            }
+            .onChange(of: viewModel.currentMetadata.workingDirectory) { _, _ in
+                checkContextFileExists()
+            }
+            .onChange(of: commandRouter.toggleTimelineTick) { _, _ in
+                withAnimation { showTimeline.toggle() }
+            }
+    }
+
+    // MARK: - Extracted layout
+
+    private var mainLayout: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 if !isCompact {
-                    // Left panel: Timeline
                     if showTimeline && !outputStore.chunks.isEmpty {
                         TimelineView(timeline: timeline) { _ in }
-
                         Divider()
                     }
                 }
 
                 terminalAndOutputArea
 
-                // Right panel: metadata (hidden in compact/split mode)
                 if !isCompact && showMetadata {
                     ResizableDivider(
                         width: $metadataPanelWidth,
@@ -69,79 +95,35 @@ struct TerminalAreaView: View {
                         maxWidth: AppConfig.UI.metadataPanelMaxWidth,
                         dragFactor: -1.0
                     )
-
                     SessionMetadataBarView(metadata: viewModel.currentMetadata)
                         .frame(width: metadataPanelWidth)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(themeManager.current.background)
+        }
+    }
 
-            // EditorInputView is rendered inside terminalAndOutputArea as a ZStack overlay.
+    // MARK: - Lifecycle
+
+    private func onViewAppear() {
+        installKeyRouter()
+        checkContextFileExists()
+        editorViewModel.onCommandSubmit = { [weak viewModel] cmd in
+            viewModel?.detectAgentFromCommand(cmd)
         }
-        .onAppear {
-            installKeyRouter()
-            checkContextFileExists()
-            editorViewModel.onCommandSubmit = { [weak viewModel] cmd in
-                viewModel?.detectAgentFromCommand(cmd)
-            }
-            Task { @MainActor in
-                do {
-                    try await Task.sleep(
-                        nanoseconds: AppConfig.UI.editorFocusDelayNanoseconds
-                    )
-                } catch is CancellationError {
-                    return
-                } catch {
-                    logger.warning("Editor focus delay failed: \(error.localizedDescription)")
-                    return
-                }
-                editorHandle.textView?.window?.makeFirstResponder(editorHandle.textView)
-            }
-        }
-        .onDisappear {
-            removeKeyRouter()
-        }
-        .sheet(item: $state.viewModel.pendingRiskAlert) { risk in
-            InterventionAlertView(
-                alert: risk,
-                onProceed: { state.viewModel.pendingRiskAlert = nil },
-                onCancel: { [engine] in
-                    state.viewModel.pendingRiskAlert = nil
-                    Task { await engine.send("\u{03}") }
-                }
-            )
-        }
-        .sheet(item: $state.viewModel.contextWindowAlert) { alert in
-            ContextWindowAlertView(alert: alert) {
-                state.viewModel.contextWindowAlert = nil
-            }
-        }
-        .onChange(of: outputStore.chunks.count) { old, new in
-            guard new > old, let latest = outputStore.chunks.last else { return }
-            timeline.append(latest)
-        }
-        .sheet(isPresented: $showExportSheet) {
-            if let session = projectContext.sessionStore.sessions
-                .first(where: { $0.id == sessionID }) {
-                ExportOptionsView(
-                    session: session,
-                    chunks: outputStore.chunks,
-                    isPresented: $showExportSheet
+        Task { @MainActor in
+            do {
+                try await Task.sleep(
+                    nanoseconds: AppConfig.UI.editorFocusDelayNanoseconds
                 )
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.warning("Editor focus delay failed: \(error.localizedDescription)")
+                return
             }
-        }
-        .sheet(isPresented: $showContextSheet) {
-            ContextFileView(
-                projectRoot: viewModel.currentMetadata.workingDirectory,
-                isPresented: $showContextSheet
-            )
-        }
-        .onChange(of: viewModel.currentMetadata.workingDirectory) { _, _ in
-            checkContextFileExists()
-        }
-        .onChange(of: commandRouter.toggleTimelineTick) { _, _ in
-            withAnimation { showTimeline.toggle() }
+            editorHandle.textView?.window?.makeFirstResponder(editorHandle.textView)
         }
     }
 
@@ -206,6 +188,55 @@ struct TerminalAreaView: View {
             NSEvent.removeMonitor(monitor)
             keyEventMonitor = nil
         }
+    }
+}
+
+// MARK: - Sheet modifiers
+
+private struct TerminalAreaSheets: ViewModifier {
+    @Binding var riskAlert: RiskAlert?
+    @Binding var contextWindowAlert: ContextWindowAlert?
+    @Binding var showExportSheet: Bool
+    @Binding var showContextSheet: Bool
+    let engine: SwiftTermEngine
+    let sessionID: SessionID
+    let projectContext: ProjectContext
+    let outputStore: OutputStore
+    let viewModel: TerminalViewModel
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $riskAlert) { risk in
+                InterventionAlertView(
+                    alert: risk,
+                    onProceed: { riskAlert = nil },
+                    onCancel: { [engine] in
+                        riskAlert = nil
+                        Task { await engine.send("\u{03}") }
+                    }
+                )
+            }
+            .sheet(item: $contextWindowAlert) { alert in
+                ContextWindowAlertView(alert: alert) {
+                    contextWindowAlert = nil
+                }
+            }
+            .sheet(isPresented: $showExportSheet) {
+                if let session = projectContext.sessionStore.sessions
+                    .first(where: { $0.id == sessionID }) {
+                    ExportOptionsView(
+                        session: session,
+                        chunks: outputStore.chunks,
+                        isPresented: $showExportSheet
+                    )
+                }
+            }
+            .sheet(isPresented: $showContextSheet) {
+                ContextFileView(
+                    projectRoot: viewModel.currentMetadata.workingDirectory,
+                    isPresented: $showContextSheet
+                )
+            }
     }
 }
 

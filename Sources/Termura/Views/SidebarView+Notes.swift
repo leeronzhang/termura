@@ -52,7 +52,7 @@ extension SidebarView {
                 FileTypeIcon.image(for: "note.md")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 13, height: 13)
+                    .frame(width: AppUI.Size.fileTypeIcon, height: AppUI.Size.fileTypeIcon)
                     .foregroundColor(.secondary)
                 Text(note.title.isEmpty ? "Untitled" : note.title)
                     .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)

@@ -25,6 +25,7 @@ struct SidebarProjectContent: View {
     @ObservedObject var viewModel: ProjectViewModel
     var activeFilePath: String?
     var onOpenFile: ((String, FileOpenMode) -> Void)?
+    @State private var selectedItemID: String?
 
     private var git: GitStatusResult { viewModel.gitResult }
 
@@ -95,45 +96,66 @@ struct SidebarProjectContent: View {
             if git.behind > 0 {
                 gitMiniPill("\u{2193}\(git.behind)", color: .orange)
             }
-            if git.stagedCount > 0 {
-                gitInlineStat("+\(git.stagedCount)", color: .green)
-            }
-            if git.modifiedCount > 0 {
-                gitInlineStat("~\(git.modifiedCount)", color: .orange)
-            }
-            if git.untrackedCount > 0 {
-                gitInlineStat("?\(git.untrackedCount)", color: .secondary)
+            HStack(spacing: AppUI.Spacing.mdLg) {
+                if git.stagedCount > 0 {
+                    gitInlineStat("A\(git.stagedCount)", color: .green)
+                }
+                if git.modifiedCount > 0 {
+                    gitInlineStat("M\(git.modifiedCount)", color: .orange)
+                }
+                if git.untrackedCount > 0 {
+                    gitInlineStat("U\(git.untrackedCount)", color: .green)
+                }
             }
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.smMd)
     }
 
-    // MARK: - Row 3: PROJECT + Path
+    // MARK: - Row 3: PROJECT header + ignore toggle
 
     private var projectRow: some View {
-        HStack {
-            Text("Project")
-                .panelHeaderStyle()
-            Spacer()
-            if !git.isGitRepo {
-                ProgressView()
-                    .controlSize(.mini)
-                    .opacity(viewModel.isLoading ? 1 : 0)
-                Button { viewModel.refresh() } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(AppUI.Font.label)
-                        .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: AppUI.Spacing.smMd) {
+            HStack {
+                Text("Project")
+                    .panelHeaderStyle()
+                Spacer()
+                if !git.isGitRepo {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .opacity(viewModel.isLoading ? 1 : 0)
+                    Button { viewModel.refresh() } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(AppUI.Font.label)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                } else if git.isGitRepo {
+                    Button {
+                        viewModel.hideIgnoredFiles.toggle()
+                    } label: {
+                        Text(".gitignore")
+                            .font(AppUI.Font.captionMono)
+                            .foregroundColor(
+                                viewModel.hideIgnoredFiles
+                                    ? .accentColor
+                                    : .secondary.opacity(AppUI.Opacity.dimmed)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(
+                        viewModel.hideIgnoredFiles
+                            ? "Showing tracked files only \u{2014} click to show all"
+                            : "Showing all files \u{2014} click to hide ignored"
+                    )
                 }
-                .buttonStyle(.plain)
-            } else {
-                Text(viewModel.displayPath)
-                    .font(AppUI.Font.captionMono)
-                    .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .help(viewModel.projectRootPath)
             }
+            Text(viewModel.displayPath)
+                .font(AppUI.Font.captionMono)
+                .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
+                .lineLimit(1)
+                .truncationMode(.head)
+                .help(viewModel.projectRootPath)
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.top, AppUI.Spacing.xxxl)
@@ -147,21 +169,73 @@ struct SidebarProjectContent: View {
         if viewModel.tree.isEmpty && !viewModel.isLoading {
             sidebarEmpty
         } else {
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(viewModel.tree) { node in
-                        FileTreeRowView(
-                            node: node,
-                            depth: 0,
-                            expandedIDs: $viewModel.expandedNodeIDs,
-                            activeFilePath: activeFilePath,
-                            onOpenFile: onOpenFile
-                        )
-                    }
-                }
-                .padding(.horizontal, AppUI.Spacing.lg)
+            List(viewModel.flatVisibleItems, selection: $selectedItemID) { item in
+                FileTreeRowView(
+                    node: item.node,
+                    depth: item.depth,
+                    isExpanded: viewModel.expandedNodeIDs.contains(item.node.id),
+                    isActive: isFileActive(item.node),
+                    onTap: {}
+                )
+                .tag(item.id)
+                .listRowInsets(EdgeInsets(
+                    top: 0, leading: AppUI.Spacing.lg,
+                    bottom: 0, trailing: 0
+                ))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .onChange(of: selectedItemID) { _, newValue in
+                guard let id = newValue else { return }
+                // Clear selection immediately so the same row can be tapped again
+                selectedItemID = nil
+                handleItemTap(id: id)
             }
         }
+    }
+
+    private func handleItemTap(id: String) {
+        guard let item = viewModel.flatVisibleItems.first(where: { $0.id == id }) else {
+            return
+        }
+        if item.node.isDirectory {
+            viewModel.toggleExpand(item.node)
+        } else {
+            openFile(item.node)
+        }
+    }
+
+    private func isFileActive(_ node: FileTreeNode) -> Bool {
+        guard let active = activeFilePath, !node.isDirectory else { return false }
+        return node.relativePath == active
+    }
+
+    private func openFile(_ node: FileTreeNode) {
+        if let status = node.gitStatus {
+            let untracked = status == .untracked
+            onOpenFile?(node.relativePath, .diff(staged: node.isGitStaged, untracked: untracked))
+        } else if isTextFile(node) {
+            onOpenFile?(node.relativePath, .edit)
+        } else {
+            onOpenFile?(node.relativePath, .preview)
+        }
+    }
+
+    private static let textExtensions: Set<String> = [
+        "swift", "m", "h", "c", "cpp", "rs", "go", "py", "rb", "js", "ts",
+        "jsx", "tsx", "json", "yaml", "yml", "toml", "xml", "plist",
+        "html", "css", "scss", "less", "sh", "bash", "zsh", "fish",
+        "md", "markdown", "txt", "log", "env", "gitignore", "editorconfig",
+        "lock", "resolved", "cfg", "ini", "conf", "sql", "graphql",
+        "vue", "svelte", "astro", "r", "lua", "zig", "nim", "ex", "exs",
+        "java", "kt", "scala", "dart", "php", "pl", "pm"
+    ]
+
+    private func isTextFile(_ node: FileTreeNode) -> Bool {
+        let ext = URL(fileURLWithPath: node.name).pathExtension.lowercased()
+        return ext.isEmpty || Self.textExtensions.contains(ext)
     }
 
     private var sidebarEmpty: some View {
@@ -180,7 +254,7 @@ struct SidebarProjectContent: View {
 
     private func gitMiniPill(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .font(AppUI.Font.captionMono.weight(.semibold))
             .foregroundColor(.white)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
@@ -190,7 +264,7 @@ struct SidebarProjectContent: View {
 
     private func gitInlineStat(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.custom(AppConfig.Fonts.terminalFamily, size: 10).bold())
+            .font(AppUI.Font.labelMono.weight(.semibold))
             .foregroundColor(color)
     }
 }
