@@ -89,14 +89,14 @@ struct SidebarProjectContent: View {
 
             Spacer()
 
-            // Right: ahead/behind + file stats
-            if git.ahead > 0 {
-                gitMiniPill("\u{2191}\(git.ahead)", color: .accentColor)
-            }
-            if git.behind > 0 {
-                gitMiniPill("\u{2193}\(git.behind)", color: .orange)
-            }
+            // Right: ahead/behind + file stats (all inline, no pill backgrounds)
             HStack(spacing: AppUI.Spacing.mdLg) {
+                if git.ahead > 0 {
+                    gitInlineStat("\u{2191}\(git.ahead)", color: .accentColor)
+                }
+                if git.behind > 0 {
+                    gitInlineStat("\u{2193}\(git.behind)", color: .orange)
+                }
                 if git.stagedCount > 0 {
                     gitInlineStat("A\(git.stagedCount)", color: .green)
                 }
@@ -251,16 +251,6 @@ struct SidebarProjectContent: View {
     }
 
     // MARK: - Git UI helpers
-
-    private func gitMiniPill(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(AppUI.Font.captionMono.weight(.semibold))
-            .foregroundColor(.white)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(color.opacity(AppUI.Opacity.strong))
-            .clipShape(Capsule())
-    }
 
     private func gitInlineStat(_ text: String, color: Color) -> some View {
         Text(text)
