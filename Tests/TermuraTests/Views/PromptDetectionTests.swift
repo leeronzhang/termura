@@ -137,22 +137,22 @@ struct PromptDetectionTests {
 
     // MARK: - detectPromptFromScreenBuffer
 
-    @Test("AI prompt in buffer sets isInteractivePrompt true and switches to editor")
-    @MainActor func detectAIPromptSwitchesMode() {
+    @Test("AI prompt in buffer sets isInteractivePrompt true without switching mode")
+    @MainActor func detectAIPromptSetsFlag() {
         let (vm, _, modeCtrl) = makeViewModel(lines: ["> "])
         modeCtrl.switchToPassthrough()
         vm.detectPromptFromScreenBuffer()
         #expect(vm.isInteractivePrompt == true)
-        #expect(modeCtrl.mode == .editor)
+        #expect(modeCtrl.mode == .passthrough)
     }
 
-    @Test("Shell prompt on cursor line switches to editor with isInteractivePrompt false")
-    @MainActor func detectShellPromptSwitchesMode() {
+    @Test("Shell prompt on cursor line sets isInteractivePrompt false without switching mode")
+    @MainActor func detectShellPromptSetsFlag() {
         let (vm, _, modeCtrl) = makeViewModel(lines: ["user@host ~ $"])
         modeCtrl.switchToPassthrough()
         vm.detectPromptFromScreenBuffer()
         #expect(vm.isInteractivePrompt == false)
-        #expect(modeCtrl.mode == .editor)
+        #expect(modeCtrl.mode == .passthrough)
     }
 
     @Test("Empty buffer does not switch mode")

@@ -87,9 +87,9 @@ final class TerminalViewModelTests: XCTestCase {
 
     // MARK: - Mode controller
 
-    func testModeControllerStartsInEditor() {
+    func testModeControllerStartsInPassthrough() {
         let vm = makeViewModel()
-        XCTAssertEqual(vm.modeController.mode, .editor)
+        XCTAssertEqual(vm.modeController.mode, .passthrough)
     }
 
     // MARK: - Send and resize
@@ -124,9 +124,9 @@ final class TerminalViewModelTests: XCTestCase {
         XCTAssertEqual(vm.modeController.mode, .editor)
     }
 
-    func testExecutionStartedSwitchesToPassthrough() async throws {
+    func testExecutionStartedStaysInPassthrough() async throws {
         let vm = makeViewModel()
-        XCTAssertEqual(modeController.mode, .editor)
+        XCTAssertEqual(modeController.mode, .passthrough)
 
         await engine.emitShellEvent(.executionStarted)
         try await yieldForDuration(seconds: 0.1)
@@ -182,5 +182,45 @@ final class TerminalViewModelTests: XCTestCase {
         vm.injectContextIfNeeded()
         // contextInjectionService is nil → returns early.
         XCTAssertNotNil(vm)
+    }
+
+    // MARK: - spawnTracked lifecycle
+
+    func testSpawnTrackedExecutesOperation() async throws {
+        let vm = makeViewModel()
+        let expectation = XCTestExpectation(description: "operation executed")
+        vm.spawnTracked {
+            expectation.fulfill()
+        }
+        await fulfillment(of: [expectation], timeout: 2.0)
+    }
+
+    func testSpawnDetachedTrackedExecutesOffMainActor() async throws {
+        let vm = makeViewModel()
+        let expectation = XCTestExpectation(description: "detached operation executed")
+        vm.spawnDetachedTracked {
+            expectation.fulfill()
+        }
+        await fulfillment(of: [expectation], timeout: 2.0)
+    }
+
+    func testSendTracksTask() async throws {
+        let vm = makeViewModel()
+        vm.send("hello")
+        // The send creates a tracked task — give it time to complete.
+        try await yieldForDuration(seconds: 0.1)
+        // Engine should have received the text.
+        let sent = await engine.sentTexts
+        XCTAssertTrue(sent.contains("hello"))
+    }
+
+    func testResizeTracksTask() async throws {
+        let vm = makeViewModel()
+        vm.resize(columns: 120, rows: 40)
+        try await yieldForDuration(seconds: 0.1)
+        let resizes = await engine.resizes
+        XCTAssertEqual(resizes.count, 1)
+        XCTAssertEqual(resizes.first?.0, 120)
+        XCTAssertEqual(resizes.first?.1, 40)
     }
 }
