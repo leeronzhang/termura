@@ -17,43 +17,6 @@ extension AppDelegate {
         }
     }
 
-    // MARK: - Persistence
-
-    func persistOpenProjects() {
-        let paths = projectWindows.keys.map(\.path)
-        UserDefaults.standard.set(paths, forKey: "openProjectPaths")
-    }
-
-    func openLastProjectOrShowPicker() {
-        Task { @MainActor in
-            await ProjectMigrationService.migrateIfNeeded()
-            if let lastURL = recentProjects.lastOpened() {
-                openProject(at: lastURL)
-            } else {
-                showProjectPicker()
-            }
-        }
-    }
-
-    // MARK: - Window Focus
-
-    func observeWindowFocus() {
-        windowObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let window = notification.object as? NSWindow else { return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                for (_, controller) in projectWindows where controller.window === window {
-                    activeContext = controller.projectContext
-                    return
-                }
-            }
-        }
-    }
-
     // MARK: - Menu Bar
 
     func setupMenuBarActivation() {
@@ -65,17 +28,6 @@ extension AppDelegate {
     func bringMainWindowToFront() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.windows.first { $0.isVisible }?.makeKeyAndOrderFront(nil)
-    }
-
-    func setupChunkHandler(for context: ProjectContext) {
-        context.commandRouter.onChunkCompleted { [weak self] chunk in
-            guard let self else { return }
-            if let code = chunk.exitCode, code != 0 {
-                menuBarService.recordFailure()
-            }
-            let service = notificationService
-            Task { await service.notifyIfLong(chunk) }
-        }
     }
 
     // MARK: - Visor

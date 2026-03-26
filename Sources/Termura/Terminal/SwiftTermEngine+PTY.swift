@@ -38,20 +38,25 @@ extension SwiftTermEngine: LocalProcessTerminalViewDelegate {
     }
 
     nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        // Lifecycle: nonisolated delegate → MainActor bridge; short-lived yield, no cleanup needed.
         Task { @MainActor [weak self] in
-            self?.continuation.yield(.titleChanged(title))
+            guard let self else { return }
+            continuation.yield(.titleChanged(title))
         }
     }
 
     nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
         guard let directory else { return }
+        // Lifecycle: nonisolated delegate → MainActor bridge; short-lived yield, no cleanup needed.
         Task { @MainActor [weak self] in
-            self?.continuation.yield(.workingDirectoryChanged(directory))
+            guard let self else { return }
+            continuation.yield(.workingDirectoryChanged(directory))
         }
     }
 
     nonisolated func processTerminated(source: TerminalView, exitCode: Int32?) {
         let code = exitCode ?? -1
+        // Lifecycle: nonisolated delegate → MainActor bridge; terminal lifecycle event.
         Task { @MainActor [weak self] in
             guard let self else { return }
             let sid = sessionID

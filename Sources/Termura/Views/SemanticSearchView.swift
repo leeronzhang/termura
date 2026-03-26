@@ -31,7 +31,7 @@ struct SemanticSearchView: View {
                 .font(AppUI.Font.searchField)
                 .onSubmit { performSearch() }
             if isSearching {
-                ProgressView().scaleEffect(0.7)
+                ProgressView().scaleEffect(AppConfig.UI.progressIndicatorScale)
             }
             Button("Cancel") { isPresented = false }
                 .keyboardShortcut(.escape, modifiers: [])

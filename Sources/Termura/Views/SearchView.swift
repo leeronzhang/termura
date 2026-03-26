@@ -61,7 +61,7 @@ struct SearchView: View {
                 .textFieldStyle(.plain)
                 .font(AppUI.Font.searchField)
             if viewModel.isSearching {
-                ProgressView().scaleEffect(0.7)
+                ProgressView().scaleEffect(AppConfig.UI.progressIndicatorScale)
             }
             Button("Cancel") { isPresented = false }
                 .keyboardShortcut(.escape, modifiers: [])

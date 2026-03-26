@@ -24,6 +24,8 @@ actor CorruptionDetector {
         do {
             pathPattern = try NSRegularExpression(pattern: "`([^`]+\\.[a-zA-Z]{1,10})`")
         } catch {
+            // Non-critical: static regex compilation — if this fails, stale-path check is skipped.
+            // The literal pattern is well-formed, so failure here would indicate a system-level issue.
             logger.error("Failed to create corruption detector regex: \(error)")
             pathPattern = nil
         }

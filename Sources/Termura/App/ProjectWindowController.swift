@@ -51,7 +51,7 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
 
     private static func makeWindow(title: String) -> TabAwareWindow {
         let window = TabAwareWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            contentRect: NSRect(x: 0, y: 0, width: AppConfig.UI.projectWindowWidth, height: AppConfig.UI.projectWindowHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -60,7 +60,7 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.minSize = NSSize(width: 800, height: 500)
+        window.minSize = NSSize(width: AppConfig.UI.projectWindowMinWidth, height: AppConfig.UI.projectWindowMinHeight)
         // Restore saved frame. setFrameAutosaveName auto-persists on resize/move.
         let autosaveName = "ProjectWindow-\(title)"
         if !window.setFrameUsingName(autosaveName) {

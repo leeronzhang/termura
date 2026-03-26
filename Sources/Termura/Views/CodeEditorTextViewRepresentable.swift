@@ -15,11 +15,11 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
 
     /// Extra spacing between lines (points). Uses lineSpacing instead of
     /// lineHeightMultiple so the cursor height matches the font, not the full line.
-    static let lineSpacingExtra: CGFloat = 6
+    static let lineSpacingExtra: CGFloat = AppConfig.UI.codeEditorLineSpacing
     /// Horizontal inset inside the text container.
-    static let textInsetWidth: CGFloat = 8
+    static let textInsetWidth: CGFloat = AppConfig.UI.codeEditorTextInset
     /// Vertical inset inside the text container.
-    static let textInsetHeight: CGFloat = 8
+    static let textInsetHeight: CGFloat = AppConfig.UI.codeEditorTextInset
 
     /// Shared Highlightr instance (heavy to create, reuse across views).
     private static let sharedHighlightr: Highlightr? = {

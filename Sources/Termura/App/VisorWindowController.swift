@@ -20,10 +20,10 @@ final class VisorWindowController: NSWindowController {
 
         let rootView = MainView()
             .environmentObject(projectContext)
-            .environmentObject(projectContext.commandRouter)
-            .environmentObject(projectContext.notesViewModel)
-            .environmentObject(themeManager)
-            .environmentObject(fontSettings)
+            .environment(\.commandRouter, projectContext.commandRouter)
+            .environment(\.notesViewModel, projectContext.notesViewModel)
+            .environment(\.themeManager, themeManager)
+            .environment(\.fontSettings, fontSettings)
         let hostingController = NSHostingController(rootView: rootView)
         panel.contentViewController = hostingController
     }

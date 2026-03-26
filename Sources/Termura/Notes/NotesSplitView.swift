@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct NotesSplitView: View {
-    @ObservedObject var viewModel: NotesViewModel
+    @Bindable var viewModel: NotesViewModel
 
     var body: some View {
         HSplitView {

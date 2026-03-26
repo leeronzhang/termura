@@ -12,7 +12,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "CodeEditorV
 struct CodeEditorView: View {
     let filePath: String
     let projectRoot: String
-    @EnvironmentObject var fontSettings: FontSettings
+    @Environment(\.fontSettings) var fontSettings
 
     @State private var content = ""
     @State private var isLoading = true
@@ -116,7 +116,7 @@ struct CodeEditorView: View {
 struct NoteEditorView: View {
     let title: String
     @Binding var text: String
-    @EnvironmentObject var fontSettings: FontSettings
+    @Environment(\.fontSettings) var fontSettings
 
     @State private var isModified = false
 

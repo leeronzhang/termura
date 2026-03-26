@@ -4,7 +4,7 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "SessionSnapshotRepository")
 
-actor SessionSnapshotRepository {
+actor SessionSnapshotRepository: SessionSnapshotRepositoryProtocol {
     private let db: any DatabaseServiceProtocol
 
     init(db: any DatabaseServiceProtocol) { self.db = db }

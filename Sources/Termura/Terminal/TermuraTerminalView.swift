@@ -9,10 +9,11 @@ import SwiftTerm
 ///
 /// This is the only public hook SwiftTerm exposes for raw output interception
 /// without reimplementing PTY management from scratch.
+@MainActor
 final class TermuraTerminalView: LocalProcessTerminalView {
     /// Called synchronously on the main queue for every PTY read batch.
-    /// Captures only `Sendable` types so it is safe to hold across actor boundaries.
-    var onDataReceived: ((ArraySlice<UInt8>) -> Void)?
+    /// @MainActor ensures this closure is only set and invoked on the main thread.
+    var onDataReceived: (@MainActor (ArraySlice<UInt8>) -> Void)?
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
         // Process through SwiftTerm's ANSI/cursor engine FIRST so the buffer

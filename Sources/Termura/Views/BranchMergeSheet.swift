@@ -62,7 +62,7 @@ struct BranchMergeSheet: View {
                     .sectionLabelStyle()
                 Spacer()
                 if isGenerating {
-                    ProgressView().scaleEffect(0.6)
+                    ProgressView().scaleEffect(AppConfig.UI.progressIndicatorScale)
                 }
             }
             TextEditor(text: $summary)

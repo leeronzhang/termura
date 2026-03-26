@@ -2,10 +2,11 @@ import AppKit
 
 // MARK: - Cmd+S support and indent guides
 
+@MainActor
 final class SaveableTextView: NSTextView {
     var onSave: (() -> Void)?
     /// Number of spaces per indent level for drawing indent guides.
-    var indentWidth: Int = 4
+    var indentWidth: Int = AppConfig.UI.editorIndentWidth
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.modifierFlags.contains(.command) else {

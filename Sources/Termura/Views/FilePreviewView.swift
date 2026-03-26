@@ -66,7 +66,7 @@ struct FilePreviewView: View {
     private var zoomControls: some View {
         HStack(spacing: AppUI.Spacing.sm) {
             Button {
-                zoomScale = max(zoomScale - 0.25, 0.25)
+                zoomScale = max(zoomScale - AppConfig.UI.previewZoomStep, AppConfig.UI.previewZoomMin)
             } label: {
                 Image(systemName: "minus.magnifyingglass")
                     .font(AppUI.Font.label)
@@ -80,7 +80,7 @@ struct FilePreviewView: View {
                 .frame(width: AppConfig.UI.filePreviewLineNumberWidth, alignment: .center)
 
             Button {
-                zoomScale = min(zoomScale + 0.25, 4.0)
+                zoomScale = min(zoomScale + AppConfig.UI.previewZoomStep, AppConfig.UI.previewZoomMax)
             } label: {
                 Image(systemName: "plus.magnifyingglass")
                     .font(AppUI.Font.label)

@@ -9,6 +9,8 @@ final class SearchViewModel: ObservableObject {
     @Published var query: String = ""
     @Published private(set) var results: SearchResults = .empty
     @Published private(set) var isSearching = false
+    /// User-visible error message from the last failed search.
+    @Published var errorMessage: String?
 
     private let searchService: any SearchServiceProtocol
     private var cancellables = Set<AnyCancellable>()
@@ -41,7 +43,10 @@ final class SearchViewModel: ObservableObject {
                         let found = try await searchService.search(query: queryText)
                         guard !Task.isCancelled else { return }
                         results = found
+                        errorMessage = nil
                     } catch {
+                        guard !Task.isCancelled else { return }
+                        errorMessage = "Search failed: \(error.localizedDescription)"
                         logger.error("Search failed: \(error)")
                     }
                     isSearching = false

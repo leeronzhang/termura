@@ -18,6 +18,8 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
     /// The underlying NSView — kept alive as a headless PTY engine; never shown in the view hierarchy.
     let terminalView: TermuraTerminalView
 
+    var terminalNSView: NSView { terminalView }
+
     // MARK: - Internal state (accessible to +PTY extension)
 
     let continuation: AsyncStream<TerminalOutputEvent>.Continuation
@@ -63,6 +65,7 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
         // process can corrupt os_unfair_locks if called during init (while SwiftUI
         // is still setting up). Dispatching asynchronously ensures all init-time
         // locks are released before the fork happens.
+        // Lifecycle: one-shot init — engine owns the PTY process; no separate cancellation needed.
         Task { @MainActor [weak self] in
             self?.startProcess(shell: shell, currentDirectory: currentDirectory)
         }

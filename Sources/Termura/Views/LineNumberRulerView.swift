@@ -5,6 +5,7 @@ private let rulerLogger = Logger(subsystem: "com.termura.app", category: "LineNu
 
 // MARK: - Line Number Ruler
 
+@MainActor
 final class LineNumberRulerView: NSRulerView {
     private weak var textView: NSTextView?
     private var fontFamily: String
@@ -22,7 +23,7 @@ final class LineNumberRulerView: NSRulerView {
         self.fontSize = fontSize
         self.lineSpacing = lineSpacing
         super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
-        ruleThickness = 60
+        ruleThickness = AppConfig.UI.lineNumberRulerWidth
         clientView = textView
 
         NotificationCenter.default.addObserver(
@@ -178,7 +179,7 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     private func rulerAttributes() -> [NSAttributedString.Key: Any] {
-        let rulerFontSize = max(fontSize - 3, FontSettings.minSize)
+        let rulerFontSize = max(fontSize - AppConfig.UI.lineNumberFontSizeReduction, FontSettings.minSize)
         let rulerFont = NSFont(name: fontFamily, size: rulerFontSize)
             ?? NSFont.monospacedDigitSystemFont(ofSize: rulerFontSize, weight: .regular)
         return [

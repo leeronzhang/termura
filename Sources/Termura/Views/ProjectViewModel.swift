@@ -10,6 +10,8 @@ final class ProjectViewModel: ObservableObject {
     @Published private(set) var tree: [FileTreeNode] = []
     @Published private(set) var gitResult: GitStatusResult = .notARepo
     @Published private(set) var isLoading = false
+    /// User-visible error from the last refresh; nil when healthy.
+    @Published var errorMessage: String?
     /// IDs of expanded folder nodes. Persisted per project via UserDefaults.
     @Published var expandedNodeIDs: Set<String> = [] {
         didSet { persistExpandedIDs() }
@@ -104,6 +106,7 @@ final class ProjectViewModel: ObservableObject {
                 do {
                     return try await self.gitService.status(at: self.projectRoot)
                 } catch {
+                    // Non-critical: git status is optional — project tree still works without it.
                     logger.warning("Git status failed: \(error.localizedDescription)")
                     return GitStatusResult.notARepo
                 }
@@ -112,6 +115,7 @@ final class ProjectViewModel: ObservableObject {
                 do {
                     return try await self.gitService.trackedFiles(at: self.projectRoot)
                 } catch {
+                    // Non-critical: tracked files are optional — tree shows all files as fallback.
                     logger.warning("Tracked files fetch failed: \(error.localizedDescription)")
                     return Set<String>()
                 }
@@ -131,6 +135,7 @@ final class ProjectViewModel: ObservableObject {
             tree = annotated
             gitResult = status
             isLoading = false
+            errorMessage = nil
 
             // Auto-expand root directories only on very first scan (no persisted state)
             if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
@@ -158,7 +163,7 @@ final class ProjectViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            Task { @MainActor in
                 self?.refresh()
             }
         }
@@ -179,7 +184,11 @@ final class ProjectViewModel: ObservableObject {
         persistTask = Task { [weak self] in
             do {
                 try await self?.clock.sleep(for: .nanoseconds(300_000_000))
+            } catch is CancellationError {
+                return
             } catch {
+                // Non-critical: expansion state is cosmetic; lost state is auto-restored on next scan.
+                logger.debug("Expansion persist debounce interrupted: \(error.localizedDescription)")
                 return
             }
             guard let self, !Task.isCancelled else { return }

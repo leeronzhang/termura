@@ -9,6 +9,8 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     @Published private(set) var activeSessionID: SessionID?
     /// Set to `true` once persisted sessions have been loaded (or skipped).
     @Published private(set) var hasLoadedPersistedSessions = false
+    /// User-visible error message from the last failed operation; cleared on next success.
+    @Published var errorMessage: String?
     /// IDs of sessions that were loaded from persistence (restored on launch).
     private(set) var restoredSessionIDs: Set<SessionID> = []
 
@@ -52,8 +54,10 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
                 let dir = projectRoot.isEmpty ? nil : projectRoot
                 engineStore.createEngine(for: activeID, shell: defaultShell, currentDirectory: dir)
             }
+            errorMessage = nil
             logger.info("Loaded \(loaded.count) persisted sessions")
         } catch {
+            errorMessage = "Failed to load sessions: \(error.localizedDescription)"
             logger.error("Failed to load sessions: \(error)")
         }
     }
@@ -184,9 +188,11 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
             sessions.append(branch)
             engineStore.createEngine(for: branch.id, shell: defaultShell)
             activeSessionID = branch.id
+            errorMessage = nil
             logger.info("Created branch \(branch.id) from \(sessionID)")
             return branch
         } catch {
+            errorMessage = "Failed to create branch: \(error.localizedDescription)"
             logger.error("Failed to create branch: \(error)")
             return nil
         }
@@ -220,8 +226,10 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
 
             // Navigate back to parent
             activeSessionID = parentID
+            errorMessage = nil
             logger.info("Merged branch \(branchID) summary to parent \(parentID)")
         } catch {
+            errorMessage = "Failed to merge branch: \(error.localizedDescription)"
             logger.error("Failed to merge branch summary: \(error)")
         }
     }
@@ -241,10 +249,14 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         _ operation: @Sendable @escaping (any SessionRepositoryProtocol) async throws -> Void
     ) {
         guard let repo = repository else { return }
+        // Lifecycle: fire-and-forget persistence — data is already applied to in-memory state;
+        // DB write is supplementary and will be retried on next mutation.
         Task {
             do {
                 try await operation(repo)
             } catch {
+                // Non-critical: fire-and-forget save — data will be re-persisted on next mutation.
+                // Surfacing every transient DB write failure would disrupt the user experience.
                 logger.error("Persistence error: \(error)")
             }
         }
@@ -263,6 +275,7 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
             } catch is CancellationError {
                 return
             } catch {
+                // Non-critical: debounced save — will retry automatically on next property change.
                 logger.error("Debounced save error: \(error)")
             }
         }

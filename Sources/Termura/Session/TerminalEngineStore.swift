@@ -31,9 +31,9 @@ final class TerminalEngineStore: ObservableObject {
 
     func terminateEngine(for sessionID: SessionID) {
         guard let engine = engines.removeValue(forKey: sessionID) else { return }
-        Task {
-            await engine.terminate()
-        }
+        // Lifecycle: cleanup after engine removal — engine is already removed from the store;
+        // the terminate call is best-effort to release PTY resources.
+        Task { await engine.terminate() }
         logger.info("Terminated engine for session \(sessionID)")
     }
 

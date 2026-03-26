@@ -11,17 +11,17 @@ final class ProjectContext: ObservableObject {
 
     // MARK: - Core infrastructure
 
-    let databaseService: DatabaseService
+    let databaseService: any DatabaseServiceProtocol
     let engineStore: TerminalEngineStore
 
     // MARK: - Repositories
 
-    let sessionRepository: SessionRepository
-    let noteRepository: NoteRepository
-    let sessionMessageRepository: SessionMessageRepository
-    let harnessEventRepository: HarnessEventRepository
-    let ruleFileRepository: RuleFileRepository
-    let sessionSnapshotRepository: SessionSnapshotRepository
+    let sessionRepository: any SessionRepositoryProtocol
+    let noteRepository: any NoteRepositoryProtocol
+    let sessionMessageRepository: any SessionMessageRepositoryProtocol
+    let harnessEventRepository: any HarnessEventRepositoryProtocol
+    let ruleFileRepository: any RuleFileRepositoryProtocol
+    let sessionSnapshotRepository: any SessionSnapshotRepositoryProtocol
 
     // MARK: - Stores & services
 
@@ -35,7 +35,7 @@ final class ProjectContext: ObservableObject {
     let branchSummarizer: BranchSummarizer
     let embeddingService: EmbeddingService
     let vectorSearchService: any VectorSearchServiceProtocol
-    let gitService: GitService
+    let gitService: any GitServiceProtocol
     let commandRouter: CommandRouter
     /// Global service — referenced per-project for environment injection.
     let tokenCountingService: any TokenCountingServiceProtocol
@@ -50,14 +50,14 @@ final class ProjectContext: ObservableObject {
 
     private init(
         projectURL: URL,
-        databaseService: DatabaseService,
+        databaseService: any DatabaseServiceProtocol,
         engineStore: TerminalEngineStore,
-        sessionRepository: SessionRepository,
-        noteRepository: NoteRepository,
-        sessionMessageRepository: SessionMessageRepository,
-        harnessEventRepository: HarnessEventRepository,
-        ruleFileRepository: RuleFileRepository,
-        sessionSnapshotRepository: SessionSnapshotRepository,
+        sessionRepository: any SessionRepositoryProtocol,
+        noteRepository: any NoteRepositoryProtocol,
+        sessionMessageRepository: any SessionMessageRepositoryProtocol,
+        harnessEventRepository: any HarnessEventRepositoryProtocol,
+        ruleFileRepository: any RuleFileRepositoryProtocol,
+        sessionSnapshotRepository: any SessionSnapshotRepositoryProtocol,
         sessionStore: SessionStore,
         agentStateStore: AgentStateStore,
         searchService: any SearchServiceProtocol,
@@ -68,7 +68,7 @@ final class ProjectContext: ObservableObject {
         branchSummarizer: BranchSummarizer,
         embeddingService: EmbeddingService,
         vectorSearchService: any VectorSearchServiceProtocol,
-        gitService: GitService,
+        gitService: any GitServiceProtocol,
         commandRouter: CommandRouter,
         tokenCountingService: any TokenCountingServiceProtocol,
         notesViewModel: NotesViewModel,
@@ -109,12 +109,13 @@ final class ProjectContext: ObservableObject {
     static func open(
         at projectURL: URL,
         engineFactory: any TerminalEngineFactory,
-        tokenCountingService: TokenCountingService
+        tokenCountingService: any TokenCountingServiceProtocol
     ) throws -> ProjectContext {
         let db = try DatabaseService(pool: DatabaseService.makePool(at: projectURL))
         let repos = makeRepositories(db: db)
         let services = makeServices(repos: repos, projectURL: projectURL, engineFactory: engineFactory)
 
+        // Lifecycle: one-shot housekeeping — gitignore management is non-critical.
         let url = projectURL
         Task.detached { ensureProjectGitignore(at: url) }
         logger.info("Opened project at \(projectURL.path)")
@@ -177,15 +178,15 @@ final class ProjectContext: ObservableObject {
     // MARK: - Factory helpers
 
     private struct Repos {
-        let session: SessionRepository
-        let note: NoteRepository
-        let message: SessionMessageRepository
-        let harness: HarnessEventRepository
-        let rule: RuleFileRepository
-        let snapshot: SessionSnapshotRepository
+        let session: any SessionRepositoryProtocol
+        let note: any NoteRepositoryProtocol
+        let message: any SessionMessageRepositoryProtocol
+        let harness: any HarnessEventRepositoryProtocol
+        let rule: any RuleFileRepositoryProtocol
+        let snapshot: any SessionSnapshotRepositoryProtocol
     }
 
-    private static func makeRepositories(db: DatabaseService) -> Repos {
+    private static func makeRepositories(db: any DatabaseServiceProtocol) -> Repos {
         Repos(
             session: SessionRepository(db: db),
             note: NoteRepository(db: db),
@@ -200,15 +201,15 @@ final class ProjectContext: ObservableObject {
         let engineStore: TerminalEngineStore
         let sessionStore: SessionStore
         let agentState: AgentStateStore
-        let search: SearchService
+        let search: any SearchServiceProtocol
         let archive: SessionArchiveService
         let summarizer: BranchSummarizer
-        let handoff: SessionHandoffService
-        let injection: ContextInjectionService
+        let handoff: any SessionHandoffServiceProtocol
+        let injection: any ContextInjectionServiceProtocol
         let codifier: ExperienceCodifier
         let embedding: EmbeddingService
-        let vector: VectorSearchService
-        let git: GitService
+        let vector: any VectorSearchServiceProtocol
+        let git: any GitServiceProtocol
         let router: CommandRouter
     }
 

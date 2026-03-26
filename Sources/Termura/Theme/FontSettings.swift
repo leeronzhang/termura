@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 import OSLog
 import SwiftUI
 
@@ -7,19 +8,19 @@ private let logger = Logger(subsystem: "com.termura.app", category: "FontSetting
 
 /// Centralized, persisted font settings. All font consumers read from here.
 /// Changed via the Settings panel — no code edits needed for font adjustments.
-@MainActor
-final class FontSettings: ObservableObject {
-    // MARK: - Published settings
+@Observable @MainActor
+final class FontSettings {
+    // MARK: - Settings
 
-    @Published var terminalFontFamily: String {
+    var terminalFontFamily: String {
         didSet { persist() }
     }
 
-    @Published var terminalFontSize: CGFloat {
+    var terminalFontSize: CGFloat {
         didSet { persist() }
     }
 
-    @Published var editorFontSize: CGFloat {
+    var editorFontSize: CGFloat {
         didSet { persist() }
     }
 

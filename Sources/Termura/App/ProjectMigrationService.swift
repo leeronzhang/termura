@@ -47,6 +47,8 @@ enum ProjectMigrationService {
             UserDefaults.standard.set(true, forKey: migratedKey)
             logger.info("Migration complete — \(projects.count) projects migrated")
         } catch {
+            // Non-critical: one-time migration — if it fails, legacy data remains intact at the
+            // original path and migration will be reattempted on next launch.
             logger.error("Project migration failed: \(error)")
         }
     }

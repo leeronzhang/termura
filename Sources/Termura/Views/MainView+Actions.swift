@@ -164,6 +164,7 @@ extension MainView {
         do {
             data = try JSONEncoder().encode(persistable)
         } catch {
+            // Non-critical: tab persistence is cosmetic; tabs will be re-created on next use.
             logger.warning("Failed to encode open tabs: \(error.localizedDescription)")
             return
         }
@@ -181,6 +182,7 @@ extension MainView {
         do {
             restored = try JSONDecoder().decode([ContentTab].self, from: data)
         } catch {
+            // Non-critical: tab restoration is cosmetic; user starts with a clean tab set.
             logger.warning("Failed to decode open tabs: \(error.localizedDescription)")
             return
         }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OSLog
 
@@ -14,6 +15,7 @@ final class LibghosttyEngine: TerminalEngine {
     let outputStream: AsyncStream<TerminalOutputEvent>
     let shellEventsStream: AsyncStream<ShellIntegrationEvent>
     var isRunning = false
+    let terminalNSView: NSView = NSView()
 
     // MARK: - Internal continuations
 

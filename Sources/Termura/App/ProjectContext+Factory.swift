@@ -13,6 +13,7 @@ func ensureProjectGitignore(at projectURL: URL) {
         do {
             contents = try String(contentsOf: gitignoreURL, encoding: .utf8)
         } catch {
+            // Non-critical: gitignore management is a convenience feature; project works without it.
             logger.warning("Could not read .gitignore: \(error)")
             return
         }
@@ -25,6 +26,7 @@ func ensureProjectGitignore(at projectURL: URL) {
             try (contents + suffix).write(to: gitignoreURL, atomically: true, encoding: .utf8)
             logger.info("Appended \(entry) to .gitignore")
         } catch {
+            // Non-critical: gitignore update is a convenience; does not affect app operation.
             logger.warning("Could not update .gitignore: \(error)")
         }
     } else {
@@ -34,6 +36,7 @@ func ensureProjectGitignore(at projectURL: URL) {
             try (entry + "\n").write(to: gitignoreURL, atomically: true, encoding: .utf8)
             logger.info("Created .gitignore with \(entry)")
         } catch {
+            // Non-critical: gitignore creation is a convenience; does not affect app operation.
             logger.warning("Could not create .gitignore: \(error)")
         }
     }

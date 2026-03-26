@@ -20,6 +20,7 @@ extension AppDelegate {
             } catch is CancellationError {
                 return
             } catch {
+                // Non-critical: window chrome is cosmetic; app functions without traffic-light tuning.
                 logger.warning("Window config delay failed: \(error.localizedDescription)")
                 return
             }
@@ -91,6 +92,7 @@ extension AppDelegate {
                     } catch is CancellationError {
                         return
                     } catch {
+                        // Non-critical: fullscreen transition chrome is cosmetic.
                         logger.warning("Full-screen exit delay failed: \(error.localizedDescription)")
                         return
                     }
@@ -118,7 +120,7 @@ extension AppDelegate {
 
         let label = NSTextField(labelWithString: window.title)
         label.tag = fullScreenLabelTag
-        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.font = .systemFont(ofSize: AppConfig.UI.fullScreenLabelFontSize, weight: .medium)
         label.textColor = .secondaryLabelColor
         label.isEditable = false
         label.isBordered = false
@@ -133,7 +135,7 @@ extension AppDelegate {
         let zoomBtn = window.standardWindowButton(.zoomButton) ?? closeBtn
         let rightEdge = zoomBtn.frame.maxX
         let labelY = zoomBtn.frame.midY - label.frame.height / 2
-        label.frame.origin = NSPoint(x: rightEdge + 12, y: labelY)
+        label.frame.origin = NSPoint(x: rightEdge + AppConfig.UI.fullScreenLabelSpacing, y: labelY)
     }
 
     private static func removeFullScreenLabel(from window: NSWindow) {
@@ -170,8 +172,8 @@ extension AppDelegate {
         guard let container = trafficLightContainer(in: window),
               let parent = container.superview else { return }
         var frame = container.frame
-        frame.origin.x = 12
-        frame.origin.y = parent.frame.height - frame.height - 8
+        frame.origin.x = AppConfig.UI.trafficLightX
+        frame.origin.y = parent.frame.height - frame.height - AppConfig.UI.trafficLightTopInset
         container.frame = frame
     }
 }
@@ -181,6 +183,7 @@ extension AppDelegate {
 /// Zero-size view added to the window's themeFrame. Its `layout()` is called
 /// on every window layout pass (including live resize), so we can synchronously
 /// reposition the traffic-light buttons before the frame is rendered.
+@MainActor
 final class TrafficLightAdjuster: NSView {
     private weak var targetWindow: NSWindow?
 
@@ -200,8 +203,8 @@ final class TrafficLightAdjuster: NSView {
               let container = closeBtn.superview,
               let parent = container.superview else { return }
         var frame = container.frame
-        frame.origin.x = 12
-        frame.origin.y = parent.frame.height - frame.height - 8
+        frame.origin.x = AppConfig.UI.trafficLightX
+        frame.origin.y = parent.frame.height - frame.height - AppConfig.UI.trafficLightTopInset
         container.frame = frame
     }
 }
@@ -210,7 +213,7 @@ final class TrafficLightAdjuster: NSView {
 
 extension AppDelegate {
     func toggleVisor() {
-        guard let context = activeContext else { return }
+        guard let context = projectCoordinator.activeContext else { return }
         if visorController == nil {
             visorController = VisorWindowController(
                 projectContext: context,

@@ -57,10 +57,10 @@ struct SidebarTabBar: View {
             }
         }
         .padding(.horizontal, 0)
-        .padding(.top, isFullScreen ? AppUI.Spacing.smMd : 8)
+        .padding(.top, isFullScreen ? AppUI.Spacing.smMd : AppUI.Spacing.md)
         .padding(.bottom, AppUI.Spacing.smMd)
         .padding(.leading, trafficLightLeading)
-        .animation(.easeInOut(duration: 0.25), value: isFullScreen)
+        .animation(.easeInOut(duration: AppUI.Animation.tabSwitch), value: isFullScreen)
     }
 
     private func tabButton(_ tab: SidebarTab) -> some View {

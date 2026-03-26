@@ -106,7 +106,7 @@ extension MainView {
                 ),
                 renderLeaf: { id in AnyView(renderLeaf(sessionID: id)) }
             )
-        } else if let engine = engineStore.engine(for: sessionID) as? SwiftTermEngine {
+        } else if let engine = engineStore.engine(for: sessionID) {
             let state = projectContext.viewState(for: sessionID, engine: engine)
             TerminalAreaView(
                 engine: engine,
@@ -120,7 +120,7 @@ extension MainView {
 
     func noteEditorView(noteID: NoteID) -> some View {
         VStack(spacing: 0) {
-            TextField("Title", text: $notesViewModel.editingTitle)
+            TextField("Title", text: notes.editingTitle)
                 .font(AppUI.Font.title1Semibold)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, AppUI.Spacing.xl)
@@ -129,7 +129,7 @@ extension MainView {
             Divider()
             NoteEditorView(
                 title: notesViewModel.editingTitle,
-                text: $notesViewModel.editingBody
+                text: notes.editingBody
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -138,7 +138,7 @@ extension MainView {
 
     @ViewBuilder
     func renderLeaf(sessionID: SessionID) -> some View {
-        if let engine = engineStore.engine(for: sessionID) as? SwiftTermEngine {
+        if let engine = engineStore.engine(for: sessionID) {
             let state = projectContext.viewState(for: sessionID, engine: engine)
             TerminalAreaView(
                 engine: engine,

@@ -1,5 +1,5 @@
 import AppKit
-import Combine
+import Observation
 import OSLog
 import SwiftUI
 
@@ -7,14 +7,14 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ThemeManage
 
 /// Manages the active theme, responds to system appearance changes,
 /// and exposes available definitions (built-in + custom).
-@MainActor
-final class ThemeManager: ObservableObject {
-    @Published private(set) var current: ThemeColors
-    @Published private(set) var availableDefinitions: [ThemeDefinition] = ThemeDefinition.builtIn
-    @Published private(set) var selectedThemeID: UUID?
+@Observable @MainActor
+final class ThemeManager {
+    private(set) var current: ThemeColors
+    private(set) var availableDefinitions: [ThemeDefinition] = ThemeDefinition.builtIn
+    private(set) var selectedThemeID: UUID?
 
     /// Current terminal font size — persisted via UserDefaults.
-    @Published var terminalFontSize: CGFloat {
+    var terminalFontSize: CGFloat {
         didSet { UserDefaults.standard.set(Double(terminalFontSize), forKey: "terminalFontSize") }
     }
 
@@ -51,6 +51,7 @@ final class ThemeManager: ObservableObject {
         }
         current = ThemeManager.themeForCurrentAppearance()
         observeAppearance()
+        // Lifecycle: one-shot init — restores theme from disk; defaults apply if this fails.
         Task { @MainActor [weak self] in
             await self?.restoreSelectedTheme()
         }
@@ -85,6 +86,7 @@ final class ThemeManager: ObservableObject {
         }
         apply(definition: definition)
         let def = definition
+        // Lifecycle: fire-and-forget persistence — theme is already applied in memory.
         Task.detached { await ThemeManager.saveTheme(def) }
     }
 
@@ -194,11 +196,13 @@ final class ThemeManager: ObservableObject {
                     let data = try Data(contentsOf: url)
                     return try decoder.decode(ThemeDefinition.self, from: data)
                 } catch {
+                    // Non-critical: malformed custom theme files are skipped; built-in themes remain available.
                     logger.warning("Skipping theme file \(url.lastPathComponent): \(error)")
                     return nil
                 }
             }
         } catch {
+            // Non-critical: custom themes directory may not exist yet; built-in themes are available.
             logger.debug("Custom themes directory not available: \(error.localizedDescription)")
             return []
         }
@@ -213,6 +217,8 @@ final class ThemeManager: ObservableObject {
             let data = try JSONEncoder().encode(definition)
             try data.write(to: url)
         } catch {
+            // Non-critical: theme save failure means the custom theme won't persist across restarts,
+            // but the theme remains applied in the current session.
             logger.error("Failed to save theme '\(definition.name)': \(error)")
         }
     }

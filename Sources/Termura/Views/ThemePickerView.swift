@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 /// Settings panel for browsing built-in themes and importing custom ones.
 struct ThemePickerView: View {
-    @ObservedObject var themeManager: ThemeManager
+    @Bindable var themeManager: ThemeManager
     let themeImportService: any ThemeImportServiceProtocol
 
     @State private var importError: String?
@@ -118,7 +118,8 @@ private struct ThemeCard: View {
     private var colorSwatches: some View {
         let keys = ["ansiBlack", "ansiRed", "ansiGreen", "ansiYellow",
                     "ansiBlue", "ansiMagenta", "ansiCyan", "ansiWhite"]
-        return LazyVGrid(columns: Array(repeating: GridItem(.fixed(AppUI.Size.themeCheckbox)), count: 4), spacing: 3) {
+        let cols = Array(repeating: GridItem(.fixed(AppUI.Size.themeCheckbox)), count: AppConfig.UI.themeGridColumns)
+        return LazyVGrid(columns: cols, spacing: AppUI.Spacing.xxs) {
             ForEach(keys, id: \.self) { key in
                 Rectangle()
                     .fill(ThemeDefinition.color(fromHex: definition.colors[key]) ?? .gray)

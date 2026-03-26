@@ -19,41 +19,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let themeImportService: ThemeImportService
     let recentProjects: RecentProjectsService
 
-    // MARK: - Fallbacks (used only until first project opens)
+    // MARK: - Project coordinator
 
-    private let fallbackEngineStore: TerminalEngineStore
-    private let fallbackSessionStore: SessionStore
-    private let fallbackNoteRepo: any NoteRepositoryProtocol
-    private let fallbackSearchService: any SearchServiceProtocol
-
-    // MARK: - Project windows
-
-    /// Maps project URL → window controller. Each window owns one project.
-    private(set) var projectWindows: [URL: ProjectWindowController] = [:]
-
-    /// The context of the most recently focused project window.
-    var activeContext: ProjectContext?
-
-    // MARK: - Convenience accessors (route through activeContext)
-
-    var sessionStore: SessionStore { activeContext?.sessionStore ?? fallbackSessionStore }
-    var engineStore: TerminalEngineStore { activeContext?.engineStore ?? fallbackEngineStore }
-    var noteRepository: any NoteRepositoryProtocol { activeContext?.noteRepository ?? fallbackNoteRepo }
-    var searchService: any SearchServiceProtocol { activeContext?.searchService ?? fallbackSearchService }
-    var agentStateStore: AgentStateStore { activeContext?.agentStateStore ?? AgentStateStore() }
-    var contextInjectionService: (any ContextInjectionServiceProtocol)? { activeContext?.contextInjectionService }
-    var sessionMessageRepository: SessionMessageRepository? { activeContext?.sessionMessageRepository }
-    var harnessEventRepository: HarnessEventRepository? { activeContext?.harnessEventRepository }
-    var ruleFileRepository: RuleFileRepository? { activeContext?.ruleFileRepository }
-    var vectorSearchService: (any VectorSearchServiceProtocol)? { activeContext?.vectorSearchService }
-    var sessionHandoffService: (any SessionHandoffServiceProtocol)? { activeContext?.sessionHandoffService }
-    var commandRouter: CommandRouter? { activeContext?.commandRouter }
+    let projectCoordinator: ProjectCoordinator
 
     // MARK: - UI controllers
 
     var visorController: VisorWindowController?
     @Published var showShellOnboarding = false
-    var windowObserver: NSObjectProtocol?
 
     // MARK: - Init
 
@@ -70,14 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarService = MenuBarService()
         themeImportService = ThemeImportService()
         recentProjects = RecentProjectsService()
-
-        let fbEngineStore = TerminalEngineStore(factory: factory)
-        fallbackEngineStore = fbEngineStore
-        fallbackSessionStore = SessionStore(engineStore: fbEngineStore)
-        fallbackNoteRepo = MockNoteRepository()
-        let sessionRepo = MockSessionRepository()
-        let noteRepo = MockNoteRepository()
-        fallbackSearchService = SearchService(sessionRepository: sessionRepo, noteRepository: noteRepo)
+        projectCoordinator = ProjectCoordinator()
 
         super.init()
     }
@@ -88,8 +54,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupVisorShortcut()
         checkShellIntegrationOnboarding()
         setupMenuBarActivation()
-        observeWindowFocus()
-        openLastProjectOrShowPicker()
+        projectCoordinator.start(with: ProjectCoordinator.Dependencies(
+            engineFactory: engineFactory,
+            tokenCountingService: tokenCountingService,
+            themeManager: themeManager,
+            fontSettings: fontSettings,
+            notificationService: notificationService,
+            menuBarService: menuBarService,
+            recentProjects: recentProjects,
+            windowChromeConfigurator: { [weak self] window in
+                self?.configureProjectWindow(window)
+            }
+        ))
         logger.info("Termura launched")
     }
 
@@ -129,130 +105,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Capture per-project handoff info on MainActor before detaching.
-        let handoffItems: [TerminationHandoffItem] = projectWindows.values.compactMap { controller -> TerminationHandoffItem? in
-            let ctx = controller.projectContext
-            guard let activeID = ctx.sessionStore.activeSessionID,
-                  let session = ctx.sessionStore.sessions.first(where: { $0.id == activeID }) else {
-                return nil
-            }
-            let chunks = ctx.outputStores[activeID]?.chunks ?? []
-            let agentState = ctx.agentStateStore.agents[activeID]
-                ?? AgentState(sessionID: activeID, agentType: .unknown)
-            return TerminationHandoffItem(
-                handoff: ctx.sessionHandoffService,
-                session: session,
-                chunks: chunks,
-                agentState: agentState
-            )
-        }
-        guard !handoffItems.isEmpty else { return .terminateNow }
-
-        Task.detached {
-            for item in handoffItems {
-                do {
-                    try await item.handoff.generateHandoff(
-                        session: item.session,
-                        chunks: item.chunks,
-                        agentState: item.agentState
-                    )
-                } catch {
-                    logger.error("generateHandoff failed on termination: \(error)")
-                }
-            }
-            await MainActor.run {
-                NSApp.reply(toApplicationShouldTerminate: true)
-            }
-        }
-        return .terminateLater
+        projectCoordinator.handleTermination()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if let observer = windowObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        for (_, controller) in projectWindows {
-            controller.projectContext.close()
-        }
+        projectCoordinator.tearDown()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
 
-    // MARK: - Project management
+    // MARK: - Project management (delegated to ProjectCoordinator)
 
     func openProject(at url: URL) {
-        // If already open, bring existing window to front
-        if let existing = projectWindows[url] {
-            existing.window?.makeKeyAndOrderFront(nil)
-            return
-        }
-
-        do {
-            let context = try ProjectContext.open(
-                at: url,
-                engineFactory: engineFactory,
-                tokenCountingService: tokenCountingService
-            )
-            let controller = ProjectWindowController(
-                projectContext: context,
-                themeManager: themeManager,
-                fontSettings: fontSettings
-            )
-            projectWindows[url] = controller
-            activeContext = context
-            recentProjects.addRecent(url)
-            setupChunkHandler(for: context)
-            persistOpenProjects()
-            controller.showWindow(nil)
-            if let window = controller.window {
-                configureProjectWindow(window)
-            }
-
-            Task { @MainActor in
-                await context.sessionStore.loadPersistedSessions()
-            }
-            logger.info("Opened project window: \(url.path)")
-        } catch {
-            logger.error("Failed to open project at \(url.path): \(error)")
-        }
-    }
-
-    func closeProject(at url: URL) {
-        guard let controller = projectWindows.removeValue(forKey: url) else { return }
-        controller.projectContext.close()
-        controller.close()
-        if activeContext?.projectURL == url {
-            activeContext = projectWindows.values.first?.projectContext
-        }
-        persistOpenProjects()
-        logger.info("Closed project: \(url.path)")
+        projectCoordinator.openProject(at: url)
     }
 
     func showProjectPicker() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Open Project"
-        panel.message = "Choose a project directory to open in Termura"
-
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in
-                self?.openProject(at: url)
-            }
-        }
+        projectCoordinator.showProjectPicker()
     }
 
-    // MARK: - Termination Handoff
-
-    /// Captures per-project state needed for session handoff during app termination.
-    private struct TerminationHandoffItem {
-        let handoff: any SessionHandoffServiceProtocol
-        let session: SessionRecord
-        let chunks: [OutputChunk]
-        let agentState: AgentState
-    }
+    /// The context of the most recently focused project window.
+    var activeContext: ProjectContext? { projectCoordinator.activeContext }
 }

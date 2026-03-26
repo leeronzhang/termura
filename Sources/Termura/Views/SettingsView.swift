@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Main settings window with tabbed sections.
 struct SettingsView: View {
-    @ObservedObject var themeManager: ThemeManager
-    @ObservedObject var fontSettings: FontSettings
+    @Bindable var themeManager: ThemeManager
+    @Bindable var fontSettings: FontSettings
     let themeImportService: any ThemeImportServiceProtocol
 
     var body: some View {
@@ -24,7 +24,7 @@ struct SettingsView: View {
 // MARK: - Font Settings Tab
 
 struct FontSettingsView: View {
-    @ObservedObject var fontSettings: FontSettings
+    @Bindable var fontSettings: FontSettings
 
     @State private var monoFamilies: [String] = []
 

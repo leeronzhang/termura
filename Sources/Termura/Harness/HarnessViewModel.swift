@@ -15,6 +15,8 @@ final class HarnessViewModel: ObservableObject {
     @Published private(set) var versionHistory: [RuleFileRecord] = []
     @Published var selectedFilePath: String?
     @Published private(set) var isScanning = false
+    /// User-visible error message from the last failed operation.
+    @Published var errorMessage: String?
 
     // MARK: - Dependencies
 
@@ -44,6 +46,7 @@ final class HarnessViewModel: ObservableObject {
                 // Check if content changed since last saved version
                 try await snapshotIfChanged(record)
             } catch {
+                errorMessage = "Failed to load rule file \(path): \(error.localizedDescription)"
                 logger.error("Failed to load rule file \(path): \(error)")
             }
         }
@@ -57,7 +60,9 @@ final class HarnessViewModel: ObservableObject {
             selectedSections = sections
             let history = try await repository.fetchHistory(for: path)
             versionHistory = history
+            errorMessage = nil
         } catch {
+            errorMessage = "Failed to load rule file: \(error.localizedDescription)"
             logger.error("Failed to select rule file: \(error)")
         }
     }
@@ -72,8 +77,10 @@ final class HarnessViewModel: ObservableObject {
             let detector = corruptionDetector
             let results = await detector.scan(sections: sections, projectRoot: projectRoot)
             corruptionResults = results
+            errorMessage = nil
             logger.info("Corruption scan: \(results.count) issues found")
         } catch {
+            errorMessage = "Corruption scan failed: \(error.localizedDescription)"
             logger.error("Corruption scan failed: \(error)")
         }
     }

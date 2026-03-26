@@ -52,7 +52,8 @@ actor ExperienceCodifier {
         do {
             try FileManager.default.removeItem(atPath: backupPath)
         } catch {
-            logger.error("Failed to remove backup rule file: \(error)")
+            // Non-critical: stale backup is harmless and will be overwritten on next rule append.
+            logger.warning("Failed to remove backup rule file: \(error)")
         }
 
         // Record harness event

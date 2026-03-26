@@ -43,12 +43,19 @@ enum SemanticParser {
         let filePath: String?
     }
 
-    // MARK: - Detection Heuristics
+    // MARK: - Detection Heuristics (declarative pattern tables)
+
+    /// Diff detection patterns — both conditions must match within the prefix.
+    private static let diffPatterns: [[String]] = [
+        ["--- a/", "+++ b/"],
+        ["diff --git"]
+    ]
 
     private static func isDiff(_ text: String) -> Bool {
-        let lines = text.prefix(AppConfig.Output.diffDetectionPrefixLength)
-        return lines.contains("--- a/") && lines.contains("+++ b/")
-            || lines.contains("diff --git")
+        let sample = String(text.prefix(AppConfig.Output.diffDetectionPrefixLength))
+        return diffPatterns.contains { group in
+            group.allSatisfy { sample.contains($0) }
+        }
     }
 
     private static func extractDiffPath(_ text: String) -> String? {
@@ -58,13 +65,15 @@ enum SemanticParser {
         return nil
     }
 
+    /// Error indicator patterns (case-insensitive).
+    static let errorIndicators: [String] = [
+        "error:", "error[", "fatal:", "panic:",
+        "traceback (most recent", "exception:",
+        "failed:", "segmentation fault"
+    ]
+
     private static func isError(_ text: String) -> Bool {
-        let lowered = text.lowercased().prefix(AppConfig.Output.errorDetectionPrefixLength)
-        let errorIndicators = [
-            "error:", "error[", "fatal:", "panic:",
-            "traceback (most recent", "exception:",
-            "failed:", "segmentation fault"
-        ]
+        let lowered = String(text.lowercased().prefix(AppConfig.Output.errorDetectionPrefixLength))
         return errorIndicators.contains { lowered.contains($0) }
     }
 
@@ -76,8 +85,13 @@ enum SemanticParser {
         return lang.isEmpty ? "text" : lang
     }
 
+    /// Tool-call indicator patterns.
+    static let toolCallIndicators: [String] = [
+        "\u{23FA}", "Tool:", "tool_use"
+    ]
+
     private static func isToolCall(_ text: String) -> Bool {
-        let prefix = text.prefix(AppConfig.Output.toolCallDetectionPrefixLength)
-        return prefix.contains("\u{23FA}") || prefix.contains("Tool:") || prefix.contains("tool_use")
+        let sample = String(text.prefix(AppConfig.Output.toolCallDetectionPrefixLength))
+        return toolCallIndicators.contains { sample.contains($0) }
     }
 }

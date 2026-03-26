@@ -77,15 +77,9 @@ final class ProjectViewModelTests: XCTestCase {
         )
         await mockGit.setStubbed(status)
 
-        let expectation = XCTestExpectation(description: "uncommitted changes set")
-        router.$hasUncommittedChanges
-            .dropFirst()
-            .first(where: { $0 })
-            .sink { _ in expectation.fulfill() }
-            .store(in: &cancellables)
-
         vm.refresh()
-        await fulfillment(of: [expectation], timeout: 2.0)
+        // Allow the async refresh task to complete.
+        try await yieldForDuration(seconds: 0.1)
 
         XCTAssertTrue(router.hasUncommittedChanges)
     }

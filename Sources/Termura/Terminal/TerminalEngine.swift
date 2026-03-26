@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Protocol abstracting the terminal PTY engine.
@@ -25,6 +26,9 @@ protocol TerminalEngine: AnyObject {
 
     /// Whether the underlying PTY process is running.
     var isRunning: Bool { get }
+
+    /// The AppKit view backing this terminal engine, for focus and key routing.
+    var terminalNSView: NSView { get }
 
     /// Text content of the terminal row where the cursor currently sits,
     /// read from SwiftTerm's screen buffer *after* all ANSI sequences have

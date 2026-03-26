@@ -4,7 +4,7 @@ extension MainView {
     var searchSheet: some View {
         SearchView(
             searchService: projectContext.searchService,
-            isPresented: $commandRouter.showSearch,
+            isPresented: router.showSearch,
             onSelectSession: { id in sessionStore.activateSession(id: id) },
             vectorService: projectContext.vectorSearchService
         )
@@ -39,7 +39,7 @@ extension MainView {
             repository: projectContext.ruleFileRepository,
             projectRoot: projectRoot
         )
-        HarnessSidebarView(viewModel: vm, isPresented: $commandRouter.showHarness)
+        HarnessSidebarView(viewModel: vm, isPresented: router.showHarness)
             .frame(minWidth: AppConfig.UI.mainSheetMinWidth, idealHeight: AppConfig.UI.mainSheetIdealHeight)
     }
 

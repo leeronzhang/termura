@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Test double for TerminalEngine. Captures all interactions for assertion.
@@ -11,6 +12,7 @@ final class MockTerminalEngine: TerminalEngine {
     // MARK: - State
 
     private(set) var isRunning = true
+    let terminalNSView: NSView = NSView()
     private(set) var sentTexts: [String] = []
     private(set) var sentBytes: [Data] = []
     private(set) var resizes: [(UInt16, UInt16)] = []

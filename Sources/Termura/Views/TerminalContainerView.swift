@@ -11,17 +11,17 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalCon
 /// Acts as the bridge between SwiftUI layout and the AppKit terminal renderer.
 struct TerminalContainerView: NSViewRepresentable {
     let viewModel: TerminalViewModel
-    let engine: SwiftTermEngine
+    let engine: any TerminalEngine
     let theme: ThemeColors
     /// Value types so SwiftUI diffs trigger updateNSView on change.
     let fontFamily: String
     let fontSize: CGFloat
 
-    func makeNSView(context: Context) -> LocalProcessTerminalView {
-        let view = engine.terminalView
-        applyTheme(theme, to: view)
-        // Hide scrollbar entirely — scrolling still works via trackpad / mouse wheel.
-        // SwiftTerm uses a bare NSScroller subview (not NSScrollView), so we find and hide it directly.
+    func makeNSView(context: Context) -> NSView {
+        let view = engine.terminalNSView
+        if let termView = view as? LocalProcessTerminalView {
+            applyTheme(theme, to: termView)
+        }
         hideScroller(in: view)
         return view
     }
@@ -35,8 +35,10 @@ struct TerminalContainerView: NSViewRepresentable {
         }
     }
 
-    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
-        applyTheme(theme, to: nsView)
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if let termView = nsView as? LocalProcessTerminalView {
+            applyTheme(theme, to: termView)
+        }
     }
 
     func makeCoordinator() -> Coordinator {

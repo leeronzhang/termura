@@ -30,7 +30,7 @@ struct SidebarHarnessContent: View {
     var onOpenFile: ((String, FileOpenMode) -> Void)?
 
     init(
-        repository: RuleFileRepository,
+        repository: any RuleFileRepositoryProtocol,
         projectRoot: String,
         onOpenFile: ((String, FileOpenMode) -> Void)? = nil
     ) {
