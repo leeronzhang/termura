@@ -14,6 +14,11 @@ struct RecentProjectsService: Sendable {
         fileURL = dir.appendingPathComponent(AppConfig.RecentProjects.fileName)
     }
 
+    /// Testable initializer allowing injection of a custom file URL.
+    init(fileURL: URL) {
+        self.fileURL = fileURL
+    }
+
     // MARK: - Read
 
     func fetchRecent() -> [RecentProject] {

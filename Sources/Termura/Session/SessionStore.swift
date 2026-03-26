@@ -17,18 +17,21 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     /// Project root directory — used as default working directory for new sessions.
     let projectRoot: String
     private let repository: (any SessionRepositoryProtocol)?
+    private let clock: any AppClock
     private var saveTask: Task<Void, Never>?
 
     init(
         engineStore: TerminalEngineStore,
         shell: String = "",
         projectRoot: String = "",
-        repository: (any SessionRepositoryProtocol)? = nil
+        repository: (any SessionRepositoryProtocol)? = nil,
+        clock: any AppClock = LiveClock()
     ) {
         self.engineStore = engineStore
         defaultShell = shell
         self.projectRoot = projectRoot
         self.repository = repository
+        self.clock = clock
     }
 
     // MARK: - Persistence
@@ -254,7 +257,7 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         saveTask?.cancel()
         saveTask = Task {
             do {
-                try await Task.sleep(for: .seconds(AppConfig.Runtime.notesAutoSaveSeconds))
+                try await clock.sleep(for: .seconds(AppConfig.Runtime.notesAutoSaveSeconds))
                 guard !Task.isCancelled else { return }
                 try await operation(repo)
             } catch is CancellationError {

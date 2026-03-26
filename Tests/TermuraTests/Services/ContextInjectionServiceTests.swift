@@ -4,55 +4,6 @@ import Testing
 
 // MARK: - Test Helpers
 
-private actor MockMessageRepo: SessionMessageRepositoryProtocol {
-    var savedMessages: [SessionMessage] = []
-
-    func fetchMessages(
-        for sessionID: SessionID,
-        contentType: MessageContentType?
-    ) async throws -> [SessionMessage] {
-        savedMessages.filter { $0.sessionID == sessionID }
-    }
-
-    func save(_ message: SessionMessage) async throws {
-        savedMessages.append(message)
-    }
-
-    func delete(id: SessionMessageID) async throws {
-        savedMessages.removeAll { $0.id == id }
-    }
-
-    func deleteAll(for sessionID: SessionID) async throws {
-        savedMessages.removeAll { $0.sessionID == sessionID }
-    }
-
-    func countTokens(
-        for sessionID: SessionID,
-        contentType: MessageContentType
-    ) async throws -> Int {
-        0
-    }
-}
-
-private actor MockHarnessEventRepo: HarnessEventRepositoryProtocol {
-    var savedEvents: [HarnessEvent] = []
-
-    func fetchEvents(for sessionID: SessionID) async throws -> [HarnessEvent] {
-        savedEvents.filter { $0.sessionID == sessionID }
-    }
-
-    func save(_ event: HarnessEvent) async throws {
-        savedEvents.append(event)
-    }
-
-    func fetchEvents(
-        ofType type: HarnessEventType,
-        for sessionID: SessionID
-    ) async throws -> [HarnessEvent] {
-        savedEvents.filter { $0.sessionID == sessionID && $0.eventType == type }
-    }
-}
-
 private func makeTempDir() throws -> String {
     let tmp = NSTemporaryDirectory() + "termura-injection-test-\(UUID().uuidString)"
     try FileManager.default.createDirectory(
@@ -64,8 +15,8 @@ private func makeTempDir() throws -> String {
 
 private func makeHandoffService() -> SessionHandoffService {
     SessionHandoffService(
-        messageRepo: MockMessageRepo(),
-        harnessEventRepo: MockHarnessEventRepo(),
+        messageRepo: MockSessionMessageRepository(),
+        harnessEventRepo: MockHarnessEventRepository(),
         summarizer: BranchSummarizer()
     )
 }

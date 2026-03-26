@@ -32,6 +32,7 @@ final class TerminalViewModel: ObservableObject {
     let agentDetector: AgentStateDetector
     private let interventionService: InterventionService
     let contextWindowMonitor: ContextWindowMonitor
+    let clock: any AppClock
     weak var agentStateStore: AgentStateStore? // concrete: weak requires class type
     let sessionStartTime: Date = .init()
     /// Prevents repeated renames after the agent is already detected from output.
@@ -65,7 +66,8 @@ final class TerminalViewModel: ObservableObject {
         agentStateStore: AgentStateStore? = nil,
         isRestoredSession: Bool = false,
         contextInjectionService: (any ContextInjectionServiceProtocol)? = nil,
-        sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil
+        sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil,
+        clock: any AppClock = LiveClock()
     ) {
         self.sessionID = sessionID
         self.engine = engine
@@ -77,6 +79,7 @@ final class TerminalViewModel: ObservableObject {
         self.isRestoredSession = isRestoredSession
         self.contextInjectionService = contextInjectionService
         self.sessionHandoffService = sessionHandoffService
+        self.clock = clock
         chunkDetector = ChunkDetector(sessionID: sessionID)
         fallbackDetector = FallbackChunkDetector(sessionID: sessionID)
         agentDetector = AgentStateDetector(sessionID: sessionID)
@@ -102,7 +105,12 @@ final class TerminalViewModel: ObservableObject {
     // MARK: - Public
 
     func send(_ text: String) {
-        Task { await engine.send(text) }
+        let service = tokenCountingService
+        let sid = sessionID
+        Task {
+            await engine.send(text)
+            await service.accumulateInput(for: sid, text: text)
+        }
     }
 
     /// Detect agent type from a submitted command and update session title if matched.
@@ -210,8 +218,12 @@ final class TerminalViewModel: ObservableObject {
                     store.append(chunk)
                 }
             }
-            await service.accumulate(for: sid, text: stripped)
+            await service.accumulateOutput(for: sid, text: stripped)
             _ = await agentDet.analyzeOutput(stripped)
+            if let stats = await agentDet.parseTokenStats(stripped),
+               let cached = stats.cachedTokens, cached > 0 {
+                await service.accumulateCached(for: sid, count: cached)
+            }
             if let risk = await intervention.detectRisk(in: stripped) {
                 await MainActor.run { [weak self] in
                     self?.pendingRiskAlert = risk
@@ -236,7 +248,7 @@ final class TerminalViewModel: ObservableObject {
         Task { @MainActor [weak self] in
             guard let text = await service.buildInjectionText(projectRoot: workingDir) else { return }
             do {
-                try await Task.sleep(nanoseconds: AppConfig.SessionHandoff.injectionDelayNanoseconds)
+                try await self?.clock.sleep(for: .nanoseconds(AppConfig.SessionHandoff.injectionDelayNanoseconds))
             } catch is CancellationError {
                 return
             } catch {

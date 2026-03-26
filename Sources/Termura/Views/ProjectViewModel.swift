@@ -42,6 +42,7 @@ final class ProjectViewModel: ObservableObject {
     }
 
     private let gitService: any GitServiceProtocol
+    private let clock: any AppClock
     private let fileTreeService = FileTreeService()
     private let projectRoot: String
     private weak var commandRouter: CommandRouter?
@@ -55,11 +56,13 @@ final class ProjectViewModel: ObservableObject {
     init(
         gitService: any GitServiceProtocol,
         projectRoot: String,
-        commandRouter: CommandRouter? = nil
+        commandRouter: CommandRouter? = nil,
+        clock: any AppClock = LiveClock()
     ) {
         self.gitService = gitService
         self.projectRoot = projectRoot
         self.commandRouter = commandRouter
+        self.clock = clock
         restoreExpandedIDs()
         setupObservers()
     }
@@ -175,7 +178,7 @@ final class ProjectViewModel: ObservableObject {
         persistTask?.cancel()
         persistTask = Task { [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 300_000_000)
+                try await self?.clock.sleep(for: .nanoseconds(300_000_000))
             } catch {
                 return
             }
@@ -200,8 +203,8 @@ final class ProjectViewModel: ObservableObject {
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
             do {
-                try await Task.sleep(
-                    nanoseconds: AppConfig.Git.refreshDebounceNanoseconds
+                try await self?.clock.sleep(
+                    for: .nanoseconds(AppConfig.Git.refreshDebounceNanoseconds)
                 )
             } catch is CancellationError {
                 return

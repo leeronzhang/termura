@@ -82,7 +82,7 @@ extension TerminalViewModel {
         promptRecheckTask?.cancel()
         promptRecheckTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(nanoseconds: AppConfig.UI.promptRecheckDelayNanoseconds)
+                try await self?.clock.sleep(for: .nanoseconds(AppConfig.UI.promptRecheckDelayNanoseconds))
             } catch is CancellationError {
                 return
             } catch {
