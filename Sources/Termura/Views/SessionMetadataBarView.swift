@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Narrow right-side panel displaying session metadata: directory, token usage,
-/// command count, and duration. Toggled via toolbar button in TerminalAreaView.
+/// Narrow right-side panel displaying session metadata: agent info, directory,
+/// token breakdown, cost, command count, and duration.
 struct SessionMetadataBarView: View {
     let metadata: SessionMetadata
 
@@ -16,6 +16,9 @@ struct SessionMetadataBarView: View {
                     }
                     directorySection
                     tokenSection
+                    if metadata.estimatedCostUSD > 0 {
+                        costSection
+                    }
                     commandSection
                     durationSection
                 }
@@ -46,8 +49,23 @@ struct SessionMetadataBarView: View {
             metadataItem(label: "Agent") {
                 HStack(spacing: AppUI.Spacing.smMd) {
                     AgentStatusBadgeView(status: agentStatus, agentType: agentType)
-                    Text(agentType.rawValue)
+                    Text(agentType.displayName)
                         .font(AppUI.Font.bodyMedium)
+                }
+                Text(MetadataFormatter.formatAgentStatus(agentStatus))
+                    .font(AppUI.Font.caption)
+                    .foregroundColor(agentStatusColor(agentStatus))
+                if let task = metadata.currentAgentTask {
+                    Text(task)
+                        .font(AppUI.Font.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                }
+                if metadata.agentElapsedTime > 0 {
+                    breakdownRow(
+                        "Elapsed",
+                        MetadataFormatter.formatDuration(metadata.agentElapsedTime)
+                    )
                 }
                 if metadata.activeAgentCount > 1 {
                     Text("\(metadata.activeAgentCount) agents active")
@@ -80,12 +98,50 @@ struct SessionMetadataBarView: View {
                     estimatedTokens: metadata.estimatedTokenCount,
                     contextLimit: metadata.contextWindowLimit
                 )
-            } else {
+            }
+            if metadata.hasTokenBreakdown {
+                tokenBreakdownRows
+            } else if metadata.contextWindowLimit <= 0 {
                 Text(formattedTokenCount)
                     .font(AppUI.Font.label)
                     .foregroundColor(.secondary)
                     .monospacedDigit()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var tokenBreakdownRows: some View {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
+            if metadata.inputTokenCount > 0 {
+                breakdownRow(
+                    "Input",
+                    MetadataFormatter.formatTokenCount(metadata.inputTokenCount)
+                )
+            }
+            if metadata.outputTokenCount > 0 {
+                breakdownRow(
+                    "Output",
+                    MetadataFormatter.formatTokenCount(metadata.outputTokenCount)
+                )
+            }
+            if metadata.cachedTokenCount > 0 {
+                breakdownRow(
+                    "Cached",
+                    MetadataFormatter.formatTokenCount(metadata.cachedTokenCount)
+                )
+            }
+        }
+    }
+
+    // MARK: - Cost
+
+    private var costSection: some View {
+        metadataItem(label: "Cost") {
+            Text(MetadataFormatter.formatCost(metadata.estimatedCostUSD))
+                .font(AppUI.Font.label)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
         }
     }
 
@@ -109,7 +165,7 @@ struct SessionMetadataBarView: View {
         }
     }
 
-    // MARK: - Reusable item layout
+    // MARK: - Reusable layouts
 
     @ViewBuilder
     private func metadataItem(
@@ -120,6 +176,19 @@ struct SessionMetadataBarView: View {
             Text(label)
                 .sectionLabelStyle()
             content()
+        }
+    }
+
+    private func breakdownRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(AppUI.Font.captionMono)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .font(AppUI.Font.captionMono)
+                .foregroundColor(.secondary)
+                .monospacedDigit()
         }
     }
 
@@ -135,5 +204,16 @@ struct SessionMetadataBarView: View {
 
     private var formattedDuration: String {
         MetadataFormatter.formatDuration(metadata.sessionDuration)
+    }
+
+    private func agentStatusColor(_ status: AgentStatus) -> Color {
+        switch status {
+        case .idle: .secondary
+        case .thinking: .blue
+        case .toolRunning: .orange
+        case .waitingInput: .yellow
+        case .error: .red
+        case .completed: .green
+        }
     }
 }

@@ -72,13 +72,27 @@ extension SidebarView {
         toggleExpand: (() -> Void)? = nil,
         isExpanded: Bool = true
     ) -> some View {
-        SessionRowView(
+        let agentState = projectContext.agentStateStore.agents[session.id]
+        let tokens: String? = {
+            guard let tokenTotal = agentState?.tokenCount, tokenTotal > 0 else { return nil }
+            return MetadataFormatter.formatTokenCount(tokenTotal)
+        }()
+        let duration: String? = {
+            guard let started = agentState?.startedAt else { return nil }
+            let elapsed = Date().timeIntervalSince(started)
+            guard elapsed > 0 else { return nil }
+            return MetadataFormatter.formatDuration(elapsed)
+        }()
+        return SessionRowView(
             session: session,
             isActive: sessionStore.activeSessionID == session.id
                 && activeContentTab?.sessionID == session.id,
             hasUnreadFailure: false,
-            agentStatus: projectContext.agentStateStore.agents[session.id]?.status,
-            agentType: projectContext.agentStateStore.agents[session.id]?.agentType ?? session.agentType,
+            agentStatus: agentState?.status,
+            agentType: agentState?.agentType ?? session.agentType,
+            tokenSummary: tokens,
+            durationText: duration,
+            currentTaskSnippet: agentState?.currentTask,
             onActivate: { sessionStore.activateSession(id: session.id) },
             onRename: { sessionStore.renameSession(id: session.id, title: $0) },
             onClose: { sessionStore.closeSession(id: session.id) },
@@ -156,7 +170,13 @@ extension SidebarView {
 extension SidebarView {
     @ViewBuilder
     var agentsContent: some View {
-        AgentDashboardView(agentStore: projectContext.agentStateStore) { sid in
+        let titles = Dictionary(
+            uniqueKeysWithValues: sessionStore.sessions.map { ($0.id, $0.title) }
+        )
+        AgentDashboardView(
+            agentStore: projectContext.agentStateStore,
+            sessionTitles: titles
+        ) { sid in
             sessionStore.activateSession(id: sid)
         }
         .frame(maxWidth: .infinity)

@@ -38,8 +38,11 @@ extension TerminalViewModel {
         let agentDet = agentDetector
         let service = tokenCountingService
         let sid = sessionID
-        let tokens = await service.estimatedTokens(for: sid)
-        guard let state = await agentDet.buildState(tokenCount: tokens) else { return }
+        let breakdown = await service.tokenBreakdown(for: sid)
+        guard var state = await agentDet.buildState(tokenCount: breakdown.totalTokens) else { return }
+        state.inputTokens = breakdown.inputTokens
+        state.outputTokens = breakdown.outputTokens
+        state.cachedTokens = breakdown.cachedTokens
         agentStateStore?.update(state: state)
 
         let monitor = contextWindowMonitor
@@ -53,7 +56,8 @@ extension TerminalViewModel {
     func refreshMetadata(workingDirectory: String? = nil) async {
         let service = tokenCountingService
         let sid = sessionID
-        let tokens = await service.estimatedTokens(for: sid)
+        let breakdown = await service.tokenBreakdown(for: sid)
+        let tokens = breakdown.totalTokens
         let elapsed = Date().timeIntervalSince(sessionStartTime)
         let cmdCount = outputStore.chunks.count
         let dir = workingDirectory ?? currentMetadata.workingDirectory
@@ -62,17 +66,27 @@ extension TerminalViewModel {
 
         let ctxLimit = agentState?.contextWindowLimit ?? 0
         let ctxFraction = agentState?.contextUsageFraction ?? 0
+        let agentElapsed = agentState.map {
+            Date().timeIntervalSince($0.startedAt)
+        } ?? 0
+        let cost = agentState?.estimatedCostUSD ?? 0
 
         currentMetadata = SessionMetadata(
             sessionID: sessionID,
             estimatedTokenCount: tokens,
             totalCharacterCount: tokens * Int(AppConfig.AI.tokenEstimateDivisor),
+            inputTokenCount: breakdown.inputTokens,
+            outputTokenCount: breakdown.outputTokens,
+            cachedTokenCount: breakdown.cachedTokens,
+            estimatedCostUSD: cost,
             sessionDuration: elapsed,
             commandCount: cmdCount,
             workingDirectory: dir,
             activeAgentCount: agentStateStore?.activeAgentCount ?? 0,
             currentAgentType: agentState?.agentType,
             currentAgentStatus: agentState?.status,
+            currentAgentTask: agentState?.currentTask,
+            agentElapsedTime: agentElapsed,
             contextWindowLimit: ctxLimit,
             contextUsageFraction: ctxFraction
         )

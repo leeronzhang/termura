@@ -74,6 +74,15 @@ enum AppConfig {
         static let tokenEstimateDivisor: Double = 4.0
     }
 
+    /// Per-million-token pricing for heuristic cost estimation.
+    enum CostEstimation {
+        static let claudeInputPerMillion: Double = 3.0
+        static let claudeOutputPerMillion: Double = 15.0
+        static let claudeCacheReadPerMillion: Double = 0.30
+        static let defaultInputPerMillion: Double = 3.0
+        static let defaultOutputPerMillion: Double = 15.0
+    }
+
     enum ContextWindow {
         static let claudeCodeLimit = 200_000
         static let codexLimit = 128_000

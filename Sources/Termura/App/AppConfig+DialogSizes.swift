@@ -22,7 +22,7 @@ extension AppConfig.UI {
     static let fieldPickerWidth: Double = 200
     static let settingsFontSizeFieldWidth: Double = 50
     static let filePreviewLineNumberWidth: CGFloat = 36
-    static let agentDashboardLabelWidth: Double = 60
+    static let agentDashboardLabelWidth: Double = 80
     // Divider
     static let dividerLineWidth: Double = 1
     static let dividerHitTarget: Double = 9

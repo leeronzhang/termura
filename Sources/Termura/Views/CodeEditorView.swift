@@ -176,4 +176,3 @@ private func editorErrorView(_ message: String) -> some View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
 }
-

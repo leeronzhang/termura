@@ -53,6 +53,14 @@ enum AgentStatus: String, Sendable, Codable, CaseIterable {
     case completed
 }
 
+/// Token statistics parsed from agent output (e.g. Claude Code cost summary).
+struct ParsedTokenStats: Sendable {
+    var inputTokens: Int?
+    var outputTokens: Int?
+    var cachedTokens: Int?
+    var totalCost: Double?
+}
+
 /// Snapshot of a detected agent's state within a session.
 struct AgentState: Identifiable, Sendable {
     let id: UUID
@@ -61,6 +69,12 @@ struct AgentState: Identifiable, Sendable {
     var status: AgentStatus
     var currentTask: String?
     var tokenCount: Int
+    /// Token breakdown by category.
+    var inputTokens: Int
+    var outputTokens: Int
+    var cachedTokens: Int
+    /// Estimated cost in USD parsed from agent output.
+    var estimatedCostUSD: Double
     /// Context window token limit for the detected agent.
     var contextWindowLimit: Int
     let startedAt: Date
@@ -72,6 +86,10 @@ struct AgentState: Identifiable, Sendable {
         status: AgentStatus = .idle,
         currentTask: String? = nil,
         tokenCount: Int = 0,
+        inputTokens: Int = 0,
+        outputTokens: Int = 0,
+        cachedTokens: Int = 0,
+        estimatedCostUSD: Double = 0,
         contextWindowLimit: Int? = nil,
         startedAt: Date = Date()
     ) {
@@ -81,6 +99,10 @@ struct AgentState: Identifiable, Sendable {
         self.status = status
         self.currentTask = currentTask
         self.tokenCount = tokenCount
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cachedTokens = cachedTokens
+        self.estimatedCostUSD = estimatedCostUSD
         self.contextWindowLimit = contextWindowLimit ?? agentType.contextWindowLimit
         self.startedAt = startedAt
     }

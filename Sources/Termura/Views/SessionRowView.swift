@@ -7,6 +7,12 @@ struct SessionRowView: View {
     let hasUnreadFailure: Bool
     var agentStatus: AgentStatus?
     var agentType: AgentType?
+    /// Formatted token count (e.g. "42.1k") for the session, if available.
+    var tokenSummary: String?
+    /// Formatted duration (e.g. "4m 23s") for the session, if available.
+    var durationText: String?
+    /// Brief description of agent's current task.
+    var currentTaskSnippet: String?
     let onActivate: () -> Void
     let onRename: (String) -> Void
     let onClose: () -> Void
@@ -119,7 +125,23 @@ struct SessionRowView: View {
                         .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
                         .lineLimit(1)
                 }
+                agentStatsLine
             }
+        }
+    }
+
+    @ViewBuilder
+    private var agentStatsLine: some View {
+        let parts = [
+            agentStatus.map { MetadataFormatter.formatAgentStatus($0) },
+            tokenSummary,
+            durationText
+        ].compactMap { $0 }
+        if !parts.isEmpty {
+            Text(parts.joined(separator: "  "))
+                .font(AppUI.Font.captionMono)
+                .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
+                .lineLimit(1)
         }
     }
 

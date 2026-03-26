@@ -104,7 +104,7 @@ struct SidebarProjectContent: View {
                     gitInlineStat("M\(git.modifiedCount)", color: .orange)
                 }
                 if git.untrackedCount > 0 {
-                    gitInlineStat("U\(git.untrackedCount)", color: .green)
+                    gitInlineStat("U\(git.untrackedCount)", color: .cyan)
                 }
             }
         }
@@ -138,7 +138,7 @@ struct SidebarProjectContent: View {
                             .font(AppUI.Font.captionMono)
                             .foregroundColor(
                                 viewModel.hideIgnoredFiles
-                                    ? .accentColor
+                                    ? .primary
                                     : .secondary.opacity(AppUI.Opacity.dimmed)
                             )
                     }

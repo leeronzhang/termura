@@ -99,7 +99,7 @@ struct FileTreeRowView: View {
         switch status {
         case .modified: return node.isGitStaged ? .green : .orange
         case .added: return .green
-        case .untracked: return .green
+        case .untracked: return .cyan
         case .deleted: return .red
         case .renamed, .copied: return .blue
         }
@@ -166,7 +166,7 @@ struct FileTreeRowView: View {
         switch kind {
         case .modified: staged ? .green : .orange
         case .added: .green
-        case .untracked: .green
+        case .untracked: .cyan
         case .deleted: .red
         case .renamed, .copied: .blue
         }

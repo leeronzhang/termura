@@ -78,14 +78,17 @@ final class FontSettings: ObservableObject {
 
     func zoomIn() {
         terminalFontSize = min(terminalFontSize + Self.zoomStep, Self.maxSize)
+        editorFontSize = min(editorFontSize + Self.zoomStep, Self.maxSize)
     }
 
     func zoomOut() {
         terminalFontSize = max(terminalFontSize - Self.zoomStep, Self.minSize)
+        editorFontSize = max(editorFontSize - Self.zoomStep, Self.minSize)
     }
 
     func resetZoom() {
         terminalFontSize = Self.defaultTerminalSize
+        editorFontSize = Self.defaultEditorSize
     }
 
     // MARK: - Font constructors
