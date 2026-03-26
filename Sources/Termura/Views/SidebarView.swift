@@ -3,9 +3,9 @@ import SwiftUI
 /// Sidebar with Xcode-style tab bar: Sessions, Agents, Harness, Notes, Project.
 struct SidebarView: View {
     @EnvironmentObject var projectContext: ProjectContext
-    @EnvironmentObject var themeManager: ThemeManager
-    @EnvironmentObject var commandRouter: CommandRouter
-    @EnvironmentObject var notesViewModel: NotesViewModel
+    @Environment(\.themeManager) var themeManager
+    @Environment(\.commandRouter) var commandRouter
+    @Environment(\.notesViewModel) var notesViewModel
 
     var isFullScreen: Bool = false
     /// The currently visible content tab — used to suppress session highlight

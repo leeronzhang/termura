@@ -4,8 +4,49 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "TerminalViewModel+Agent")
 
-/// Extension grouping session handoff, agent state updates, and metadata refresh.
+/// Extension grouping agent detection, session handoff, agent state updates, and metadata refresh.
 extension TerminalViewModel {
+    // MARK: - Output-based agent detection
+
+    /// Signature patterns in terminal output that identify a running agent.
+    private static var outputSignatures: [(pattern: String, type: AgentType)] {
+        [
+            ("claude code", .claudeCode),
+            ("anthropic", .claudeCode),
+            ("openai codex", .codex),
+            (">_ openai codex", .codex),
+            ("aider v", .aider),
+            ("opencode", .openCode),
+            ("gemini cli", .gemini),
+            ("gemini code", .gemini)
+        ]
+    }
+
+    /// Strips known agent icon prefixes from OSC terminal titles.
+    static func stripAgentPrefixes(_ title: String) -> String {
+        var stripped = title.trimmingCharacters(in: .whitespaces)
+        let prefixes = ["\u{2733}", ">_", "\u{2726}", "\u{26A1}", "\u{203A}"]
+        for prefix in prefixes where stripped.hasPrefix(prefix) {
+            stripped = String(stripped.dropFirst(prefix.count))
+                .trimmingCharacters(in: .whitespaces)
+        }
+        return stripped.isEmpty ? title : stripped
+    }
+
+    /// Scan terminal output for agent signatures and rename session on first match.
+    func detectAgentFromOutput(_ text: String) {
+        guard !hasDetectedAgentFromOutput else { return }
+        let lower = text.lowercased()
+        for (pattern, type) in Self.outputSignatures where lower.contains(pattern) {
+            hasDetectedAgentFromOutput = true
+            sessionStore.renameSession(id: sessionID, title: type.displayName)
+            sessionStore.setAgentType(id: sessionID, type: type)
+            let detector = agentDetector
+            spawnTracked { await detector.setDetectedType(type) }
+            return
+        }
+    }
+
     // MARK: - Session Handoff
 
     func generateHandoffIfNeeded(exitCode: Int32) async {
@@ -19,7 +60,7 @@ extension TerminalViewModel {
         let chunks = outputStore.chunks
         guard let handoffService = sessionHandoffService else { return }
 
-        Task.detached {
+        spawnDetachedTracked {
             do {
                 try await handoffService.generateHandoff(
                     session: session,
@@ -27,6 +68,8 @@ extension TerminalViewModel {
                     agentState: agentState
                 )
             } catch {
+                // Non-critical: handoff is best-effort background persistence;
+                // user session data remains in memory and can be re-generated.
                 logger.error("Session handoff failed: \(error)")
             }
         }
@@ -45,9 +88,13 @@ extension TerminalViewModel {
         state.cachedTokens = breakdown.cachedTokens
         agentStateStore?.update(state: state)
 
-        let monitor = contextWindowMonitor
-        if let alert = await monitor.evaluate(state: state) {
-            contextWindowAlert = alert
+        // Only trigger context alerts when we have parsed token data, not heuristic.
+        let hasParsedData = state.cachedTokens > 0 || state.estimatedCostUSD > 0
+        if hasParsedData {
+            let monitor = contextWindowMonitor
+            if let alert = await monitor.evaluate(state: state) {
+                contextWindowAlert = alert
+            }
         }
     }
 

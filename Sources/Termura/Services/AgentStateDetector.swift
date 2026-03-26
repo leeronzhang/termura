@@ -14,6 +14,8 @@ private enum TokenStatRegex {
         do {
             return try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
         } catch {
+            // Non-critical: static regex — the hard-coded patterns are well-formed.
+            // If compilation fails here it indicates a system-level issue, not a code defect.
             logger.error("Failed to compile regex '\(pattern)': \(error)")
             return nil
         }
@@ -25,6 +27,7 @@ private enum TokenStatRegex {
 actor AgentStateDetector {
     private var detectedType: AgentType?
     private var currentStatus: AgentStatus = .idle
+    private var detectedAt: Date?
     private let sessionID: SessionID
 
     init(sessionID: SessionID) {
@@ -40,6 +43,7 @@ actor AgentStateDetector {
             if cmd.hasPrefix(pattern) || cmd.contains("/\(pattern)") {
                 detectedType = type
                 currentStatus = .idle
+                detectedAt = Date()
                 logger.info("Detected agent \(type.rawValue) in session \(self.sessionID)")
                 return type
             }
@@ -47,24 +51,26 @@ actor AgentStateDetector {
         return nil
     }
 
+    /// Directly set the detected agent type (used when detection happens outside the detector).
+    func setDetectedType(_ type: AgentType) {
+        guard detectedType == nil else { return }
+        detectedType = type
+        currentStatus = .idle
+        detectedAt = Date()
+        logger.info("Agent \(type.rawValue) set externally in session \(self.sessionID)")
+    }
+
     // MARK: - Output Analysis
 
     /// Analyze a batch of terminal output to update agent status.
+    /// Evaluates the status rule table top-to-bottom; first match wins.
     func analyzeOutput(_ text: String) -> AgentStatus {
         guard detectedType != nil else { return .idle }
 
         let sample = String(text.suffix(AppConfig.Agent.outputAnalysisSuffixLength))
 
-        if isWaitingInput(sample) {
-            currentStatus = .waitingInput
-        } else if isError(sample) {
-            currentStatus = .error
-        } else if isToolRunning(sample) {
-            currentStatus = .toolRunning
-        } else if isThinking(sample) {
-            currentStatus = .thinking
-        } else if isCompleted(sample) {
-            currentStatus = .completed
+        if let matched = evaluateRules(sample) {
+            currentStatus = matched
         }
 
         return currentStatus
@@ -77,7 +83,8 @@ actor AgentStateDetector {
             sessionID: sessionID,
             agentType: type,
             status: currentStatus,
-            tokenCount: tokenCount
+            tokenCount: tokenCount,
+            startedAt: detectedAt ?? Date()
         )
     }
 
@@ -113,6 +120,7 @@ actor AgentStateDetector {
     func reset() {
         detectedType = nil
         currentStatus = .idle
+        detectedAt = nil
     }
 
     // MARK: - Token Stat Patterns
@@ -166,35 +174,95 @@ actor AgentStateDetector {
         ("pi-agent", .pi)
     ]
 
-    private func isWaitingInput(_ text: String) -> Bool {
-        // Claude Code ">" prompt, Codex confirm, Aider ">"
-        text.hasSuffix("> ") || text.hasSuffix(">\n")
-            || text.contains("[Y/n]") || text.contains("[y/N]")
-            || text.contains("Do you want to proceed")
-            || text.contains("permission")
+    /// Ordered rule table for status detection. Evaluated top-to-bottom;
+    /// first match wins. Higher-priority statuses appear earlier.
+    /// Each rule is independently testable via `StatusRule.matches(_:)`.
+    static let statusRules: [StatusRule] = [
+        // -- waitingInput: highest priority (user action required) --
+        StatusRule(.waitingInput, .suffix("> "), label: "prompt-suffix"),
+        StatusRule(.waitingInput, .suffix(">\n"), label: "prompt-suffix-nl"),
+        StatusRule(.waitingInput, .contains("[Y/n]"), label: "confirm-yn"),
+        StatusRule(.waitingInput, .contains("[y/N]"), label: "confirm-yN"),
+        StatusRule(.waitingInput, .contains("Do you want to proceed"), label: "proceed-prompt"),
+        StatusRule(.waitingInput, .contains("permission"), label: "permission-prompt"),
+
+        // -- error: second priority (needs attention) --
+        StatusRule(.error, .containsCaseInsensitive("api error"), label: "api-error"),
+        StatusRule(.error, .containsCaseInsensitive("rate limit"), label: "rate-limit"),
+        StatusRule(.error, .containsCaseInsensitive("fatal:"), label: "fatal"),
+        StatusRule(.error, .containsCaseInsensitive("panic:"), label: "panic"),
+        StatusRule(.error, .containsCaseInsensitive("traceback"), label: "traceback"),
+        StatusRule(.error, .containsCaseInsensitive("error:"), label: "error-colon"),
+
+        // -- toolRunning: agent is executing a tool --
+        StatusRule(.toolRunning, .contains("\u{23FA}"), label: "record-icon"),
+        StatusRule(.toolRunning, .contains("Running:"), label: "running-label"),
+        StatusRule(.toolRunning, .contains("Executing:"), label: "executing-label"),
+        StatusRule(.toolRunning, .contains("Writing to"), label: "writing-to"),
+        StatusRule(.toolRunning, .contains("tool_use"), label: "tool-use-tag"),
+        StatusRule(.toolRunning, .contains("bash("), label: "bash-call"),
+
+        // -- thinking: agent is generating --
+        StatusRule(.thinking, .contains("Thinking"), label: "thinking-word"),
+        StatusRule(.thinking, .contains("\u{2026}"), label: "ellipsis"),
+        StatusRule(.thinking, .contains("Generating"), label: "generating-word"),
+        StatusRule(.thinking, .contains("\u{280B}"), label: "braille-spinner-1"),
+        StatusRule(.thinking, .contains("\u{2819}"), label: "braille-spinner-2"),
+        StatusRule(.thinking, .contains("\u{2839}"), label: "braille-spinner-3"),
+
+        // -- completed: lowest priority --
+        StatusRule(.completed, .contains("Task completed"), label: "task-completed"),
+        StatusRule(.completed, .contains("Done!"), label: "done-bang"),
+        StatusRule(.completed, .contains("finished"), label: "finished-word"),
+        StatusRule(.completed, .contains("\u{2713}"), label: "checkmark")
+    ]
+
+    /// Evaluates status rules against a text sample.
+    /// Returns the status of the first matching rule, or nil if no rule matches.
+    private func evaluateRules(_ text: String) -> AgentStatus? {
+        for rule in Self.statusRules where rule.matches(text) {
+            return rule.status
+        }
+        return nil
+    }
+}
+
+// MARK: - Status Rule
+
+/// A single, independently testable detection rule.
+/// Each rule maps a text pattern to an `AgentStatus`.
+struct StatusRule: Sendable {
+    let status: AgentStatus
+    let pattern: Pattern
+    /// Human-readable label for debugging and test identification.
+    let label: String
+
+    init(_ status: AgentStatus, _ pattern: Pattern, label: String) {
+        self.status = status
+        self.pattern = pattern
+        self.label = label
     }
 
-    private func isError(_ text: String) -> Bool {
-        let lowered = text.lowercased()
-        return lowered.contains("error:") || lowered.contains("fatal:")
-            || lowered.contains("panic:") || lowered.contains("traceback")
-            || lowered.contains("api error") || lowered.contains("rate limit")
+    /// Returns true if the text matches this rule's pattern.
+    func matches(_ text: String) -> Bool {
+        pattern.evaluate(text)
     }
 
-    private func isToolRunning(_ text: String) -> Bool {
-        text.contains("\u{23FA}") || text.contains("Running:")
-            || text.contains("Executing:") || text.contains("Writing to")
-            || text.contains("tool_use") || text.contains("bash(")
-    }
+    /// Pattern types for flexible matching.
+    enum Pattern: Sendable {
+        case contains(String)
+        case containsCaseInsensitive(String)
+        case suffix(String)
 
-    private func isThinking(_ text: String) -> Bool {
-        text.contains("Thinking") || text.contains("\u{2026}")
-            || text.contains("Generating") || text.contains("\u{280B}")
-            || text.contains("\u{2819}") || text.contains("\u{2839}")
-    }
-
-    private func isCompleted(_ text: String) -> Bool {
-        text.contains("Task completed") || text.contains("Done!")
-            || text.contains("finished") || text.contains("\u{2713}")
+        func evaluate(_ text: String) -> Bool {
+            switch self {
+            case let .contains(needle):
+                text.contains(needle)
+            case let .containsCaseInsensitive(needle):
+                text.localizedCaseInsensitiveContains(needle)
+            case let .suffix(needle):
+                text.hasSuffix(needle)
+            }
+        }
     }
 }

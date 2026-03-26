@@ -36,11 +36,15 @@ final class TerminalViewModel: ObservableObject {
     weak var agentStateStore: AgentStateStore? // concrete: weak requires class type
     let sessionStartTime: Date = .init()
     /// Prevents repeated renames after the agent is already detected from output.
-    private var hasDetectedAgentFromOutput = false
+    var hasDetectedAgentFromOutput = false
     private var streamTask: Task<Void, Never>?
     private var shellTask: Task<Void, Never>?
     /// Debounced re-check for prompt detection after PTY output settles.
     var promptRecheckTask: Task<Void, Never>?
+    /// Tracks detached background tasks for cancellation in deinit.
+    private var pendingTasks: [Task<Void, Never>] = []
+    /// Context injection task — stored separately because it uses a sleep delay.
+    private var injectionTask: Task<Void, Never>?
 
     // MARK: - Context injection & handoff
 
@@ -100,15 +104,38 @@ final class TerminalViewModel: ObservableObject {
         streamTask?.cancel()
         shellTask?.cancel()
         promptRecheckTask?.cancel()
+        injectionTask?.cancel()
+        for task in pendingTasks { task.cancel() }
+        pendingTasks.removeAll()
+    }
+
+    /// Spawns a background task inheriting the current actor context and tracks it
+    /// for cancellation in deinit. Use for fire-and-forget work that accesses
+    /// non-Sendable dependencies (engine, sessionStore).
+    func spawnTracked(_ operation: @escaping @MainActor () async -> Void) {
+        pendingTasks.removeAll { $0.isCancelled }
+        let task = Task { @MainActor in await operation() }
+        pendingTasks.append(task)
+    }
+
+    /// Spawns a detached background task and tracks it for cancellation in deinit.
+    /// Use for heavy processing that must run off MainActor.
+    func spawnDetachedTracked(
+        _ operation: @Sendable @escaping () async -> Void
+    ) {
+        pendingTasks.removeAll { $0.isCancelled }
+        let task = Task.detached(operation: operation)
+        pendingTasks.append(task)
     }
 
     // MARK: - Public
 
     func send(_ text: String) {
+        let eng = engine
         let service = tokenCountingService
         let sid = sessionID
-        Task {
-            await engine.send(text)
+        spawnTracked {
+            await eng.send(text)
             await service.accumulateInput(for: sid, text: text)
         }
     }
@@ -118,7 +145,7 @@ final class TerminalViewModel: ObservableObject {
         let detector = agentDetector
         let store = sessionStore
         let sid = sessionID
-        Task {
+        spawnTracked {
             guard let agentType = await detector.detectFromCommand(command) else { return }
             await MainActor.run {
                 store.renameSession(id: sid, title: agentType.displayName)
@@ -126,45 +153,9 @@ final class TerminalViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Output-based agent detection
-
-    /// Signature patterns in terminal output that identify a running agent.
-    private static let outputSignatures: [(pattern: String, type: AgentType)] = [
-        ("claude code", .claudeCode),
-        ("anthropic", .claudeCode),
-        ("openai codex", .codex),
-        (">_ openai codex", .codex),
-        ("aider v", .aider),
-        ("opencode", .openCode),
-        ("gemini cli", .gemini),
-        ("gemini code", .gemini)
-    ]
-
-    /// Strips known agent icon prefixes from OSC terminal titles (e.g. "\u{2733} Claude Code" -> "Claude Code").
-    static func stripAgentPrefixes(_ title: String) -> String {
-        var stripped = title.trimmingCharacters(in: .whitespaces)
-        // Known prefixes set by AI tools via OSC title
-        let prefixes = ["\u{2733}", ">_", "\u{2726}", "\u{26A1}", "\u{203A}"]
-        for prefix in prefixes where stripped.hasPrefix(prefix) {
-            stripped = String(stripped.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
-        }
-        return stripped.isEmpty ? title : stripped
-    }
-
-    /// Scan terminal output for agent signatures and rename the session on first match.
-    private func detectAgentFromOutput(_ text: String) {
-        guard !hasDetectedAgentFromOutput else { return }
-        let lower = text.lowercased()
-        for (pattern, type) in Self.outputSignatures where lower.contains(pattern) {
-            hasDetectedAgentFromOutput = true
-            sessionStore.renameSession(id: sessionID, title: type.displayName)
-            sessionStore.setAgentType(id: sessionID, type: type)
-            return
-        }
-    }
-
     func resize(columns: UInt16, rows: UInt16) {
-        Task { await engine.resize(columns: columns, rows: rows) }
+        let eng = engine
+        spawnTracked { await eng.resize(columns: columns, rows: rows) }
     }
 
     // MARK: - Output subscription
@@ -210,7 +201,7 @@ final class TerminalViewModel: ObservableObject {
         let service = tokenCountingService
         let agentDet = agentDetector
         let intervention = interventionService
-        Task.detached {
+        spawnDetachedTracked { [weak self] in
             await detector.appendRawOutput(text)
             let chunks = await fallback.processOutput(stripped, raw: text)
             await MainActor.run {
@@ -225,7 +216,7 @@ final class TerminalViewModel: ObservableObject {
                 await service.accumulateCached(for: sid, count: cached)
             }
             if let risk = await intervention.detectRisk(in: stripped) {
-                await MainActor.run { [weak self] in
+                await MainActor.run {
                     self?.pendingRiskAlert = risk
                 }
             }
@@ -245,13 +236,15 @@ final class TerminalViewModel: ObservableObject {
         let workingDir = currentMetadata.workingDirectory
         guard !workingDir.isEmpty else { return }
         guard let service = contextInjectionService else { return }
-        Task { @MainActor [weak self] in
+        injectionTask?.cancel()
+        injectionTask = Task { @MainActor [weak self] in
             guard let text = await service.buildInjectionText(projectRoot: workingDir) else { return }
             do {
                 try await self?.clock.sleep(for: .nanoseconds(AppConfig.SessionHandoff.injectionDelayNanoseconds))
             } catch is CancellationError {
                 return
             } catch {
+                // Non-critical: context injection is supplementary; session functions without it.
                 logger.warning("Context injection delay failed: \(error.localizedDescription)")
                 return
             }

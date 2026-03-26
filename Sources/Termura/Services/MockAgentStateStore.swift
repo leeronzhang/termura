@@ -1,12 +1,15 @@
 import Foundation
 
 /// Test double for `AgentStateStoreProtocol`.
+/// Set `shouldRejectUpdates` to simulate state update failures (e.g., store full).
 @MainActor
 final class MockAgentStateStore: AgentStateStoreProtocol {
     private(set) var agents: [SessionID: AgentState] = [:]
     var updateCallCount = 0
     var removeCallCount = 0
     var clearCallCount = 0
+    /// When true, `update(state:)` records the call but does NOT store the state.
+    var shouldRejectUpdates = false
 
     var activeAgentCount: Int {
         agents.values.filter { $0.status == .thinking || $0.status == .toolRunning }.count
@@ -36,6 +39,7 @@ final class MockAgentStateStore: AgentStateStoreProtocol {
 
     func update(state: AgentState) {
         updateCallCount += 1
+        guard !shouldRejectUpdates else { return }
         agents[state.sessionID] = state
     }
 

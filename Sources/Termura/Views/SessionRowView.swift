@@ -25,19 +25,20 @@ struct SessionRowView: View {
     @State private var isHovered = false
     @State private var glowOpacity: Double = 0.0
     @State private var showCloseConfirm = false
-    @EnvironmentObject private var themeManager: ThemeManager
+    @Environment(\.themeManager) private var themeManager
 
     private var isWaiting: Bool { agentStatus == .waitingInput }
 
     var body: some View {
-        HStack(spacing: AppUI.Spacing.smMd) {
-            sessionInfo
-            Spacer(minLength: AppUI.Spacing.sm)
-            actionButtons
-            closeButton
+        HStack(alignment: .top, spacing: AppUI.Spacing.smMd) {
+            leadingIcons
+            VStack(alignment: .leading, spacing: AppUI.Spacing.smMd) {
+                titleRow
+                agentStatsLine
+            }
         }
-        .padding(.horizontal, AppUI.Spacing.xxxl)
-        .padding(.vertical, AppUI.Spacing.smMd)
+        .padding(.horizontal, AppUI.Spacing.md)
+        .padding(.vertical, AppUI.Spacing.md)
         .background(rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
         .overlay(glowBorder)
@@ -62,51 +63,47 @@ struct SessionRowView: View {
     }
 
     @ViewBuilder
-    private var sessionInfo: some View {
-        colorDot
+    private var leadingIcons: some View {
         if let type = agentType, type != .unknown {
             AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
+                .padding(.top, AppUI.Spacing.xxs)
+        } else if session.colorLabel != .none {
+            Circle()
+                .fill(colorForLabel(session.colorLabel))
+                .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
+                .padding(.top, AppUI.Spacing.xxs)
         }
-        sessionTitle
     }
 
-    @ViewBuilder
-    private var actionButtons: some View {
-        if let status = agentStatus, let type = agentType {
-            AgentStatusBadgeView(status: status, agentType: type)
-        }
-        if hasUnreadFailure {
-            Circle()
-                .fill(Color.red)
-                .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
-        }
-        if let toggle = onToggleExpand {
-            Button {
-                toggle()
-            } label: {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(AppUI.Font.micro)
-                    .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
-                    .frame(width: AppUI.Size.iconFrame, height: AppUI.Size.iconFrame)
-                    .contentShape(Rectangle())
+    private var titleRow: some View {
+        HStack(spacing: AppUI.Spacing.smMd) {
+            titleLabel
+            Spacer(minLength: AppUI.Spacing.sm)
+            if hasUnreadFailure {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
             }
-            .buttonStyle(.plain)
+            if let toggle = onToggleExpand {
+                Button {
+                    toggle()
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(AppUI.Font.micro)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
+                        .frame(width: AppUI.Size.iconFrame, height: AppUI.Size.iconFrame)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            closeButton
         }
     }
 
     // MARK: - Subviews
 
     @ViewBuilder
-    private var colorDot: some View {
-        if session.colorLabel != .none {
-            Circle()
-                .fill(colorForLabel(session.colorLabel))
-                .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
-        }
-    }
-
-    @ViewBuilder
-    private var sessionTitle: some View {
+    private var titleLabel: some View {
         if isEditing {
             TextField("Session name", text: $editTitle, onCommit: commitEdit)
                 .textFieldStyle(.plain)
@@ -114,41 +111,48 @@ struct SessionRowView: View {
                 .foregroundColor(themeManager.current.sidebarText)
                 .onExitCommand { cancelEdit() }
         } else {
-            VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
-                Text(session.title)
-                    .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
-                    .foregroundColor(isActive ? .primary : themeManager.current.sidebarText)
-                    .lineLimit(1)
-                if let dir = workingDirectorySubtitle {
-                    Text(dir)
-                        .font(AppUI.Font.caption)
-                        .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
-                        .lineLimit(1)
-                }
-                agentStatsLine
-            }
+            Text(session.title)
+                .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
+                .foregroundColor(isActive ? .primary : themeManager.current.sidebarText)
+                .lineLimit(1)
         }
     }
 
     @ViewBuilder
     private var agentStatsLine: some View {
-        let parts = [
-            agentStatus.map { MetadataFormatter.formatAgentStatus($0) },
-            tokenSummary,
-            durationText
-        ].compactMap { $0 }
-        if !parts.isEmpty {
-            Text(parts.joined(separator: "  "))
+        let hasAgent = agentStatus != nil
+        if hasAgent {
+            HStack(spacing: AppUI.Spacing.smMd) {
+                if let status = agentStatus {
+                    Text(MetadataFormatter.formatAgentStatus(status))
+                        .font(AppUI.Font.labelMono)
+                        .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.secondary))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: AppUI.Spacing.sm)
+                HStack(spacing: AppUI.Spacing.md) {
+                    if let tokens = tokenSummary {
+                        Label(tokens, systemImage: "text.word.spacing")
+                            .font(AppUI.Font.captionMono)
+                            .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
+                    }
+                    if let duration = durationText {
+                        Label(duration, systemImage: "clock")
+                            .font(AppUI.Font.captionMono)
+                            .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
+                    }
+                }
+                .monospacedDigit()
+                if let status = agentStatus, let type = agentType {
+                    AgentStatusBadgeView(status: status, agentType: type)
+                }
+            }
+        } else if session.agentType != .unknown {
+            // Previous agent session -- show persisted type
+            Text(session.agentType.displayName)
                 .font(AppUI.Font.captionMono)
                 .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
-                .lineLimit(1)
         }
-    }
-
-    private var workingDirectorySubtitle: String? {
-        let path = session.workingDirectory
-        guard !path.isEmpty else { return nil }
-        return URL(fileURLWithPath: path).lastPathComponent
     }
 
     private var closeButton: some View {

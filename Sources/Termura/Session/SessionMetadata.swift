@@ -39,6 +39,11 @@ struct SessionMetadata: Sendable {
         inputTokenCount > 0 || outputTokenCount > 0 || cachedTokenCount > 0
     }
 
+    /// True when real token data was parsed from agent output (not just heuristic).
+    var hasParsedTokenData: Bool {
+        estimatedCostUSD > 0 || cachedTokenCount > 0
+    }
+
     // MARK: - Factory
 
     static func empty(sessionID: SessionID, workingDirectory: String) -> SessionMetadata {

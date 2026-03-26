@@ -23,6 +23,11 @@ extension AppConfig.UI {
     static let settingsFontSizeFieldWidth: Double = 50
     static let filePreviewLineNumberWidth: CGFloat = 36
     static let agentDashboardLabelWidth: Double = 80
+    // Composer
+    static let composerMaxWidth: Double = 700
+    static let composerMinHeight: Double = 160
+    static let composerMaxHeight: Double = 400
+    static let composerEditorMinHeight: Double = 80
     // Divider
     static let dividerLineWidth: Double = 1
     static let dividerHitTarget: Double = 9

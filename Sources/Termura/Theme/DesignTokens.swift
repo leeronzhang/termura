@@ -131,6 +131,8 @@ enum AppUI {
         static let diffAddition: Double = 0.1
         /// 0.1 — diff removal line highlight
         static let diffRemoval: Double = 0.1
+        /// 0.5 — modal backdrop overlay
+        static let backdrop: Double = 0.5
     }
 
     // MARK: - Sizes
@@ -178,5 +180,18 @@ enum AppUI {
         static let quick: Double = 0.15
         /// Panel show/hide
         static let panel: Double = 0.2
+        /// Sidebar tab switch
+        static let tabSwitch: Double = 0.25
+        /// Status badge pulse cycle
+        static let pulse: Double = 1.0
+    }
+
+    // MARK: - Scale Factors
+
+    enum Scale {
+        /// Agent status badge pulse max
+        static let pulseMax: Double = 1.2
+        /// Agent status badge pulse min
+        static let pulseMin: Double = 0.8
     }
 }

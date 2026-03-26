@@ -6,29 +6,43 @@ struct AgentStatusBadgeView: View {
     let status: AgentStatus
     let agentType: AgentType
 
-    var body: some View {
-        HStack(spacing: AppUI.Spacing.sm) {
-            statusDot
-            if status == .thinking || status == .toolRunning {
-                pulsingIndicator
-            }
-        }
-        .help(helpText)
-    }
+    @State private var isPulsing = false
 
-    private var statusDot: some View {
+    var body: some View {
         Circle()
             .fill(statusColor)
             .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
+            .overlay(pulsingOverlay)
+            .help(helpText)
+            .onAppear { updatePulse() }
+            .onChange(of: status) { _, _ in updatePulse() }
     }
 
     @ViewBuilder
-    private var pulsingIndicator: some View {
-        Circle()
-            .fill(statusColor.opacity(0.4))
-            .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
-            .scaleEffect(1.5)
-            .opacity(AppUI.Opacity.secondary)
+    private var pulsingOverlay: some View {
+        if status == .thinking || status == .toolRunning {
+            Circle()
+                .stroke(statusColor.opacity(0.5), lineWidth: 1.5)
+                .frame(
+                    width: AppUI.Size.dotMedium * 2,
+                    height: AppUI.Size.dotMedium * 2
+                )
+                .scaleEffect(isPulsing ? AppUI.Scale.pulseMax : AppUI.Scale.pulseMin)
+                .opacity(isPulsing ? 0.0 : 0.6)
+        }
+    }
+
+    private func updatePulse() {
+        let shouldPulse = status == .thinking || status == .toolRunning
+        if shouldPulse {
+            withAnimation(
+                .easeInOut(duration: AppUI.Animation.pulse).repeatForever(autoreverses: true)
+            ) {
+                isPulsing = true
+            }
+        } else {
+            isPulsing = false
+        }
     }
 
     private var statusColor: Color {
@@ -43,6 +57,6 @@ struct AgentStatusBadgeView: View {
     }
 
     private var helpText: String {
-        "\(agentType.rawValue) — \(status.rawValue)"
+        "\(agentType.displayName) — \(status.rawValue)"
     }
 }
