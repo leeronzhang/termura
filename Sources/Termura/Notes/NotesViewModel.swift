@@ -11,18 +11,28 @@ final class NotesViewModel {
     var editingTitle: String = "" {
         didSet { scheduleAutoSave() }
     }
+
     var editingBody: String = "" {
         didSet { scheduleAutoSave() }
     }
+
     /// User-visible error message from the last failed operation; cleared on next success.
     var errorMessage: String?
 
     private let repository: any NoteRepositoryProtocol
     private var saveTask: Task<Void, Never>?
     private var autoSaveTask: Task<Void, Never>?
+    /// Tracks in-flight persistence Tasks so they can be awaited during flush.
+    private var pendingWrites: [Task<Void, Never>] = []
 
     init(repository: any NoteRepositoryProtocol) {
         self.repository = repository
+    }
+
+    /// The currently selected note record, if any.
+    var selectedNote: NoteRecord? {
+        guard let id = selectedNoteID else { return nil }
+        return notes.first { $0.id == id }
     }
 
     func loadNotes() async {
@@ -41,14 +51,8 @@ final class NotesViewModel {
         selectedNoteID = note.id
         editingTitle = note.title
         editingBody = note.body
-        // Lifecycle: fire-and-forget persistence — note is already in the in-memory array.
-        Task {
-            do {
-                try await repository.save(note)
-            } catch {
-                errorMessage = "Failed to create note: \(error.localizedDescription)"
-                logger.error("Failed to create note: \(error)")
-            }
+        persistTracked { [repository] in
+            try await repository.save(note)
         }
     }
 
@@ -63,13 +67,9 @@ final class NotesViewModel {
         guard let idx = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[idx].isFavorite.toggle()
         let updated = notes[idx]
-        Task {
-            do {
-                try await repository.save(updated)
-            } catch {
-                errorMessage = "Failed to update favorite: \(error.localizedDescription)"
-                logger.error("Failed to update favorite: \(error)")
-            }
+        resortNotes()
+        persistTracked { [repository] in
+            try await repository.save(updated)
         }
     }
 
@@ -79,14 +79,8 @@ final class NotesViewModel {
             selectedNoteID = notes.first?.id
             if let next = selectedNoteID { selectNote(id: next) }
         }
-        // Lifecycle: fire-and-forget persistence — note is already removed from in-memory array.
-        Task {
-            do {
-                try await repository.delete(id: id)
-            } catch {
-                errorMessage = "Failed to delete note: \(error.localizedDescription)"
-                logger.error("Failed to delete note: \(error)")
-            }
+        persistTracked { [repository] in
+            try await repository.delete(id: id)
         }
     }
 
@@ -107,6 +101,14 @@ final class NotesViewModel {
         }
     }
 
+    /// Re-sorts notes array: favorites first, then by updatedAt descending.
+    private func resortNotes() {
+        notes.sort { lhs, rhs in
+            if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
     private func persistCurrentNote(title: String, body: String) {
         guard let id = selectedNoteID,
               let idx = notes.firstIndex(where: { $0.id == id }) else { return }
@@ -124,6 +126,53 @@ final class NotesViewModel {
                     self.errorMessage = "Auto-save failed: \(error.localizedDescription)"
                     logger.error("Note auto-save failed: \(error)")
                 }
+            }
+        }
+    }
+
+    // MARK: - Tracked persistence
+
+    /// Persists an operation asynchronously while tracking the Task for flush.
+    private func persistTracked(
+        _ operation: @Sendable @escaping () async throws -> Void
+    ) {
+        let task = Task {
+            do {
+                try await operation()
+            } catch {
+                errorMessage = "\(error.localizedDescription)"
+                logger.error("Persistence error: \(error)")
+            }
+        }
+        pendingWrites.append(task)
+    }
+
+    /// Awaits all in-flight persistence Tasks and force-saves the currently
+    /// edited note to capture any debounced changes not yet written to DB.
+    func flushPendingWrites() async {
+        // 1. Cancel debounce timers.
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        saveTask?.cancel()
+        saveTask = nil
+
+        // 2. Await all tracked writes.
+        let snapshot = pendingWrites
+        pendingWrites.removeAll()
+        for task in snapshot {
+            await task.value
+        }
+
+        // 3. Force-save the currently edited note to capture debounced edits.
+        if let id = selectedNoteID,
+           let idx = notes.firstIndex(where: { $0.id == id }) {
+            notes[idx].title = editingTitle
+            notes[idx].body = editingBody
+            notes[idx].updatedAt = Date()
+            do {
+                try await repository.save(notes[idx])
+            } catch {
+                logger.error("Flush note save error: \(error)")
             }
         }
     }

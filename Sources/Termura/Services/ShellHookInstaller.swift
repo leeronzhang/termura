@@ -78,8 +78,8 @@ actor ShellHookInstaller {
     // MARK: - Private helpers
 
     private func rcFilePath(for shell: ShellType) -> String {
-        let home = AppConfig.Paths.homeDirectory
-        return "\(home)/\(shell.rcFileName)"
+        URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+            .appendingPathComponent(shell.rcFileName).path
     }
 
     private func isHookPresent(in path: String) throws -> Bool {

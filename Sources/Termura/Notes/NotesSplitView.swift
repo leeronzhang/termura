@@ -54,14 +54,18 @@ struct NotesSplitView: View {
 
     @ViewBuilder
     private var editorPane: some View {
-        if viewModel.selectedNoteID != nil {
+        if let noteID = viewModel.selectedNoteID {
             VStack(spacing: 0) {
-                TextField("Title", text: $viewModel.editingTitle)
-                    .font(AppUI.Font.title1Semibold)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, AppUI.Spacing.xl)
-                    .padding(.top, AppUI.Spacing.xl)
-                    .padding(.bottom, AppUI.Spacing.md)
+                HStack(spacing: AppUI.Spacing.md) {
+                    TextField("Title", text: $viewModel.editingTitle)
+                        .font(AppUI.Font.title1Semibold)
+                        .textFieldStyle(.plain)
+                    Spacer()
+                    splitFavoriteButton(noteID: noteID)
+                }
+                .padding(.horizontal, AppUI.Spacing.xl)
+                .padding(.top, AppUI.Spacing.xl)
+                .padding(.bottom, AppUI.Spacing.md)
                 Divider()
                 NoteEditorView(
                     title: viewModel.editingTitle,
@@ -73,5 +77,18 @@ struct NotesSplitView: View {
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func splitFavoriteButton(noteID: NoteID) -> some View {
+        let isFav = viewModel.selectedNote?.isFavorite ?? false
+        return Button {
+            viewModel.toggleFavorite(id: noteID)
+        } label: {
+            Image(systemName: isFav ? "star.fill" : "star")
+                .font(AppUI.Font.body)
+                .foregroundColor(isFav ? .yellow : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help(isFav ? "Remove from favorites" : "Add to favorites")
     }
 }

@@ -12,7 +12,7 @@ final class MockTerminalEngine: TerminalEngine {
     // MARK: - State
 
     private(set) var isRunning = true
-    let terminalNSView: NSView = NSView()
+    let terminalNSView: NSView = .init()
     private(set) var sentTexts: [String] = []
     private(set) var sentBytes: [Data] = []
     private(set) var resizes: [(UInt16, UInt16)] = []

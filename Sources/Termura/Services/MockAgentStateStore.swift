@@ -12,7 +12,7 @@ final class MockAgentStateStore: AgentStateStoreProtocol {
     var shouldRejectUpdates = false
 
     var activeAgentCount: Int {
-        agents.values.filter { $0.status == .thinking || $0.status == .toolRunning }.count
+        agents.values.count(where: { $0.status == .thinking || $0.status == .toolRunning })
     }
 
     var sessionsNeedingAttention: [SessionID] {

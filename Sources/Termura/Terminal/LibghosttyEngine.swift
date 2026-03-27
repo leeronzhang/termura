@@ -15,7 +15,7 @@ final class LibghosttyEngine: TerminalEngine {
     let outputStream: AsyncStream<TerminalOutputEvent>
     let shellEventsStream: AsyncStream<ShellIntegrationEvent>
     var isRunning = false
-    let terminalNSView: NSView = NSView()
+    let terminalNSView: NSView = .init()
 
     // MARK: - Internal continuations
 

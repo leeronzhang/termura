@@ -5,6 +5,13 @@ private let logger = Logger(subsystem: "com.termura.app", category: "FileTreeSer
 
 /// Scans the project directory and builds a file tree, optionally annotated with git status.
 actor FileTreeService {
+    /// macOS TCC-protected directories under home that trigger permission popups.
+    /// Skipped when scanning the home directory to avoid repeated system dialogs.
+    private static let tccProtectedDirectories: Set<String> = [
+        "Library", "Pictures", "Movies", "Music",
+        "Applications", "Desktop", "Documents", "Downloads",
+        "Public", "Contacts", "Calendars"
+    ]
 
     /// Scans the directory at `projectRoot` and returns a sorted tree.
     func scan(at projectRoot: String) -> [FileTreeNode] {
@@ -85,6 +92,8 @@ actor FileTreeService {
             let name = url.lastPathComponent
             if name.hasPrefix(".") && AppConfig.FileTree.ignoredDotfiles { continue }
             if AppConfig.FileTree.ignoredDirectories.contains(name) { continue }
+            if Self.tccProtectedDirectories.contains(name),
+               url.deletingLastPathComponent().path == AppConfig.Paths.homeDirectory { continue }
 
             let isDir: Bool
             do {
@@ -94,7 +103,8 @@ actor FileTreeService {
                 logger.warning("Failed to read resource values for \(url.path): \(error.localizedDescription)")
                 isDir = false
             }
-            let relativePath = url.path.replacingOccurrences(of: rootURL.path + "/", with: "")
+            let rootPrefix = rootURL.path.hasSuffix("/") ? rootURL.path : rootURL.path + "/"
+            let relativePath = url.path.replacingOccurrences(of: rootPrefix, with: "")
             let entry = ClassifiedEntry(url: url, name: name, relativePath: relativePath)
 
             if isDir {
@@ -144,7 +154,7 @@ actor FileTreeService {
                 annotated.gitStatus = status.0
                 annotated.isGitStaged = status.1
             } else if !trackedFiles.isEmpty
-                        && !trackedFiles.contains(node.relativePath) {
+                && !trackedFiles.contains(node.relativePath) {
                 // File has no git status and is not tracked → ignored
                 annotated.isGitIgnored = true
             }

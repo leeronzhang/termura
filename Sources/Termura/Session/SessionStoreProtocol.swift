@@ -18,6 +18,10 @@ protocol SessionStoreProtocol: AnyObject {
     func setAgentType(id: SessionID, type: AgentType)
     func reorderSessions(from: IndexSet, to: Int)
     func isRestoredSession(id: SessionID) -> Bool
+    func ensureEngine(for id: SessionID)
+    /// Awaits all in-flight persistence Tasks and force-saves debounced state.
+    /// Call during app termination or project close to prevent data loss.
+    func flushPendingWrites() async
 
     // MARK: - Session Tree
 

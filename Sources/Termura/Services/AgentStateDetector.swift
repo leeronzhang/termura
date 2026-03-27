@@ -30,8 +30,20 @@ actor AgentStateDetector {
     private var detectedType: AgentType?
     private var currentStatus: AgentStatus = .idle
     private var detectedAt: Date?
+    private var lastStatusChange: Date?
     private var parsedCost: Double = 0
     private let sessionID: SessionID
+
+    /// Valid state transitions — prevents impossible jumps
+    /// (e.g. idle -> completed without going through thinking first).
+    private static let validTransitions: [AgentStatus: Set<AgentStatus>] = [
+        .idle: [.thinking, .toolRunning, .waitingInput, .error],
+        .thinking: [.toolRunning, .waitingInput, .completed, .error, .idle],
+        .toolRunning: [.thinking, .waitingInput, .completed, .error, .idle],
+        .waitingInput: [.thinking, .toolRunning, .idle, .error],
+        .completed: [.idle, .thinking, .toolRunning],
+        .error: [.idle, .thinking, .toolRunning, .waitingInput]
+    ]
 
     init(sessionID: SessionID) {
         self.sessionID = sessionID
@@ -42,12 +54,13 @@ actor AgentStateDetector {
     /// Analyze a command string to detect agent launch.
     func detectFromCommand(_ command: String) -> AgentType? {
         let cmd = command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let sid = sessionID
         for (pattern, type) in Self.launchPatterns {
             if cmd.hasPrefix(pattern) || cmd.contains("/\(pattern)") {
                 detectedType = type
                 currentStatus = .idle
                 detectedAt = Date()
-                logger.info("Detected agent \(type.rawValue) in session \(self.sessionID)")
+                logger.info("Detected agent \(type.rawValue) in session \(sid)")
                 return type
             }
         }
@@ -61,26 +74,43 @@ actor AgentStateDetector {
 
     /// Set or update the detected agent type (used when detection happens outside the detector).
     func setDetectedType(_ type: AgentType) {
+        let sid = sessionID
         detectedType = type
         currentStatus = .idle
         detectedAt = Date()
         parsedCost = 0
-        logger.info("Agent \(type.rawValue) set externally in session \(self.sessionID)")
+        logger.info("Agent \(type.rawValue) set externally in session \(sid)")
     }
 
     // MARK: - Output Analysis
 
     /// Analyze a batch of terminal output to update agent status.
     /// Evaluates the status rule table top-to-bottom; first match wins.
+    /// Applies cooldown and state-transition constraints to suppress false positives.
     func analyzeOutput(_ text: String) -> AgentStatus {
         guard detectedType != nil else { return .idle }
 
         let sample = String(text.suffix(AppConfig.Agent.outputAnalysisSuffixLength))
 
-        if let matched = evaluateRules(sample) {
-            currentStatus = matched
+        guard let matched = evaluateRules(sample),
+              matched != currentStatus else {
+            return currentStatus
         }
 
+        // Enforce valid state transitions.
+        guard Self.validTransitions[currentStatus]?.contains(matched) ?? false else {
+            return currentStatus
+        }
+
+        // Enforce cooldown between transitions to avoid flip-flopping on noisy output.
+        let now = Date()
+        if let last = lastStatusChange,
+           now.timeIntervalSince(last) < AppConfig.Agent.statusChangeCooldown {
+            return currentStatus
+        }
+
+        currentStatus = matched
+        lastStatusChange = now
         return currentStatus
     }
 
@@ -130,6 +160,7 @@ actor AgentStateDetector {
         detectedType = nil
         currentStatus = .idle
         detectedAt = nil
+        lastStatusChange = nil
     }
 
     // MARK: - Token Stat Patterns
@@ -190,7 +221,7 @@ actor AgentStateDetector {
         StatusRule(.waitingInput, .contains("[Y/n]"), label: "confirm-yn"),
         StatusRule(.waitingInput, .contains("[y/N]"), label: "confirm-yN"),
         StatusRule(.waitingInput, .contains("Do you want to proceed"), label: "proceed-prompt"),
-        StatusRule(.waitingInput, .contains("permission"), label: "permission-prompt"),
+        StatusRule(.waitingInput, .contains("permission to"), label: "permission-prompt"),
 
         // -- error: second priority (needs attention) --
         StatusRule(.error, .containsCaseInsensitive("api error"), label: "api-error"),
@@ -210,7 +241,7 @@ actor AgentStateDetector {
 
         // -- thinking: agent is generating --
         StatusRule(.thinking, .contains("Thinking"), label: "thinking-word"),
-        StatusRule(.thinking, .contains("\u{2026}"), label: "ellipsis"),
+        // Removed ellipsis (\u{2026}) — too many false positives from npm/build output.
         StatusRule(.thinking, .contains("Generating"), label: "generating-word"),
         StatusRule(.thinking, .contains("\u{280B}"), label: "braille-spinner-1"),
         StatusRule(.thinking, .contains("\u{2819}"), label: "braille-spinner-2"),
@@ -230,45 +261,5 @@ actor AgentStateDetector {
             return rule.status
         }
         return nil
-    }
-}
-
-// MARK: - Status Rule
-
-/// A single, independently testable detection rule.
-/// Each rule maps a text pattern to an `AgentStatus`.
-struct StatusRule: Sendable {
-    let status: AgentStatus
-    let pattern: Pattern
-    /// Human-readable label for debugging and test identification.
-    let label: String
-
-    init(_ status: AgentStatus, _ pattern: Pattern, label: String) {
-        self.status = status
-        self.pattern = pattern
-        self.label = label
-    }
-
-    /// Returns true if the text matches this rule's pattern.
-    func matches(_ text: String) -> Bool {
-        pattern.evaluate(text)
-    }
-
-    /// Pattern types for flexible matching.
-    enum Pattern: Sendable {
-        case contains(String)
-        case containsCaseInsensitive(String)
-        case suffix(String)
-
-        func evaluate(_ text: String) -> Bool {
-            switch self {
-            case let .contains(needle):
-                text.contains(needle)
-            case let .containsCaseInsensitive(needle):
-                text.localizedCaseInsensitiveContains(needle)
-            case let .suffix(needle):
-                text.hasSuffix(needle)
-            }
-        }
     }
 }

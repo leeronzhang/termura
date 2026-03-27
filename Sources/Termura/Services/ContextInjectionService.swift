@@ -47,15 +47,22 @@ actor ContextInjectionService: ContextInjectionServiceProtocol {
     }
 
     private func formatForShell(_ context: HandoffContext) -> String {
+        let hasTask = !context.taskStatus.isEmpty
+            && !context.taskStatus.lowercased().contains("empty")
+        let recentDecisions = context.decisions.suffix(3)
+        let hasDecisions = !recentDecisions.isEmpty
+
+        // Nothing meaningful to inject.
+        guard hasTask || hasDecisions else { return "" }
+
         var lines: [String] = []
         lines.append("--- Restored session context ---")
 
-        if !context.taskStatus.isEmpty {
+        if hasTask {
             lines.append("Task: \(context.taskStatus)")
         }
 
-        let recentDecisions = context.decisions.suffix(3)
-        if !recentDecisions.isEmpty {
+        if hasDecisions {
             lines.append("Decisions:")
             for entry in recentDecisions {
                 lines.append("  - \(entry.summary)")

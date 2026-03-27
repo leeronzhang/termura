@@ -1,3 +1,4 @@
+import DequeModule
 import Foundation
 
 /// A single command execution entry in the session timeline.
@@ -22,7 +23,7 @@ struct BranchPointMarker: Identifiable, Sendable {
 /// Bound to an OutputStore and updated as chunks are appended.
 @MainActor
 final class SessionTimeline: ObservableObject {
-    @Published private(set) var turns: [TimelineTurn] = []
+    @Published private(set) var turns: Deque<TimelineTurn> = []
 
     func append(_ chunk: OutputChunk) {
         let turn = TimelineTurn(

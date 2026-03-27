@@ -20,6 +20,35 @@ final class EditorTextView: NSTextView {
         didSet { needsDisplay = true }
     }
 
+    // MARK: - Drag and drop
+
+    func setupDragTypes() {
+        registerForDraggedTypes([.fileURL, .URL])
+    }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard sender.draggingPasteboard.canReadObject(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) else {
+            return super.draggingEntered(sender)
+        }
+        return .copy
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard let urls = sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL], !urls.isEmpty else {
+            return super.performDragOperation(sender)
+        }
+        let paths = urls.map(\.path.shellEscaped).joined(separator: " ")
+        let insertion = string.isEmpty ? paths : " " + paths
+        insertText(insertion, replacementRange: selectedRange())
+        return true
+    }
+
     // MARK: - Control sequence callback
 
     /// Called when a PTY control sequence is typed (Ctrl+C, Escape, etc.).

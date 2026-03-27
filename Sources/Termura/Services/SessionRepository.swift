@@ -292,7 +292,6 @@ actor SessionRepository: SessionRepositoryProtocol {
     // MARK: - Private
 
     private func safeFTSQuery(_ raw: String) -> String {
-        let escaped = raw.replacingOccurrences(of: "\"", with: "\"\"")
-        return "\"\(escaped)\"*"
+        FTS5.escapeQuery(raw)
     }
 }

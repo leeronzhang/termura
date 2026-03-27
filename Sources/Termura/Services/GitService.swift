@@ -16,7 +16,6 @@ protocol GitServiceProtocol: Sendable {
 
 /// Actor that shells out to the `git` CLI to query repository state.
 actor GitService: GitServiceProtocol {
-
     func status(at directory: String) async throws -> GitStatusResult {
         guard await isGitRepo(at: directory) else {
             return .notARepo
@@ -117,50 +116,60 @@ actor GitService: GitServiceProtocol {
         at directory: String,
         cmdString: String
     ) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = arguments
-            process.currentDirectoryURL = URL(fileURLWithPath: directory)
-            process.environment = ProcessInfo.processInfo.environment
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.currentDirectoryURL = URL(fileURLWithPath: directory)
+        process.environment = ProcessInfo.processInfo.environment
 
-            let pipe = Pipe()
-            let errPipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = errPipe
+        let pipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = errPipe
 
-            // Resume the continuation asynchronously when the process exits.
-            process.terminationHandler = { terminatedProcess in
-                guard terminatedProcess.terminationStatus == 0 else {
-                    let stderr = String(
-                        data: errPipe.fileHandleForReading.readDataToEndOfFile(),
-                        encoding: .utf8
-                    ) ?? ""
-                    let error = GitServiceError.commandFailed(
-                        command: cmdString,
-                        exitCode: terminatedProcess.terminationStatus,
-                        stderr: stderr
-                    )
-                    logger.warning("\(error.localizedDescription)")
-                    continuation.resume(throwing: error)
-                    return
-                }
+        // Drain pipes in detached tasks BEFORE launch to prevent pipe-buffer deadlock.
+        // If readDataToEndOfFile() were called inside terminationHandler, a child
+        // producing >64 KB of output would fill the pipe buffer, block on write,
+        // never exit, and the handler would never fire.
+        let stdoutHandle = pipe.fileHandleForReading
+        let stderrHandle = errPipe.fileHandleForReading
+        let stdoutTask = Task.detached { stdoutHandle.readDataToEndOfFile() }
+        let stderrTask = Task.detached { stderrHandle.readDataToEndOfFile() }
 
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let result = String(data: data, encoding: .utf8) ?? ""
-                continuation.resume(returning: result)
+        // Wait for process termination via continuation; pipes are already draining.
+        let exitStatus: Int32 = try await withCheckedThrowingContinuation { continuation in
+            process.terminationHandler = { terminated in
+                continuation.resume(returning: terminated.terminationStatus)
             }
-
             do {
                 try process.run()
             } catch {
                 process.terminationHandler = nil
+                // Cancel leaked pipe-read tasks since the process never started.
+                stdoutTask.cancel()
+                stderrTask.cancel()
                 continuation.resume(throwing: GitServiceError.launchFailed(
                     command: cmdString,
                     underlying: error
                 ))
             }
         }
-    }
 
+        // Pipe reads complete once the child closes its file descriptors (on exit).
+        let stdoutData = await stdoutTask.value
+        let stderrData = await stderrTask.value
+
+        guard exitStatus == 0 else {
+            let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+            let error = GitServiceError.commandFailed(
+                command: cmdString,
+                exitCode: exitStatus,
+                stderr: stderr
+            )
+            logger.warning("\(error.localizedDescription)")
+            throw error
+        }
+
+        return String(data: stdoutData, encoding: .utf8) ?? ""
+    }
 }

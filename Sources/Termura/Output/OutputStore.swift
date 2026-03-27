@@ -1,3 +1,4 @@
+import DequeModule
 import Foundation
 
 /// Observable store of output chunks for a single session.
@@ -6,7 +7,7 @@ import Foundation
 final class OutputStore: ObservableObject {
     // MARK: - Published state
 
-    @Published private(set) var chunks: [OutputChunk] = []
+    @Published private(set) var chunks: Deque<OutputChunk> = []
 
     // MARK: - Configuration
 

@@ -78,6 +78,7 @@ struct EditorInputView: NSViewRepresentable {
             .strikethroughStyle: 0
         ]
         textView.delegate = coordinator
+        textView.setupDragTypes()
 
         // Register in handle so TerminalAreaView's key-routing monitor can find us
         viewHandle.textView = textView

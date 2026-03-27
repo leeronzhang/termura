@@ -53,7 +53,7 @@ enum RuleFileParser {
     static func findRuleFiles(in directory: String) -> [String] {
         let fm = FileManager.default
         return AppConfig.Harness.supportedRuleFiles.compactMap { name in
-            let path = (directory as NSString).appendingPathComponent(name)
+            let path = URL(fileURLWithPath: directory).appendingPathComponent(name).path
             return fm.fileExists(atPath: path) ? path : nil
         }
     }

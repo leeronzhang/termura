@@ -79,7 +79,7 @@ actor NoteRepository: NoteRepositoryProtocol {
         try await db.read { database in
             let rows = try NoteRow
                 .filter(sql: "archived_at IS NULL")
-                .order(sql: "updated_at DESC")
+                .order(sql: "is_snippet DESC, updated_at DESC")
                 .fetchAll(database)
             return try rows.map { try $0.toNote() }
         }
@@ -106,8 +106,7 @@ actor NoteRepository: NoteRepositoryProtocol {
 
     func search(query: String) async throws -> [NoteRecord] {
         guard query.count >= AppConfig.Search.minQueryLength else { return [] }
-        let escaped = query.replacingOccurrences(of: "\"", with: "\"\"")
-        let ftsQuery = "\"\(escaped)\"*"
+        let ftsQuery = FTS5.escapeQuery(query)
         return try await db.read { database in
             let rows = try NoteRow.fetchAll(
                 database,

@@ -109,7 +109,9 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
     ) async throws {
         try await writeContextFile(context: context, projectRoot: projectRoot)
 
-        let path = "\(projectRoot)/\(AppConfig.SessionHandoff.directoryName)/\(AppConfig.SessionHandoff.contextFileName)"
+        let path = URL(fileURLWithPath: projectRoot)
+            .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
+            .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
         let message = SessionMessage(
             sessionID: session.id,
             role: .system,
@@ -127,8 +129,9 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
     }
 
     func readExistingContext(projectRoot: String) async -> HandoffContext? {
-        let dir = (projectRoot as NSString).appendingPathComponent(AppConfig.SessionHandoff.directoryName)
-        let filePath = (dir as NSString).appendingPathComponent(AppConfig.SessionHandoff.contextFileName)
+        let filePath = URL(fileURLWithPath: projectRoot)
+            .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
+            .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
         let content: String?
         do {
             content = try String(contentsOfFile: filePath, encoding: .utf8)
@@ -147,12 +150,11 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         context: HandoffContext,
         projectRoot: String
     ) async throws {
-        let dirPath = (projectRoot as NSString).appendingPathComponent(
-            AppConfig.SessionHandoff.directoryName
-        )
-        let filePath = (dirPath as NSString).appendingPathComponent(
-            AppConfig.SessionHandoff.contextFileName
-        )
+        let rootURL = URL(fileURLWithPath: projectRoot)
+        let dirPath = rootURL.appendingPathComponent(AppConfig.SessionHandoff.directoryName).path
+        let filePath = rootURL
+            .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
+            .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
         let markdown = renderContextMarkdown(context)
         let fm = FileManager.default
 

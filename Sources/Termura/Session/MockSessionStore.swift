@@ -73,6 +73,14 @@ final class MockSessionStore: ObservableObject, SessionStoreProtocol {
         false
     }
 
+    func ensureEngine(for id: SessionID) {
+        // No-op in mock.
+    }
+
+    func flushPendingWrites() async {
+        // No-op in mock — no persistence layer.
+    }
+
     // MARK: - Session Tree
 
     @discardableResult

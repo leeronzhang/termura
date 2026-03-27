@@ -34,11 +34,10 @@ extension GitService {
         let bracketParts = branchInfo.components(separatedBy: " [")
         let branchPart = bracketParts[0]
 
-        let branch: String
-        if let dotDot = branchPart.range(of: "...") {
-            branch = String(branchPart[branchPart.startIndex..<dotDot.lowerBound])
+        let branch: String = if let dotDot = branchPart.range(of: "...") {
+            String(branchPart[branchPart.startIndex ..< dotDot.lowerBound])
         } else {
-            branch = branchPart
+            branchPart
         }
 
         if bracketParts.count > 1 {
@@ -107,7 +106,7 @@ extension GitService {
         if let hostRange = url.range(of: "@") {
             let afterAt = url[hostRange.upperBound...]
             if let colon = afterAt.firstIndex(of: ":") {
-                return String(afterAt[afterAt.startIndex..<colon])
+                return String(afterAt[afterAt.startIndex ..< colon])
             }
         }
         if let host = URL(string: url)?.host {
@@ -118,12 +117,12 @@ extension GitService {
 
     private static func mapStatusChar(_ char: Character) -> GitFileStatus.Kind {
         switch char {
-        case "M": return .modified
-        case "A": return .added
-        case "D": return .deleted
-        case "R": return .renamed
-        case "C": return .copied
-        default: return .modified
+        case "M": .modified
+        case "A": .added
+        case "D": .deleted
+        case "R": .renamed
+        case "C": .copied
+        default: .modified
         }
     }
 }
@@ -148,7 +147,7 @@ enum GitServiceError: Error, LocalizedError {
     /// Whether the caller may retry this operation (e.g., transient I/O issue).
     var isRetryable: Bool {
         switch self {
-        case .commandFailed(_, let code, _):
+        case let .commandFailed(_, code, _):
             code >= 128
         case .launchFailed:
             false

@@ -23,7 +23,7 @@ struct FileTreeNode: Identifiable, Sendable {
         isGitStaged: Bool = false,
         isGitIgnored: Bool = false
     ) {
-        self.id = relativePath.isEmpty ? name : relativePath
+        id = relativePath.isEmpty ? name : relativePath
         self.name = name
         self.relativePath = relativePath
         self.isDirectory = isDirectory

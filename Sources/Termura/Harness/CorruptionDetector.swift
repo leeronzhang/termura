@@ -39,7 +39,7 @@ actor CorruptionDetector {
                 guard match.numberOfRanges >= 2 else { continue }
                 let pathRange = match.range(at: 1)
                 let path = nsBody.substring(with: pathRange)
-                let fullPath = (root as NSString).appendingPathComponent(path)
+                let fullPath = URL(fileURLWithPath: root).appendingPathComponent(path).path
 
                 if path.contains("/"), !fm.fileExists(atPath: fullPath) {
                     results.append(CorruptionResult(
