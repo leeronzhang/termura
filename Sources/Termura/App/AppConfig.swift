@@ -125,8 +125,6 @@ enum AppConfig {
         static let trafficLightFadeSeconds: Double = 0.2
         /// Height of the project path bar in points.
         static let projectPathBarHeight: Double = 32
-        /// Hit-target height for the editor divider handle.
-        static let editorDividerHandleHeight: Double = 9
         /// Visor panel height as a fraction of screen height.
         static let visorPanelHeightFraction: Double = 0.55
         /// Indentation per nesting level in the file tree sidebar (points).
@@ -167,7 +165,7 @@ enum AppConfig {
     enum Search {
         static let maxResults = 50
         static let minQueryLength = 2
-        static let snippetLength = 64
+        static let previewLength = 64
     }
 
     enum Timeline {

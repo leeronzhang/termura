@@ -211,9 +211,13 @@ final class TerminalViewModel: ObservableObject {
             }
             await service.accumulateOutput(for: sid, text: stripped)
             _ = await agentDet.analyzeOutput(stripped)
-            if let stats = await agentDet.parseTokenStats(stripped),
-               let cached = stats.cachedTokens, cached > 0 {
-                await service.accumulateCached(for: sid, count: cached)
+            if let stats = await agentDet.parseTokenStats(stripped) {
+                if let cached = stats.cachedTokens, cached > 0 {
+                    await service.accumulateCached(for: sid, count: cached)
+                }
+                if let cost = stats.totalCost {
+                    await agentDet.updateCost(cost)
+                }
             }
             if let risk = await intervention.detectRisk(in: stripped) {
                 await MainActor.run {

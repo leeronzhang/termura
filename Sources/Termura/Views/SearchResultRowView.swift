@@ -52,7 +52,7 @@ struct SearchResultRowView: View {
         case let .session(s):
             return s.workingDirectory.isEmpty ? "No directory" : s.workingDirectory
         case let .note(n):
-            let preview = n.body.prefix(AppConfig.Search.snippetLength)
+            let preview = n.body.prefix(AppConfig.Search.previewLength)
             return preview.isEmpty ? "Empty note" : String(preview)
         }
     }

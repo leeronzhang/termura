@@ -160,17 +160,6 @@ enum AppUI {
         static let branchIndicatorLine: CGFloat = 1
     }
 
-    // MARK: - Shadow
-
-    enum Shadow {
-        /// Floating card shadow radius
-        static let cardRadius: CGFloat = 20
-        /// Floating card shadow Y offset
-        static let cardY: CGFloat = 10
-        /// Floating card shadow opacity
-        static let cardOpacity: Double = 0.1
-    }
-
     // MARK: - Animation
 
     enum Animation {

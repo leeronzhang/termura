@@ -181,7 +181,7 @@ enum DatabaseMigrations {
 
     // MARK: - v4: notes + FTS5
 
-    // MARK: - v8: snippets flag on notes
+    // MARK: - v8: notes favorite flag (column named is_snippet for legacy compat)
 
     private static func registerV8Snippets(into migrator: inout DatabaseMigrator) {
         migrator.registerMigration("v8_snippets") { db in
@@ -190,7 +190,7 @@ enum DatabaseMigrations {
                     .notNull()
                     .defaults(to: 0)
             }
-            logger.info("v8 migration complete: is_snippet column on notes")
+            logger.info("v8 migration complete: is_snippet (favorite) column on notes")
         }
     }
 

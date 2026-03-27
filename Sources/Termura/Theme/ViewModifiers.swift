@@ -62,26 +62,6 @@ extension View {
     }
 }
 
-// MARK: - Floating Card Shadow
-
-/// Subtle shadow for floating overlays (editor card, intervention toolbar).
-struct FloatingCardModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .shadow(
-                color: .black.opacity(AppUI.Shadow.cardOpacity),
-                radius: AppUI.Shadow.cardRadius,
-                y: AppUI.Shadow.cardY
-            )
-    }
-}
-
-extension View {
-    func floatingCard() -> some View {
-        modifier(FloatingCardModifier())
-    }
-}
-
 // MARK: - Conditional Modifier
 
 extension View {
