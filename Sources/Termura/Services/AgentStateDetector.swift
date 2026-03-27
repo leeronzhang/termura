@@ -59,12 +59,12 @@ actor AgentStateDetector {
         parsedCost = cost
     }
 
-    /// Directly set the detected agent type (used when detection happens outside the detector).
+    /// Set or update the detected agent type (used when detection happens outside the detector).
     func setDetectedType(_ type: AgentType) {
-        guard detectedType == nil else { return }
         detectedType = type
         currentStatus = .idle
         detectedAt = Date()
+        parsedCost = 0
         logger.info("Agent \(type.rawValue) set externally in session \(self.sessionID)")
     }
 
