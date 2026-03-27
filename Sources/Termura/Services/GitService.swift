@@ -33,7 +33,8 @@ actor GitService: GitServiceProtocol {
                 ["log", "-1", "--oneline", "--no-decorate"],
                 at: directory
             )
-            result.lastCommit = logLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = logLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            result.lastCommit = trimmed.isEmpty ? nil : trimmed
         } catch {
             // Non-critical: last commit is a display-only field; empty repos have no log.
             logger.debug("Could not read last commit: \(error.localizedDescription)")

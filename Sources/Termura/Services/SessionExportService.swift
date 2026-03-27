@@ -90,7 +90,7 @@ private struct JSONExportData: Encodable {
         init(record: SessionRecord) {
             id = record.id.rawValue.uuidString
             title = record.title
-            workingDirectory = record.workingDirectory
+            workingDirectory = record.workingDirectory ?? ""
             createdAt = record.createdAt
             branchType = record.branchType.rawValue
             parentID = record.parentID?.rawValue.uuidString

@@ -28,7 +28,7 @@ actor MockSessionRepository: SessionRepositoryProtocol {
         let lowered = query.lowercased()
         return order.compactMap { store[$0] }.filter {
             $0.title.lowercased().contains(lowered) ||
-                $0.workingDirectory.lowercased().contains(lowered)
+                ($0.workingDirectory ?? "").lowercased().contains(lowered)
         }
     }
 

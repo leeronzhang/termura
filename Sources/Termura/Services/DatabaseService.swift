@@ -6,10 +6,12 @@ private let logger = Logger(subsystem: "com.termura.app", category: "DatabaseSer
 
 actor DatabaseService: DatabaseServiceProtocol {
     private let pool: DatabasePool
+    private let metrics: (any MetricsCollectorProtocol)?
 
     /// Designated init — inject a pre-configured pool (enables testing with in-memory pools).
-    init(pool: DatabasePool) throws {
+    init(pool: DatabasePool, metrics: (any MetricsCollectorProtocol)? = nil) throws {
         self.pool = pool
+        self.metrics = metrics
         var migrator = DatabaseMigrator()
         DatabaseMigrations.register(into: &migrator)
         try migrator.migrate(pool)
@@ -35,10 +37,24 @@ actor DatabaseService: DatabaseServiceProtocol {
     }
 
     func read<T: Sendable>(_ block: @Sendable (Database) throws -> T) async throws -> T {
-        try await pool.read(block)
+        await metrics?.increment(.dbRead)
+        let start = ContinuousClock.now
+        let result = try await pool.read(block)
+        let elapsed = ContinuousClock.now - start
+        let seconds = Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+        await metrics?.recordDuration(.dbReadDuration, seconds: seconds)
+        return result
     }
 
     func write<T: Sendable>(_ block: @Sendable (Database) throws -> T) async throws -> T {
-        try await pool.write(block)
+        await metrics?.increment(.dbWrite)
+        let start = ContinuousClock.now
+        let result = try await pool.write(block)
+        let elapsed = ContinuousClock.now - start
+        let seconds = Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+        await metrics?.recordDuration(.dbWriteDuration, seconds: seconds)
+        return result
     }
 }

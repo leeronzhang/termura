@@ -46,8 +46,7 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         chunks: [OutputChunk],
         agentState: AgentState
     ) async throws {
-        let projectRoot = session.workingDirectory
-        guard !projectRoot.isEmpty else { return }
+        guard let projectRoot = session.workingDirectory else { return }
 
         let context = await buildHandoffContext(
             session: session,
@@ -83,7 +82,11 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         let errors = extractErrors(from: chunks)
         let duration = session.lastActiveAt.timeIntervalSince(session.createdAt)
 
-        let existing = await readExistingContext(projectRoot: session.workingDirectory)
+        let existing: HandoffContext? = if let dir = session.workingDirectory {
+            await readExistingContext(projectRoot: dir)
+        } else {
+            nil
+        }
 
         var mergedDecisions = (existing?.decisions ?? []) + decisions
         if mergedDecisions.count > AppConfig.SessionHandoff.maxDecisionEntries {

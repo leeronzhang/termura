@@ -21,10 +21,10 @@ struct GitStatusResult: Sendable {
     let ahead: Int
     /// Commits behind the tracking branch.
     let behind: Int
-    /// Most recent commit (short hash + subject), empty if no commits yet.
-    var lastCommit: String = ""
-    /// Short remote host label (e.g. "GitHub", "GitLab"), empty if no remote.
-    var remoteHost: String = ""
+    /// Most recent commit (short hash + subject), nil if no commits yet.
+    var lastCommit: String?
+    /// Short remote host label (e.g. "GitHub", "GitLab"), nil if no remote.
+    var remoteHost: String?
 
     static let notARepo = GitStatusResult(
         branch: "", files: [], isGitRepo: false, ahead: 0, behind: 0

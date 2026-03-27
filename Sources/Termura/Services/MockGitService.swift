@@ -12,10 +12,10 @@ actor MockGitService: GitServiceProtocol {
         return stubbedResult
     }
 
-    var stubbedDiff = ""
+    var stubbedDiff: String?
 
     func diff(file: String, staged: Bool, at directory: String) async throws -> String {
-        stubbedDiff
+        stubbedDiff ?? ""
     }
 
     var stubbedTrackedFiles: Set<String> = []

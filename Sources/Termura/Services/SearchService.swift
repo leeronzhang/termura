@@ -14,22 +14,31 @@ struct SearchResults: Sendable {
 actor SearchService: SearchServiceProtocol {
     private let sessionRepository: any SessionRepositoryProtocol
     private let noteRepository: any NoteRepositoryProtocol
+    private let metrics: (any MetricsCollectorProtocol)?
 
     init(
         sessionRepository: any SessionRepositoryProtocol,
-        noteRepository: any NoteRepositoryProtocol
+        noteRepository: any NoteRepositoryProtocol,
+        metrics: (any MetricsCollectorProtocol)? = nil
     ) {
         self.sessionRepository = sessionRepository
         self.noteRepository = noteRepository
+        self.metrics = metrics
     }
 
     func search(query: String) async throws -> SearchResults {
         guard query.count >= AppConfig.Search.minQueryLength else {
             return SearchResults.empty
         }
+        await metrics?.increment(.searchQuery)
+        let start = ContinuousClock.now
         async let sessions = sessionRepository.search(query: query)
         async let notes = noteRepository.search(query: query)
         let (foundSessions, foundNotes) = try await (sessions, notes)
+        let elapsed = ContinuousClock.now - start
+        let seconds = Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+        await metrics?.recordDuration(.searchDuration, seconds: seconds)
         return SearchResults(sessions: foundSessions, notes: foundNotes, query: query)
     }
 }

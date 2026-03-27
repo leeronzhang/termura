@@ -57,7 +57,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
     init(record: SessionRecord, archivedAt: Date? = nil) {
         id = record.id.rawValue.uuidString
         title = record.title
-        workingDirectory = record.workingDirectory
+        workingDirectory = record.workingDirectory ?? ""
         createdAt = record.createdAt.timeIntervalSince1970
         lastActiveAt = record.lastActiveAt.timeIntervalSince1970
         colorLabel = record.colorLabel.rawValue
@@ -65,7 +65,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         orderIndex = record.orderIndex
         self.archivedAt = archivedAt?.timeIntervalSince1970
         parentId = record.parentID?.rawValue.uuidString
-        summary = record.summary
+        summary = record.summary ?? ""
         branchType = record.branchType.rawValue
         agentType = record.agentType.rawValue
     }
@@ -103,14 +103,14 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         return SessionRecord(
             id: SessionID(rawValue: uuid),
             title: title,
-            workingDirectory: workingDirectory,
+            workingDirectory: workingDirectory.isEmpty ? nil : workingDirectory,
             createdAt: Date(timeIntervalSince1970: createdAt),
             lastActiveAt: Date(timeIntervalSince1970: lastActiveAt),
             colorLabel: label,
             isPinned: isPinned,
             orderIndex: orderIndex,
             parentID: parentSessionID,
-            summary: summary,
+            summary: summary.isEmpty ? nil : summary,
             branchType: branch,
             agentType: agent
         )

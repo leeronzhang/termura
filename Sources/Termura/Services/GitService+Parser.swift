@@ -92,7 +92,7 @@ extension GitService {
     }
 
     /// Extract a short host label from a remote URL.
-    static func parseRemoteHost(from url: String) -> String {
+    static func parseRemoteHost(from url: String) -> String? {
         let lowered = url.lowercased()
         if lowered.contains("github.com") { return "GitHub" }
         if lowered.contains("gitlab.com") { return "GitLab" }
@@ -109,10 +109,7 @@ extension GitService {
                 return String(afterAt[afterAt.startIndex ..< colon])
             }
         }
-        if let host = URL(string: url)?.host {
-            return host
-        }
-        return ""
+        return URL(string: url)?.host
     }
 
     private static func mapStatusChar(_ char: Character) -> GitFileStatus.Kind {

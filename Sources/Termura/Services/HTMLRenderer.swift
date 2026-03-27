@@ -23,7 +23,7 @@ enum HTMLRenderer {
         <header>
         <h1>\(title)\(branchInfo)</h1>
         <p class="meta">Exported from Termura · \(date)
-         · \(escapeHTML(session.workingDirectory))</p>
+         · \(escapeHTML(session.workingDirectory ?? ""))</p>
         </header>
         <main>
         """
