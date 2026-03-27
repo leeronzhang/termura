@@ -56,7 +56,7 @@ struct SessionTreeNodeTests {
     func splitNodeIDs() {
         let id1 = SessionID()
         let id2 = SessionID()
-        let node = SplitNode.split(.horizontal, .leaf(id1), .leaf(id2))
+        let node = SplitNode.split(axis: .horizontal, first: .leaf(id1), second: .leaf(id2))
         #expect(node.allSessionIDs.count == 2)
         #expect(node.depth == 1)
         #expect(node.canSplit == true)

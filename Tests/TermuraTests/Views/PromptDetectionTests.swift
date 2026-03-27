@@ -17,14 +17,21 @@ struct PromptDetectionTests {
         let outputStore = OutputStore(sessionID: sessionID)
         let tokenService = TokenCountingService()
         let modeController = InputModeController()
+        let coordinator = AgentCoordinator(sessionID: sessionID)
+        let processor = OutputProcessor(
+            sessionID: sessionID,
+            outputStore: outputStore,
+            tokenCountingService: tokenService
+        )
+        let services = SessionServices()
         let vm = TerminalViewModel(
             sessionID: sessionID,
             engine: engine,
             sessionStore: sessionStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenService,
             modeController: modeController,
-            isRestoredSession: false
+            agentCoordinator: coordinator,
+            outputProcessor: processor,
+            sessionServices: services
         )
         return (vm, engine, modeController)
     }

@@ -23,14 +23,21 @@ final class TerminalViewModelTests: XCTestCase {
     private func makeViewModel(
         isRestoredSession: Bool = false
     ) -> TerminalViewModel {
-        TerminalViewModel(
+        let coordinator = AgentCoordinator(sessionID: sessionID)
+        let processor = OutputProcessor(
+            sessionID: sessionID,
+            outputStore: outputStore,
+            tokenCountingService: tokenService
+        )
+        let services = SessionServices(isRestoredSession: isRestoredSession)
+        return TerminalViewModel(
             sessionID: sessionID,
             engine: engine,
             sessionStore: sessionStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenService,
             modeController: modeController,
-            isRestoredSession: isRestoredSession
+            agentCoordinator: coordinator,
+            outputProcessor: processor,
+            sessionServices: services
         )
     }
 
@@ -148,7 +155,7 @@ final class TerminalViewModelTests: XCTestCase {
 
     func testDataEventAccumulatesTokens() async throws {
         let vm = makeViewModel()
-        let text = String(repeating: "a", count: 400) // 400 chars → 100 tokens
+        let text = String(repeating: "a", count: 400) // 400 chars -> 100 tokens
         let data = text.data(using: .utf8) ?? Data()
         await engine.emit(.data(data))
         try await yieldForDuration(seconds: 0.2)
@@ -172,15 +179,23 @@ final class TerminalViewModelTests: XCTestCase {
 
     func testInjectContextGuardsNonRestoredSession() {
         let vm = makeViewModel(isRestoredSession: false)
-        vm.injectContextIfNeeded()
+        vm.sessionServices.injectContextIfNeeded(
+            workingDirectory: "",
+            engine: engine,
+            clock: LiveClock()
+        )
         // Should return early — no service, no crash.
         XCTAssertNotNil(vm)
     }
 
     func testInjectContextGuardsNoService() {
         let vm = makeViewModel(isRestoredSession: true)
-        vm.injectContextIfNeeded()
-        // contextInjectionService is nil → returns early.
+        vm.sessionServices.injectContextIfNeeded(
+            workingDirectory: "/tmp",
+            engine: engine,
+            clock: LiveClock()
+        )
+        // contextInjectionService is nil -> returns early.
         XCTAssertNotNil(vm)
     }
 

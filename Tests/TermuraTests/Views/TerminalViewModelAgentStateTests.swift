@@ -21,13 +21,21 @@ final class TerminalViewModelAgentStateTests: XCTestCase {
     }
 
     private func makeViewModel() -> TerminalViewModel {
-        TerminalViewModel(
+        let coordinator = AgentCoordinator(sessionID: sessionID)
+        let processor = OutputProcessor(
+            sessionID: sessionID,
+            outputStore: outputStore,
+            tokenCountingService: tokenService
+        )
+        let services = SessionServices()
+        return TerminalViewModel(
             sessionID: sessionID,
             engine: engine,
             sessionStore: sessionStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenService,
-            modeController: modeController
+            modeController: modeController,
+            agentCoordinator: coordinator,
+            outputProcessor: processor,
+            sessionServices: services
         )
     }
 
@@ -35,7 +43,7 @@ final class TerminalViewModelAgentStateTests: XCTestCase {
 
     func testRefreshMetadataUpdatesTokenCount() async {
         let vm = makeViewModel()
-        await tokenService.accumulate(for: sessionID, text: String(repeating: "a", count: 400)) // 400/4 = 100 tokens
+        await tokenService.accumulate(for: sessionID, text: String(repeating: "a", count: 400))
         await vm.refreshMetadata()
         XCTAssertEqual(vm.currentMetadata.estimatedTokenCount, 100)
     }
@@ -75,9 +83,16 @@ final class TerminalViewModelAgentStateTests: XCTestCase {
     // MARK: - Generate handoff guards
 
     func testGenerateHandoffWithoutServiceIsNoop() async {
-        // sessionHandoffService is nil by default → should return early.
+        // sessionHandoffService is nil by default -> should return early.
         let vm = makeViewModel()
-        await vm.generateHandoffIfNeeded(exitCode: 0)
+        let agentState = await vm.agentCoordinator.agentDetector.buildState()
+        vm.sessionServices.generateHandoffIfNeeded(
+            session: nil,
+            chunks: [],
+            agentState: agentState,
+            handoffService: nil,
+            taskExecutor: BoundedTaskExecutor(maxConcurrent: 1)
+        )
         // No crash, no side effects.
         XCTAssertNotNil(vm)
     }
@@ -86,8 +101,11 @@ final class TerminalViewModelAgentStateTests: XCTestCase {
 
     func testUpdateAgentStateDoesNotCrashWithNoAgent() async {
         let vm = makeViewModel()
-        await vm.updateAgentState()
-        // No agent detected → agentDetector.buildState() returns nil → early return.
+        await vm.agentCoordinator.updateAgentState(
+            tokenCountingService: tokenService,
+            sessionID: sessionID
+        )
+        // No agent detected -> agentDetector.buildState() returns nil -> early return.
         XCTAssertNil(vm.contextWindowAlert)
     }
 }

@@ -11,7 +11,7 @@ struct SplitNodeMutationTests {
 
         let result = SplitNodeMutations.splitLeaf(root: root, targetID: target, newID: newID, axis: .vertical)
 
-        guard case .split(let axis, let first, let second) = result else {
+        guard case .split(axis: let axis, first: let first, second: let second) = result else {
             Issue.record("Expected .split")
             return
         }
@@ -26,11 +26,11 @@ struct SplitNodeMutationTests {
         let a = SessionID()
         let b = SessionID()
         let newID = SessionID()
-        let root = SplitNode.split(.horizontal, .leaf(a), .leaf(b))
+        let root = SplitNode.split(axis: .horizontal, first: .leaf(a), second: .leaf(b))
 
         let result = SplitNodeMutations.splitLeaf(root: root, targetID: b, newID: newID, axis: .vertical)
 
-        guard case .split(_, let first, let second) = result else {
+        guard case .split(axis: _, first: let first, second: let second) = result else {
             Issue.record("Expected .split")
             return
         }
@@ -38,7 +38,7 @@ struct SplitNodeMutationTests {
         guard case .leaf(let firstID) = first else { Issue.record("Expected leaf"); return }
         #expect(firstID == a)
         // Second child is now a split
-        guard case .split(let innerAxis, _, _) = second else {
+        guard case .split(axis: let innerAxis, first: _, second: _) = second else {
             Issue.record("Expected nested split")
             return
         }
@@ -49,7 +49,7 @@ struct SplitNodeMutationTests {
         // Build a tree at maximum depth
         var node = SplitNode.leaf(SessionID())
         for _ in 0..<AppConfig.SplitPane.maxSplitDepth {
-            node = .split(.horizontal, node, .leaf(SessionID()))
+            node = .split(axis: .horizontal, first: node, second: .leaf(SessionID()))
         }
         #expect(node.canSplit == false)
 
@@ -63,7 +63,7 @@ struct SplitNodeMutationTests {
     @Test func removeLeafCollapsesToSibling() {
         let a = SessionID()
         let b = SessionID()
-        let root = SplitNode.split(.horizontal, .leaf(a), .leaf(b))
+        let root = SplitNode.split(axis: .horizontal, first: .leaf(a), second: .leaf(b))
 
         let result = SplitNodeMutations.removeLeaf(root: root, targetID: a)
         guard case .leaf(let remaining) = result else {

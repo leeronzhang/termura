@@ -59,16 +59,25 @@ final class TerminalViewModelContextInjectionTests: XCTestCase {
         contextInjectionService: (any ContextInjectionServiceProtocol)? = nil,
         sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil
     ) -> TerminalViewModel {
-        TerminalViewModel(
+        let coordinator = AgentCoordinator(sessionID: sessionID)
+        let processor = OutputProcessor(
+            sessionID: sessionID,
+            outputStore: outputStore,
+            tokenCountingService: tokenService
+        )
+        let services = SessionServices(
+            contextInjectionService: contextInjectionService,
+            sessionHandoffService: sessionHandoffService,
+            isRestoredSession: isRestoredSession
+        )
+        return TerminalViewModel(
             sessionID: sessionID,
             engine: engine,
             sessionStore: sessionStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenService,
             modeController: modeController,
-            isRestoredSession: isRestoredSession,
-            contextInjectionService: contextInjectionService,
-            sessionHandoffService: sessionHandoffService,
+            agentCoordinator: coordinator,
+            outputProcessor: processor,
+            sessionServices: services,
             clock: testClock
         )
     }
@@ -86,7 +95,11 @@ final class TerminalViewModelContextInjectionTests: XCTestCase {
             sessionID: sessionID,
             workingDirectory: "/tmp/project"
         )
-        vm.injectContextIfNeeded()
+        vm.sessionServices.injectContextIfNeeded(
+            workingDirectory: vm.currentMetadata.workingDirectory,
+            engine: engine,
+            clock: testClock
+        )
         try await yieldForDuration(seconds: 0.2)
         let count = await mockInjection.buildCallCount
         XCTAssertEqual(count, 1)
@@ -102,8 +115,16 @@ final class TerminalViewModelContextInjectionTests: XCTestCase {
             sessionID: sessionID,
             workingDirectory: "/tmp/project"
         )
-        vm.injectContextIfNeeded()
-        vm.injectContextIfNeeded()
+        vm.sessionServices.injectContextIfNeeded(
+            workingDirectory: vm.currentMetadata.workingDirectory,
+            engine: engine,
+            clock: testClock
+        )
+        vm.sessionServices.injectContextIfNeeded(
+            workingDirectory: vm.currentMetadata.workingDirectory,
+            engine: engine,
+            clock: testClock
+        )
         try await yieldForDuration(seconds: 0.2)
         let count = await mockInjection.buildCallCount
         XCTAssertEqual(count, 1, "Injection should fire exactly once regardless of repeated calls")
@@ -120,7 +141,11 @@ final class TerminalViewModelContextInjectionTests: XCTestCase {
             sessionID: sessionID,
             workingDirectory: "/tmp/project"
         )
-        vm.injectContextIfNeeded()
+        vm.sessionServices.injectContextIfNeeded(
+            workingDirectory: vm.currentMetadata.workingDirectory,
+            engine: engine,
+            clock: testClock
+        )
         try await yieldForDuration(seconds: 0.2)
         // Service was called, but engine should NOT have received text.
         let sent = await engine.sentTexts
@@ -133,13 +158,15 @@ final class TerminalViewModelContextInjectionTests: XCTestCase {
             isRestoredSession: true,
             contextInjectionService: mockInjection
         )
-        // Default metadata has homeDirectory which is non-empty,
-        // so explicitly set empty working directory.
         vm.currentMetadata = SessionMetadata.empty(
             sessionID: sessionID,
             workingDirectory: ""
         )
-        vm.injectContextIfNeeded()
+        vm.sessionServices.injectContextIfNeeded(
+            workingDirectory: vm.currentMetadata.workingDirectory,
+            engine: engine,
+            clock: testClock
+        )
         try await yieldForDuration(seconds: 0.2)
         let count = await mockInjection.buildCallCount
         XCTAssertEqual(count, 0, "Should skip injection when working directory is empty")
@@ -151,25 +178,43 @@ final class TerminalViewModelContextInjectionTests: XCTestCase {
         let mockHandoff = MockSessionHandoffService()
         let record = sessionStore.createSession(title: "Test")
         sessionID = record.id
-        // Rebuild stores with matching session ID.
         outputStore = OutputStore(sessionID: sessionID)
         sessionStore.updateWorkingDirectory(id: sessionID, path: "/tmp/project")
 
+        let coordinator = AgentCoordinator(sessionID: sessionID)
+        let processor = OutputProcessor(
+            sessionID: sessionID,
+            outputStore: outputStore,
+            tokenCountingService: tokenService
+        )
+        let services = SessionServices(
+            sessionHandoffService: mockHandoff
+        )
         let vm = TerminalViewModel(
             sessionID: sessionID,
             engine: engine,
             sessionStore: sessionStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenService,
             modeController: modeController,
-            sessionHandoffService: mockHandoff,
+            agentCoordinator: coordinator,
+            outputProcessor: processor,
+            sessionServices: services,
             clock: testClock
         )
         // Pre-detect an agent so handoff guard passes.
-        let agentDet = vm.agentDetector
+        let agentDet = vm.agentCoordinator.agentDetector
         _ = await agentDet.detectFromCommand("claude")
 
-        await vm.generateHandoffIfNeeded(exitCode: 0)
+        let agentState = await agentDet.buildState()
+        let session = sessionStore.sessions.first { $0.id == sessionID }
+        let chunks = Array(outputStore.chunks)
+        let executor = BoundedTaskExecutor(maxConcurrent: 1)
+        services.generateHandoffIfNeeded(
+            session: session,
+            chunks: chunks,
+            agentState: agentState,
+            handoffService: mockHandoff,
+            taskExecutor: executor
+        )
         try await yieldForDuration(seconds: 0.2)
         let count = await mockHandoff.generateCallCount
         XCTAssertEqual(count, 1)
@@ -177,8 +222,15 @@ final class TerminalViewModelContextInjectionTests: XCTestCase {
 
     func testNoHandoffWhenSessionHandoffServiceNil() async throws {
         let vm = makeViewModel(sessionHandoffService: nil)
-        // Should complete without crash even with no handoff service.
-        await vm.generateHandoffIfNeeded(exitCode: 0)
+        let agentState = await vm.agentCoordinator.agentDetector.buildState()
+        let executor = BoundedTaskExecutor(maxConcurrent: 1)
+        vm.sessionServices.generateHandoffIfNeeded(
+            session: nil,
+            chunks: [],
+            agentState: agentState,
+            handoffService: nil,
+            taskExecutor: executor
+        )
         XCTAssertNotNil(vm)
     }
 }

@@ -66,7 +66,7 @@ private func makeTempDir() throws -> String {
     return tmp
 }
 
-private func makeSession(workingDirectory: String = "") -> SessionRecord {
+private func makeSession(workingDirectory: String? = nil) -> SessionRecord {
     SessionRecord(
         title: "Test Session",
         workingDirectory: workingDirectory,
@@ -175,9 +175,9 @@ struct SessionHandoffServiceTests {
         #expect(events.first?.eventType == .sessionHandoff)
     }
 
-    @Test("Does not generate handoff for empty workingDirectory")
-    func emptyWorkingDirectory() async throws {
-        let session = makeSession(workingDirectory: "")
+    @Test("Does not generate handoff for nil workingDirectory")
+    func nilWorkingDirectory() async throws {
+        let session = makeSession(workingDirectory: nil)
         let chunks = makeChunks(sessionID: session.id)
         let agentState = makeAgentState(sessionID: session.id)
         let (service, msgRepo, _) = makeService()
