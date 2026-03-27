@@ -35,13 +35,13 @@ jobs:
         run: brew install swiftformat
 
       - name: Check formatting
-        run: swiftformat --lint Sources/ --quiet
+        run: swiftformat --lint Sources/
 
   # ── 3. Build ─────────────────────────────────────────────────
   build:
     name: Build (macOS)
     runs-on: macos-15
-    needs: [lint]
+    needs: [lint, format]
     steps:
       - uses: actions/checkout@v4
 
@@ -146,8 +146,7 @@ jobs:
             curl -L https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_darwin_arm64 \
               -o /tmp/osv-scanner && chmod +x /tmp/osv-scanner
             /tmp/osv-scanner \
-              --lockfile "swift:Termura.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
-              || echo "⚠ 依赖漏洞扫描发现问题，请检查"
+              --lockfile "swift:Termura.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
           else
             echo "Package.resolved 未找到，跳过漏洞扫描"
           fi

@@ -65,6 +65,17 @@ final class TerminalViewModelAgentDetectionTests: XCTestCase {
         XCTAssertEqual(result, original, "Should return original when stripped result is empty")
     }
 
+    func testStripAgentPrefixesRemovesCompoundPrefixes() {
+        // Claude Code task titles often use compound format: sparkle + middle dot + task name.
+        let result = TerminalViewModel.stripAgentPrefixes("\u{2733} \u{00B7} Refactor God Object")
+        XCTAssertEqual(result, "Refactor God Object")
+    }
+
+    func testStripAgentPrefixesRemovesMiddleDotPrefix() {
+        let result = TerminalViewModel.stripAgentPrefixes("\u{00B7} Some task")
+        XCTAssertEqual(result, "Some task")
+    }
+
     // MARK: - detectAgentFromCommand
 
     func testDetectAgentFromCommandClaudeCode() async throws {

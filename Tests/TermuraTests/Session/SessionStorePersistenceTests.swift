@@ -84,4 +84,41 @@ final class SessionStorePersistenceTests: XCTestCase {
         let saved = try await repository.fetchAll()
         XCTAssertEqual(saved.first(where: { $0.id == session.id })?.colorLabel, .green)
     }
+
+    // MARK: - Flush tests
+
+    func testFlushAwaitsTrackedWrites() async throws {
+        let session = store.createSession(title: "Flush Test")
+        // Do NOT yield — call flush immediately to prove it awaits pending writes.
+        await store.flushPendingWrites()
+
+        let saved = try await repository.fetchAll()
+        XCTAssertTrue(saved.contains { $0.id == session.id })
+    }
+
+    func testFlushPersistsDebouncedRename() async throws {
+        let session = store.createSession(title: "Original")
+        await store.flushPendingWrites()
+
+        store.renameSession(id: session.id, title: "Renamed")
+        // Rename uses debounce — without flush, DB would still have "Original".
+        await store.flushPendingWrites()
+
+        let saved = try await repository.fetchAll()
+        XCTAssertEqual(saved.first(where: { $0.id == session.id })?.title, "Renamed")
+    }
+
+    func testFlushPersistsDebouncedWorkingDirectory() async throws {
+        let session = store.createSession(title: "Dir Test")
+        await store.flushPendingWrites()
+
+        store.updateWorkingDirectory(id: session.id, path: "/new/path")
+        await store.flushPendingWrites()
+
+        let saved = try await repository.fetchAll()
+        XCTAssertEqual(
+            saved.first(where: { $0.id == session.id })?.workingDirectory,
+            "/new/path"
+        )
+    }
 }

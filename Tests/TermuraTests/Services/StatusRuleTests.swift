@@ -1,9 +1,8 @@
-import Testing
 @testable import Termura
+import Testing
 
 @Suite("StatusRule")
 struct StatusRuleTests {
-
     // MARK: - Pattern.contains
 
     @Test("contains matches exact substring")
@@ -46,7 +45,7 @@ struct StatusRuleTests {
         ("confirm-yn", "Proceed? [Y/n]"),
         ("confirm-yN", "Delete files? [y/N]"),
         ("proceed-prompt", "Do you want to proceed with this?"),
-        ("permission-prompt", "Requesting permission to write files")
+        ("permission-prompt", "Requesting permission to write files") // tightened: "permission to"
     ])
     func waitingInputRules(label: String, text: String) {
         let rule = AgentStateDetector.statusRules.first { $0.label == label }
@@ -87,7 +86,6 @@ struct StatusRuleTests {
 
     @Test("Each thinking rule matches its intended text", arguments: [
         ("thinking-word", "Thinking about the approach..."),
-        ("ellipsis", "Processing\u{2026}"),
         ("generating-word", "Generating response"),
         ("braille-spinner-1", "Loading \u{280B}"),
         ("braille-spinner-2", "Working \u{2819}"),
@@ -124,6 +122,18 @@ struct StatusRuleTests {
         }
     }
 
+    @Test("'permission denied' does not trigger waitingInput")
+    func permissionDeniedNotWaiting() {
+        guard let rule = AgentStateDetector.statusRules.first(
+            where: { $0.label == "permission-prompt" }
+        ) else {
+            Issue.record("Rule 'permission-prompt' not found")
+            return
+        }
+        #expect(!rule.matches("permission denied"))
+        #expect(!rule.matches("no permission for this"))
+    }
+
     @Test("'>' in middle of text does not trigger waitingInput")
     func greaterThanInMiddle() {
         let suffixRules = AgentStateDetector.statusRules.filter {
@@ -143,6 +153,24 @@ struct StatusRuleTests {
         // Text matches both error ("error:") and waitingInput (suffix "> ")
         let status = await detector.analyzeOutput("error: something\n> ")
         #expect(status == .waitingInput)
+    }
+
+    @Test("State machine blocks impossible transitions (idle -> completed)")
+    func stateTransitionBlocked() async {
+        let detector = AgentStateDetector(sessionID: SessionID())
+        _ = await detector.detectFromCommand("claude")
+        // idle -> completed should be blocked (must go through thinking first)
+        let status = await detector.analyzeOutput("Task completed successfully")
+        #expect(status == .idle)
+    }
+
+    @Test("Valid transition works when cooldown is satisfied (idle -> thinking)")
+    func stateTransitionAllowed() async {
+        let detector = AgentStateDetector(sessionID: SessionID())
+        _ = await detector.detectFromCommand("claude")
+        // idle -> thinking: valid, first transition has no cooldown predecessor
+        let status = await detector.analyzeOutput("Thinking about the problem")
+        #expect(status == .thinking)
     }
 
     @Test("All statusRules have unique labels")

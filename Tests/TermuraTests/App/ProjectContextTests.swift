@@ -37,60 +37,44 @@ final class ProjectContextTests: XCTestCase {
         XCTAssertFalse(ctx.displayName.isEmpty)
     }
 
-    // MARK: - Output store cache
+    // MARK: - Output store cache (via viewStateManager)
 
     func testSetOutputStoreAndRetrieve() throws {
         let ctx = try XCTUnwrap(context)
+        let vsm = ctx.viewStateManager
         let sessionID = SessionID()
         let store = OutputStore(sessionID: sessionID)
-        ctx.setOutputStore(store, for: sessionID)
-        XCTAssertNotNil(ctx.outputStores[sessionID])
-        XCTAssertEqual(ctx.outputStores[sessionID]?.sessionID, sessionID)
+        vsm.registerOutputStore(store, for: sessionID)
+        XCTAssertNotNil(vsm.outputStores[sessionID])
+        XCTAssertEqual(vsm.outputStores[sessionID]?.sessionID, sessionID)
     }
 
-    // MARK: - View state cache
+    // MARK: - View state cache (via viewStateManager)
 
     func testSetViewStateAndRetrieve() throws {
         let ctx = try XCTUnwrap(context)
+        let vsm = ctx.viewStateManager
         let sessionID = SessionID()
         let engine = MockTerminalEngine()
-        let outputStore = OutputStore(sessionID: sessionID)
-        let modeController = InputModeController()
-        let mockStore = MockSessionStore()
-        let tokenService = MockTokenCountingService()
-        let terminalVM = TerminalViewModel(
-            sessionID: sessionID,
-            engine: engine,
-            sessionStore: mockStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenService,
-            modeController: modeController
-        )
-        let editorVM = EditorViewModel(engine: engine, modeController: modeController)
-        let timeline = SessionTimeline()
-        let viewState = SessionViewState(
-            outputStore: outputStore,
-            viewModel: terminalVM,
-            editorViewModel: editorVM,
-            modeController: modeController,
-            timeline: timeline
-        )
-        ctx.setViewState(viewState, for: sessionID)
-        XCTAssertNotNil(ctx.sessionViewStates[sessionID])
+
+        let state = vsm.viewState(for: sessionID, engine: engine)
+        XCTAssertNotNil(state.viewModel)
+        XCTAssertNotNil(vsm.sessionViewStates[sessionID])
     }
 
     // MARK: - Clear caches
 
     func testClearAllCachesRemovesEverything() throws {
         let ctx = try XCTUnwrap(context)
+        let vsm = ctx.viewStateManager
         let sid1 = SessionID()
         let sid2 = SessionID()
-        ctx.setOutputStore(OutputStore(sessionID: sid1), for: sid1)
-        ctx.setOutputStore(OutputStore(sessionID: sid2), for: sid2)
-        XCTAssertEqual(ctx.outputStores.count, 2)
+        vsm.registerOutputStore(OutputStore(sessionID: sid1), for: sid1)
+        vsm.registerOutputStore(OutputStore(sessionID: sid2), for: sid2)
+        XCTAssertEqual(vsm.outputStores.count, 2)
 
-        ctx.clearAllCaches()
-        XCTAssertTrue(ctx.sessionViewStates.isEmpty)
-        XCTAssertTrue(ctx.outputStores.isEmpty)
+        vsm.clearAll()
+        XCTAssertTrue(vsm.sessionViewStates.isEmpty)
+        XCTAssertTrue(vsm.outputStores.isEmpty)
     }
 }

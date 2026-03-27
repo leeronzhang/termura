@@ -68,13 +68,14 @@ final class ProjectContextIntegrationTests: XCTestCase {
         )
         let session = ctx.sessionStore.createSession(title: "Test")
 
-        let state1 = ctx.viewState(for: session.id, engine: mockEngine)
+        let vsm = ctx.viewStateManager
+        let state1 = vsm.viewState(for: session.id, engine: mockEngine)
         XCTAssertNotNil(state1.viewModel)
         XCTAssertNotNil(state1.outputStore)
 
-        let state2 = ctx.viewState(for: session.id, engine: mockEngine)
+        let state2 = vsm.viewState(for: session.id, engine: mockEngine)
         XCTAssertTrue(state1 === state2)
-        XCTAssertNotNil(ctx.outputStores[session.id])
+        XCTAssertNotNil(vsm.outputStores[session.id])
     }
 
     // MARK: - Close cleans up
@@ -88,8 +89,8 @@ final class ProjectContextIntegrationTests: XCTestCase {
         ctx.sessionStore.createSession(title: "Test")
         ctx.close()
 
-        XCTAssertTrue(ctx.sessionViewStates.isEmpty)
-        XCTAssertTrue(ctx.outputStores.isEmpty)
+        XCTAssertTrue(ctx.viewStateManager.sessionViewStates.isEmpty)
+        XCTAssertTrue(ctx.viewStateManager.outputStores.isEmpty)
     }
 
     // MARK: - CommandRouter chunk notification chain
