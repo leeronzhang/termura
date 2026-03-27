@@ -44,7 +44,7 @@ extension MainView {
     func openProjectFile(relativePath: String, mode: FileOpenMode) {
         let name = URL(fileURLWithPath: relativePath).lastPathComponent
         switch mode {
-        case .diff(let staged, let untracked):
+        case let .diff(staged, untracked):
             openDiffTab(path: relativePath, staged: staged, untracked: untracked)
         case .edit:
             openFileTab(path: relativePath, name: name)
@@ -106,6 +106,34 @@ extension MainView {
         }
     }
 
+    /// Toggle dual-pane mode: side-by-side view of two sessions.
+    func toggleDualPane() {
+        if splitSessionID != nil {
+            splitSessionID = nil
+            focusedPaneID = nil
+            commandRouter.isDualPaneActive = false
+            commandRouter.focusedDualPaneID = nil
+        } else {
+            guard let activeID = sessionStore.activeSessionID else { return }
+            // Pick the first session that is not the active one.
+            let candidate = sessionStore.sessions.first { $0.id != activeID }
+            guard let secondary = candidate else { return }
+            splitSessionID = secondary.id
+            focusedPaneID = activeID
+            commandRouter.isDualPaneActive = true
+            commandRouter.focusedDualPaneID = activeID
+            sessionStore.ensureEngine(for: secondary.id)
+        }
+    }
+
+    /// Called from sidebar when a session is tapped while dual-pane is active.
+    func setDualPaneSecondary(id: SessionID) {
+        guard splitSessionID != nil else { return }
+        guard id != sessionStore.activeSessionID else { return }
+        splitSessionID = id
+        sessionStore.ensureEngine(for: id)
+    }
+
     func performSplit(axis: SplitAxis) {
         guard let activeID = sessionStore.activeSessionID else { return }
         let newSession = sessionStore.createSession(title: "Terminal")
@@ -156,8 +184,8 @@ extension MainView {
         // diffs are ephemeral.
         let persistable = openTabs.filter {
             switch $0 {
-            case .note, .file, .preview: return true
-            case .terminal, .diff: return false
+            case .note, .file, .preview: true
+            case .terminal, .diff: false
             }
         }
         let data: Data

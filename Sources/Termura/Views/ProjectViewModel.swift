@@ -16,6 +16,7 @@ final class ProjectViewModel: ObservableObject {
     @Published var expandedNodeIDs: Set<String> = [] {
         didSet { persistExpandedIDs() }
     }
+
     /// When true, files/directories marked as gitignored are hidden from the tree.
     @Published var hideIgnoredFiles: Bool = true {
         didSet { UserDefaults.standard.set(hideIgnoredFiles, forKey: hideIgnoredKey) }
@@ -192,8 +193,8 @@ final class ProjectViewModel: ObservableObject {
                 return
             }
             guard let self, !Task.isCancelled else { return }
-            let array = Array(self.expandedNodeIDs)
-            UserDefaults.standard.set(array, forKey: self.expandedIDsKey)
+            let array = Array(expandedNodeIDs)
+            UserDefaults.standard.set(array, forKey: expandedIDsKey)
         }
     }
 

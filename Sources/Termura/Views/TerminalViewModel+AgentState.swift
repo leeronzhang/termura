@@ -23,12 +23,21 @@ extension TerminalViewModel {
     }
 
     /// Strips known agent icon prefixes from OSC terminal titles.
+    /// Strips iteratively to handle compound prefixes (e.g. "\u{2733} \u{00B7} Task Name").
     static func stripAgentPrefixes(_ title: String) -> String {
         var stripped = title.trimmingCharacters(in: .whitespaces)
-        let prefixes = ["\u{2733}", ">_", "\u{2726}", "\u{26A1}", "\u{203A}"]
-        for prefix in prefixes where stripped.hasPrefix(prefix) {
-            stripped = String(stripped.dropFirst(prefix.count))
-                .trimmingCharacters(in: .whitespaces)
+        let prefixes = [
+            "\u{2733}", ">_", "\u{2726}", "\u{26A1}", "\u{203A}",
+            "\u{00B7}", "\u{2022}", "\u{2027}"
+        ]
+        var didStrip = true
+        while didStrip {
+            didStrip = false
+            for prefix in prefixes where stripped.hasPrefix(prefix) {
+                stripped = String(stripped.dropFirst(prefix.count))
+                    .trimmingCharacters(in: .whitespaces)
+                didStrip = true
+            }
         }
         return stripped.isEmpty ? title : stripped
     }
@@ -45,7 +54,14 @@ extension TerminalViewModel {
             sessionStore.renameSession(id: sessionID, title: type.displayName)
             sessionStore.setAgentType(id: sessionID, type: type)
             let detector = agentDetector
-            spawnTracked { await detector.setDetectedType(type) }
+            let stateStore = agentStateStore
+            spawnTracked {
+                await detector.setDetectedType(type)
+                if let state = await detector.buildState() {
+                    // Already on MainActor via spawnTracked.
+                    stateStore?.update(state: state)
+                }
+            }
             return
         }
     }
@@ -60,7 +76,7 @@ extension TerminalViewModel {
         guard let session = sessionStore.sessions.first(where: { $0.id == sessionID }),
               !session.workingDirectory.isEmpty else { return }
 
-        let chunks = outputStore.chunks
+        let chunks = Array(outputStore.chunks)
         guard let handoffService = sessionHandoffService else { return }
 
         spawnDetachedTracked {

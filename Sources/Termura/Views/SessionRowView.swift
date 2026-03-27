@@ -4,6 +4,8 @@ import SwiftUI
 struct SessionRowView: View {
     let session: SessionRecord
     let isActive: Bool
+    /// True when the session is in a dual-pane split but not the focused pane.
+    var isInSplit: Bool = false
     let hasUnreadFailure: Bool
     var agentStatus: AgentStatus?
     var agentType: AgentType?
@@ -116,8 +118,8 @@ struct SessionRowView: View {
                 .onExitCommand { cancelEdit() }
         } else {
             Text(session.title)
-                .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
-                .foregroundColor(isActive ? .primary : themeManager.current.sidebarText)
+                .font((isActive || isInSplit) ? AppUI.Font.title3Medium : AppUI.Font.title3)
+                .foregroundColor((isActive || isInSplit) ? .primary : themeManager.current.sidebarText)
                 .lineLimit(1)
         }
     }
@@ -127,6 +129,9 @@ struct SessionRowView: View {
         let hasAgent = agentStatus != nil
         if hasAgent {
             HStack(spacing: AppUI.Spacing.smMd) {
+                if let status = agentStatus, let type = agentType {
+                    AgentStatusBadgeView(status: status, agentType: type)
+                }
                 if let status = agentStatus {
                     Text(MetadataFormatter.formatAgentStatus(status))
                         .font(AppUI.Font.labelMono)
@@ -134,22 +139,15 @@ struct SessionRowView: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: AppUI.Spacing.sm)
-                HStack(spacing: AppUI.Spacing.md) {
+                HStack(spacing: AppUI.Spacing.smMd) {
                     if let tokens = tokenSummary {
-                        Label(tokens, systemImage: "text.word.spacing")
-                            .font(AppUI.Font.captionMono)
-                            .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
+                        compactLabel(tokens, icon: "text.word.spacing")
                     }
                     if let duration = durationText {
-                        Label(duration, systemImage: "clock")
-                            .font(AppUI.Font.captionMono)
-                            .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
+                        compactLabel(duration, icon: "clock")
                     }
                 }
                 .monospacedDigit()
-                if let status = agentStatus, let type = agentType {
-                    AgentStatusBadgeView(status: status, agentType: type)
-                }
             }
         } else if session.agentType != .unknown {
             // Previous agent session -- show persisted type
@@ -157,6 +155,16 @@ struct SessionRowView: View {
                 .font(AppUI.Font.captionMono)
                 .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
         }
+    }
+
+    private func compactLabel(_ text: String, icon: String) -> some View {
+        HStack(spacing: AppUI.Spacing.xxs) {
+            Image(systemName: icon)
+                .font(AppUI.Font.micro)
+            Text(text)
+                .font(AppUI.Font.captionMono)
+        }
+        .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
     }
 
     private var closeButton: some View {
@@ -189,6 +197,8 @@ struct SessionRowView: View {
     private var rowFillColor: Color {
         if isActive {
             return Color.accentColor.opacity(AppUI.Opacity.selected)
+        } else if isInSplit {
+            return Color.accentColor.opacity(AppUI.Opacity.whisper)
         } else if isHovered {
             return themeManager.current.sidebarText.opacity(AppUI.Opacity.whisper)
         }
@@ -196,8 +206,15 @@ struct SessionRowView: View {
     }
 
     private var glowBorder: some View {
-        RoundedRectangle(cornerRadius: AppUI.Radius.md)
-            .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : Color.accentColor.opacity(glowOpacity), lineWidth: 1)
+        let borderColor = if isActive {
+            Color.accentColor.opacity(AppUI.Opacity.border)
+        } else if isInSplit {
+            Color.accentColor.opacity(AppUI.Opacity.whisper)
+        } else {
+            Color.accentColor.opacity(glowOpacity)
+        }
+        return RoundedRectangle(cornerRadius: AppUI.Radius.md)
+            .stroke(borderColor, lineWidth: 1)
     }
 
     @ViewBuilder

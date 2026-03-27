@@ -11,12 +11,19 @@ struct TerminalAreaView: View {
     let sessionID: SessionID
     /// When true (split pane mode), hides side panels and toolbar to save space.
     var isCompact: Bool = false
+    /// When true, metadata panel is managed externally (dual-pane mode).
+    var forceHideMetadata: Bool = false
+    /// When false (non-focused pane in dual mode), composer and backdrop are suppressed.
+    var isFocusedPane: Bool = true
+    /// When true, toolbar action buttons are hidden (shared toolbar in dual-pane mode).
+    var hideToolbarButtons: Bool = false
 
-    @EnvironmentObject var projectContext: ProjectContext
+    @Environment(\.sessionScope) var sessionScope
     @Environment(\.commandRouter) var commandRouter
     @Environment(\.themeManager) var themeManager
     @Environment(\.fontSettings) var fontSettings
-    /// Per-session state container — owned by `ProjectContext.sessionViewStates`,
+    @Environment(\.notesViewModel) var notesViewModel
+    /// Per-session state container — owned by `SessionViewStateManager`,
     /// received here as `@ObservedObject` to avoid the fragile `@StateObject`-in-init pattern.
     @ObservedObject var state: SessionViewState
 
@@ -28,7 +35,6 @@ struct TerminalAreaView: View {
     var modeController: InputModeController { state.modeController }
     var viewModel: TerminalViewModel { state.viewModel }
     var editorViewModel: EditorViewModel { state.editorViewModel }
-    var notesViewModel: NotesViewModel { projectContext.notesViewModel }
     var timeline: SessionTimeline { state.timeline }
 
     @State var showMetadata = true
@@ -56,7 +62,7 @@ struct TerminalAreaView: View {
                 showContextSheet: $showContextSheet,
                 engine: engine,
                 sessionID: sessionID,
-                projectContext: projectContext,
+                sessionStore: sessionScope.store,
                 outputStore: outputStore,
                 viewModel: viewModel
             ))
@@ -76,7 +82,7 @@ struct TerminalAreaView: View {
             HStack(spacing: 0) {
                 terminalAndOutputArea
 
-                if !isCompact && showMetadata {
+                if !isCompact && showMetadata && !forceHideMetadata {
                     ResizableDivider(
                         width: $metadataPanelWidth,
                         minWidth: AppConfig.UI.metadataPanelMinWidth,
@@ -104,6 +110,7 @@ struct TerminalAreaView: View {
         checkContextFileExists()
         editorViewModel.onCommandSubmit = { [weak viewModel] cmd in
             viewModel?.detectAgentFromCommand(cmd)
+            commandRouter.dismissComposer()
         }
     }
 
@@ -113,9 +120,9 @@ struct TerminalAreaView: View {
             contextFileExists = false
             return
         }
-        let path = (dir as NSString)
+        let path = URL(fileURLWithPath: dir)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
-            .appending("/\(AppConfig.SessionHandoff.contextFileName)")
+            .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
         // Lifecycle: one-shot file check — result is cosmetic UI state, no cleanup needed.
         Task.detached {
             let exists = FileManager.default.fileExists(atPath: path)
@@ -135,8 +142,14 @@ struct TerminalAreaView: View {
         let modeCtrl = modeController
         let termEngine = engine
         let router = commandRouter
+        let sid = sessionID
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             dispatchPrecondition(condition: .onQueue(.main))
+
+            // In dual-pane mode, only the focused pane handles key events.
+            if router.isDualPaneActive, router.focusedDualPaneID != sid {
+                return event
+            }
 
             guard let window = NSApp.keyWindow else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -169,7 +182,20 @@ struct TerminalAreaView: View {
         // Clicks inside the composer card area pass through to SwiftUI buttons.
         let composerHeight = AppConfig.UI.composerMaxHeight
         mouseEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            // Dual-pane focus tracking: check if click is within this terminal's NSView.
+            if router.isDualPaneActive {
+                let termView = termEngine.terminalNSView
+                let loc = termView.convert(event.locationInWindow, from: nil)
+                if termView.bounds.contains(loc) {
+                    router.focusedDualPaneID = sid
+                }
+            }
+
             guard router.showComposer else { return event }
+            // In dual-pane mode, only the focused pane handles composer backdrop clicks.
+            if router.isDualPaneActive, router.focusedDualPaneID != sid {
+                return event
+            }
             // In window coordinates, y=0 is the bottom. Composer occupies the bottom portion.
             // If click is in the composer area (y < composerHeight), let SwiftUI handle it.
             if event.locationInWindow.y < composerHeight {
@@ -202,7 +228,7 @@ private struct TerminalAreaSheets: ViewModifier {
     @Binding var showContextSheet: Bool
     let engine: any TerminalEngine
     let sessionID: SessionID
-    let projectContext: ProjectContext
+    let sessionStore: SessionStore
     let outputStore: OutputStore
     let viewModel: TerminalViewModel
 
@@ -225,11 +251,11 @@ private struct TerminalAreaSheets: ViewModifier {
                 }
             }
             .sheet(isPresented: $showExportSheet) {
-                if let session = projectContext.sessionStore.sessions
+                if let session = sessionStore.sessions
                     .first(where: { $0.id == sessionID }) {
                     ExportOptionsView(
                         session: session,
-                        chunks: outputStore.chunks,
+                        chunks: Array(outputStore.chunks),
                         isPresented: $showExportSheet
                     )
                 }

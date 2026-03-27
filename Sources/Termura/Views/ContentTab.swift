@@ -11,39 +11,39 @@ enum ContentTab: Identifiable, Hashable, Codable {
 
     var id: String {
         switch self {
-        case .terminal(let sid, _): return "terminal-\(sid)"
-        case .note(let noteID, _): return "note-\(noteID)"
-        case .diff(let path, let staged, _): return "diff-\(staged ? "staged" : "wt")-\(path)"
-        case .file(let path, _): return "file-\(path)"
-        case .preview(let path, _): return "preview-\(path)"
+        case let .terminal(sid, _): "terminal-\(sid)"
+        case let .note(noteID, _): "note-\(noteID)"
+        case let .diff(path, staged, _): "diff-\(staged ? "staged" : "wt")-\(path)"
+        case let .file(path, _): "file-\(path)"
+        case let .preview(path, _): "preview-\(path)"
         }
     }
 
     var title: String {
         switch self {
-        case .terminal(_, let name): return name.isEmpty ? "Terminal" : name
-        case .note(_, let name): return name.isEmpty ? "Untitled" : name
-        case .diff(let path, _, _): return URL(fileURLWithPath: path).lastPathComponent
-        case .file(_, let name): return name
-        case .preview(_, let name): return name
+        case let .terminal(_, name): name.isEmpty ? "Terminal" : name
+        case let .note(_, name): name.isEmpty ? "Untitled" : name
+        case let .diff(path, _, _): URL(fileURLWithPath: path).lastPathComponent
+        case let .file(_, name): name
+        case let .preview(_, name): name
         }
     }
 
     var icon: String {
         switch self {
-        case .terminal: return "terminal"
-        case .note: return "doc.text"
-        case .diff: return "doc.text.magnifyingglass"
-        case .file: return "doc.text"
-        case .preview: return "eye"
+        case .terminal: "terminal"
+        case .note: "doc.text"
+        case .diff: "doc.text.magnifyingglass"
+        case .file: "doc.text"
+        case .preview: "eye"
         }
     }
 
     /// Terminal tabs are managed via the sidebar — not closable from the tab bar.
     var isClosable: Bool {
         switch self {
-        case .terminal: return false
-        case .note, .diff, .file, .preview: return true
+        case .terminal: false
+        case .note, .diff, .file, .preview: true
         }
     }
 
@@ -55,17 +55,17 @@ enum ContentTab: Identifiable, Hashable, Codable {
 
     /// The session ID if this is a terminal tab.
     var sessionID: SessionID? {
-        if case .terminal(let sid, _) = self { return sid }
+        if case let .terminal(sid, _) = self { return sid }
         return nil
     }
 
     /// The file path if this is a file, preview, or diff tab.
     var filePath: String? {
         switch self {
-        case .file(let path, _), .preview(let path, _), .diff(let path, _, _):
-            return path
+        case let .file(path, _), let .preview(path, _), let .diff(path, _, _):
+            path
         case .terminal, .note:
-            return nil
+            nil
         }
     }
 }

@@ -2,7 +2,9 @@ import SwiftUI
 
 /// Sidebar with Xcode-style tab bar: Sessions, Agents, Harness, Notes, Project.
 struct SidebarView: View {
-    @EnvironmentObject var projectContext: ProjectContext
+    @Environment(\.sessionScope) var sessionScope
+    @Environment(\.dataScope) var dataScope
+    @Environment(\.projectScope) var projectScope
     @Environment(\.themeManager) var themeManager
     @Environment(\.commandRouter) var commandRouter
     @Environment(\.notesViewModel) var notesViewModel
@@ -11,6 +13,12 @@ struct SidebarView: View {
     /// The currently visible content tab — used to suppress session highlight
     /// when a non-terminal tab (file, note, diff) is active.
     var activeContentTab: ContentTab?
+    /// Session ID displayed in the dual-pane secondary (right) pane, if any.
+    var splitSessionID: SessionID?
+    /// Which pane is currently focused in dual-pane mode.
+    var focusedPaneID: SessionID?
+    /// Called when a session is tapped in dual-pane mode to set as secondary.
+    var onSetSplitSession: ((SessionID) -> Void)?
     /// Called when a note title is tapped in the sidebar to open it as a content tab.
     var onOpenNote: ((NoteID, String) -> Void)?
     /// Called when a project file is tapped to open in a content tab.
@@ -18,9 +26,12 @@ struct SidebarView: View {
 
     // MARK: - Convenience
 
-    var sessionStore: SessionStore { projectContext.sessionStore }
+    var sessionStore: SessionStore { sessionScope.store }
 
     @State private var selectedTab: SidebarTab = .sessions
+    /// Incremented to force re-render when agent states change (ObservableObject nested
+    /// inside non-observable SessionScope breaks SwiftUI's automatic observation).
+    @State var agentStateVersion: UInt = 0
 
     var body: some View {
         VStack(spacing: 0) {

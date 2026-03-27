@@ -143,7 +143,7 @@ final class LineNumberRulerView: NSRulerView {
         guard len > 0 else { return [] }
         var lookup = [Int](repeating: 1, count: len)
         var line = 1
-        for i in 0..<len {
+        for i in 0 ..< len {
             lookup[i] = line
             if text.character(at: i) == 0x0A { line += 1 }
         }

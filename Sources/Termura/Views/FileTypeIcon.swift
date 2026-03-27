@@ -6,7 +6,6 @@ import SwiftUI
 /// Icons are bundled as template images and render in `.secondary` monochrome.
 /// Source: https://github.com/catppuccin/vscode-icons (MIT License)
 enum FileTypeIcon {
-
     /// Returns a SwiftUI `Image` for the given filename, sized for the file tree.
     static func image(for filename: String) -> Image {
         let asset = assetName(for: filename)

@@ -3,10 +3,10 @@ import SwiftUI
 extension MainView {
     var searchSheet: some View {
         SearchView(
-            searchService: projectContext.searchService,
+            searchService: dataScope.searchService,
             isPresented: router.showSearch,
             onSelectSession: { id in sessionStore.activateSession(id: id) },
-            vectorService: projectContext.vectorSearchService
+            vectorService: dataScope.vectorSearchService
         )
     }
 
@@ -36,7 +36,7 @@ extension MainView {
     var harnessSheet: some View {
         let projectRoot = activeSessionWorkingDirectory
         let vm = HarnessViewModel(
-            repository: projectContext.ruleFileRepository,
+            repository: dataScope.ruleFileRepository,
             projectRoot: projectRoot
         )
         HarnessSidebarView(viewModel: vm, isPresented: router.showHarness)
@@ -62,7 +62,7 @@ extension MainView {
                 branchSession: session,
                 chunks: [],
                 onMerge: { summary in
-                    let msgRepo = projectContext.sessionMessageRepository
+                    let msgRepo = dataScope.sessionMessageRepository
                     Task {
                         await sessionStore.mergeBranchSummary(
                             branchID: activeID,

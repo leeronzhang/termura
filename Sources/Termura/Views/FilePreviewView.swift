@@ -109,7 +109,8 @@ struct ImagePreviewView: NSViewRepresentable {
     let zoom: CGFloat
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = CenteringScrollView()
+        let scrollView = NSScrollView()
+        scrollView.contentView = CenteringClipView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
@@ -155,36 +156,25 @@ struct ImagePreviewView: NSViewRepresentable {
     }
 }
 
-// MARK: - Centering Scroll View
+// MARK: - Centering Clip View
 
-/// NSScrollView subclass that centers its document view when smaller than the clip bounds.
-final class CenteringScrollView: NSScrollView {
-    override func tile() {
-        super.tile()
-        centerDocumentView()
-    }
+/// NSClipView subclass that centers the document view when it is smaller than the visible area.
+/// Uses `constrainBoundsRect` — the idiomatic AppKit approach that cooperates with
+/// NSScrollView's internal scroll management instead of fighting it via `setFrameOrigin`.
+final class CenteringClipView: NSClipView {
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var rect = super.constrainBoundsRect(proposedBounds)
+        guard let docView = documentView else { return rect }
 
-    override func layout() {
-        super.layout()
-        centerDocumentView()
-    }
-
-    private func centerDocumentView() {
-        guard let docView = documentView else { return }
-        let clipSize = contentView.bounds.size
-        let docSize = docView.frame.size
-
-        var origin = CGPoint.zero
-        if docSize.width < clipSize.width {
-            origin.x = (clipSize.width - docSize.width) / 2
+        let docFrame = docView.frame
+        if rect.width > docFrame.width {
+            rect.origin.x = (docFrame.width - rect.width) / 2
         }
-        if docSize.height < clipSize.height {
-            origin.y = (clipSize.height - docSize.height) / 2
+        if rect.height > docFrame.height {
+            rect.origin.y = (docFrame.height - rect.height) / 2
         }
 
-        if docView.frame.origin != origin {
-            docView.setFrameOrigin(origin)
-        }
+        return rect
     }
 }
 

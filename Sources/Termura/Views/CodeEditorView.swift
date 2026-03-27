@@ -85,9 +85,9 @@ struct CodeEditorView: View {
             Result { try String(contentsOfFile: path, encoding: .utf8) }
         }.value
         switch result {
-        case .success(let text):
+        case let .success(text):
             content = text
-        case .failure(let error):
+        case let .failure(error):
             logger.warning("Failed to read \(path): \(error.localizedDescription)")
             errorMessage = "Cannot read file"
         }

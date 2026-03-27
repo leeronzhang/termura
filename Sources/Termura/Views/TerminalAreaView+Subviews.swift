@@ -26,7 +26,9 @@ extension TerminalAreaView {
 
             Spacer()
 
-            toolbarButtons
+            if !hideToolbarButtons {
+                toolbarButtons
+            }
         }
         .frame(height: AppConfig.UI.projectPathBarHeight)
         .padding(.horizontal, AppUI.Spacing.xxl)
@@ -68,7 +70,19 @@ extension TerminalAreaView {
         .buttonStyle(.plain)
         .help("Composer (Cmd+K)")
 
-        Spacer().frame(width: AppUI.Spacing.lg)
+        Spacer().frame(width: AppUI.Spacing.xxl)
+
+        Button {
+            commandRouter.toggleDualPane()
+        } label: {
+            Image(systemName: "rectangle.split.2x1")
+                .font(AppUI.Font.toolbarIcon)
+                .foregroundColor(commandRouter.isDualPaneActive ? .accentColor : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help(commandRouter.isDualPaneActive ? "Exit Split View" : "Split View")
+
+        Spacer().frame(width: AppUI.Spacing.xxl)
 
         Button {
             withAnimation { showMetadata.toggle() }
@@ -138,7 +152,7 @@ extension TerminalAreaView {
                 .padding(.horizontal, AppUI.Spacing.xxl)
                 .background(themeManager.current.background)
 
-                if commandRouter.showComposer {
+                if commandRouter.showComposer && isFocusedPane {
                     // Backdrop — dismiss handled by NSEvent mouse monitor in TerminalAreaView.
                     themeManager.current.background.opacity(AppUI.Opacity.strong)
                         .transition(.opacity.animation(.easeOut(duration: AppUI.Animation.fadeOut)))
@@ -151,7 +165,7 @@ extension TerminalAreaView {
                     )
                     .transition(
                         .move(edge: .bottom)
-                        .animation(.spring(response: 0.35, dampingFraction: 0.85))
+                            .animation(.spring(response: 0.35, dampingFraction: 0.85))
                     )
                 }
             }
@@ -159,7 +173,6 @@ extension TerminalAreaView {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(themeManager.current.background)
     }
-
 }
 
 extension String {

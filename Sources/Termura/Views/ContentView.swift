@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Thin wrapper — bridges ProjectContext into the SwiftUI environment.
-/// ProjectContext remains @EnvironmentObject (no meaningful default possible).
-/// ThemeManager, CommandRouter, NotesViewModel, FontSettings use type-safe @Environment keys.
+/// Thin wrapper — bridges ProjectContext scopes into the SwiftUI environment.
+/// Individual feature scopes replace the former monolithic @EnvironmentObject,
+/// enforcing least-privilege: each view declares only the scopes it needs.
 struct ContentView: View {
     let projectContext: ProjectContext
     let themeManager: ThemeManager
@@ -10,7 +10,10 @@ struct ContentView: View {
 
     var body: some View {
         MainView()
-            .environmentObject(projectContext)
+            .environment(\.sessionScope, projectContext.sessionScope)
+            .environment(\.dataScope, projectContext.dataScope)
+            .environment(\.projectScope, projectContext.projectScope)
+            .environment(\.viewStateManager, projectContext.viewStateManager)
             .environment(\.commandRouter, projectContext.commandRouter)
             .environment(\.notesViewModel, projectContext.notesViewModel)
             .environment(\.themeManager, themeManager)

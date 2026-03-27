@@ -43,8 +43,9 @@ final class TerminalViewModel: ObservableObject {
     private var shellTask: Task<Void, Never>?
     /// Debounced re-check for prompt detection after PTY output settles.
     var promptRecheckTask: Task<Void, Never>?
-    /// Tracks detached background tasks for cancellation in deinit.
-    private var pendingTasks: [Task<Void, Never>] = []
+    /// Bounded executor for background tasks — limits concurrent execution
+    /// and auto-cleans completed tasks to prevent unbounded accumulation.
+    private let taskExecutor: BoundedTaskExecutor
     /// Context injection task — stored separately because it uses a sleep delay.
     private var injectionTask: Task<Void, Never>?
 
@@ -86,6 +87,7 @@ final class TerminalViewModel: ObservableObject {
         self.contextInjectionService = contextInjectionService
         self.sessionHandoffService = sessionHandoffService
         self.clock = clock
+        taskExecutor = BoundedTaskExecutor(maxConcurrent: AppConfig.Runtime.maxConcurrentSessionTasks)
         chunkDetector = ChunkDetector(sessionID: sessionID)
         fallbackDetector = FallbackChunkDetector(sessionID: sessionID)
         agentDetector = AgentStateDetector(sessionID: sessionID)
@@ -102,32 +104,27 @@ final class TerminalViewModel: ObservableObject {
         subscribeToShellEvents()
     }
 
+    // Safe: SE-0371 allows deinit to access stored properties (exclusive ownership).
     deinit {
         streamTask?.cancel()
         shellTask?.cancel()
         promptRecheckTask?.cancel()
         injectionTask?.cancel()
-        for task in pendingTasks { task.cancel() }
-        pendingTasks.removeAll()
+        // taskExecutor cancels all tracked tasks in its own deinit.
     }
 
-    /// Spawns a background task inheriting the current actor context and tracks it
-    /// for cancellation in deinit. Use for fire-and-forget work that accesses
-    /// non-Sendable dependencies (engine, sessionStore).
+    /// Spawns a background task inheriting the current actor context with bounded concurrency.
+    /// Use for fire-and-forget work that accesses non-Sendable dependencies (engine, sessionStore).
     func spawnTracked(_ operation: @escaping @MainActor () async -> Void) {
-        pendingTasks.removeAll { $0.isCancelled }
-        let task = Task { @MainActor in await operation() }
-        pendingTasks.append(task)
+        taskExecutor.spawn(operation)
     }
 
-    /// Spawns a detached background task and tracks it for cancellation in deinit.
+    /// Spawns a detached background task with bounded concurrency.
     /// Use for heavy processing that must run off MainActor.
     func spawnDetachedTracked(
         _ operation: @Sendable @escaping () async -> Void
     ) {
-        pendingTasks.removeAll { $0.isCancelled }
-        let task = Task.detached(operation: operation)
-        pendingTasks.append(task)
+        taskExecutor.spawnDetached(operation)
     }
 
     // MARK: - Public
@@ -142,15 +139,20 @@ final class TerminalViewModel: ObservableObject {
         }
     }
 
-    /// Detect agent type from a submitted command and update session title if matched.
+    /// Detect agent type from a submitted command and update session/agent state if matched.
     func detectAgentFromCommand(_ command: String) {
         let detector = agentDetector
         let store = sessionStore
         let sid = sessionID
+        let stateStore = agentStateStore
         spawnTracked {
             guard let agentType = await detector.detectFromCommand(command) else { return }
-            await MainActor.run {
-                store.renameSession(id: sid, title: agentType.displayName)
+            let agentState = await detector.buildState()
+            // Already on MainActor via spawnTracked — no need for MainActor.run.
+            store.renameSession(id: sid, title: agentType.displayName)
+            store.setAgentType(id: sid, type: agentType)
+            if let state = agentState {
+                stateStore?.update(state: state)
             }
         }
     }
@@ -183,9 +185,7 @@ final class TerminalViewModel: ObservableObject {
             await generateHandoffIfNeeded(exitCode: code)
 
         case let .titleChanged(title):
-            if !hasDetectedAgentFromOutput {
-                sessionStore.renameSession(id: sessionID, title: Self.stripAgentPrefixes(title))
-            }
+            sessionStore.renameSession(id: sessionID, title: title)
 
         case let .workingDirectoryChanged(path):
             sessionStore.updateWorkingDirectory(id: sessionID, path: path)

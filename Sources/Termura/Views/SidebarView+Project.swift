@@ -10,7 +10,7 @@ extension SidebarView {
             : sessionStore.projectRoot
         if !root.isEmpty {
             SidebarProjectContent(
-                viewModel: projectContext.projectViewModel,
+                viewModel: projectScope.viewModel,
                 activeFilePath: activeContentTab?.filePath,
                 onOpenFile: onOpenFile
             )

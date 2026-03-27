@@ -30,10 +30,15 @@ extension SidebarView {
 
     func notesList(vm: NotesViewModel) -> some View {
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: AppUI.Spacing.xxs) {
                 ForEach(vm.notes) { note in
                     noteRow(note: note, isActive: vm.selectedNoteID == note.id)
                         .contextMenu {
+                            Button {
+                                vm.toggleFavorite(id: note.id)
+                            } label: {
+                                Text(note.isFavorite ? "Unfavorite" : "Favorite")
+                            }
                             Button("Delete", role: .destructive) {
                                 vm.deleteNote(id: note.id)
                             }
@@ -48,17 +53,35 @@ extension SidebarView {
         Button {
             onOpenNote?(note.id, note.title)
         } label: {
-            HStack(spacing: AppUI.Spacing.md) {
+            HStack(alignment: .top, spacing: AppUI.Spacing.md) {
                 FileTypeIcon.image(for: "note.md")
                     .resizable()
                     .scaledToFit()
                     .frame(width: AppUI.Size.fileTypeIcon, height: AppUI.Size.fileTypeIcon)
                     .foregroundColor(.secondary)
-                Text(note.title.isEmpty ? "Untitled" : note.title)
-                    .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
-                    .foregroundColor(isActive ? .primary : .secondary)
-                    .lineLimit(1)
-                Spacer()
+                    .padding(.top, AppUI.Spacing.xxs)
+
+                VStack(alignment: .leading, spacing: AppUI.Spacing.xxs) {
+                    HStack(spacing: AppUI.Spacing.smMd) {
+                        Text(note.title.isEmpty ? "Untitled" : note.title)
+                            .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
+                            .foregroundColor(isActive ? .primary : .secondary)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(sidebarFormattedDate(note.updatedAt))
+                            .font(AppUI.Font.micro)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if let preview = sidebarNotePreview(note.body) {
+                        Text(preview)
+                            .font(AppUI.Font.caption)
+                            .foregroundColor(.secondary.opacity(AppUI.Opacity.secondary))
+                            .lineLimit(1)
+                    }
+                }
+
+                favoriteButton(note: note)
             }
             .padding(.horizontal, AppUI.Spacing.lg)
             .padding(.vertical, AppUI.Spacing.smMd)
@@ -74,5 +97,46 @@ extension SidebarView {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Private Helpers
+
+    private func favoriteButton(note: NoteRecord) -> some View {
+        Button {
+            notesViewModel.toggleFavorite(id: note.id)
+        } label: {
+            Image(systemName: note.isFavorite ? "star.fill" : "star")
+                .font(.system(size: 11))
+                .foregroundColor(
+                    note.isFavorite
+                        ? .yellow
+                        : .secondary.opacity(AppUI.Opacity.tertiary)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(note.isFavorite ? "Remove from favorites" : "Add to favorites")
+    }
+
+    private func sidebarNotePreview(_ body: String) -> String? {
+        let line = body.components(separatedBy: .newlines)
+            .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard let line, !line.isEmpty else { return nil }
+        let limit = AppConfig.Search.previewLength
+        return line.count > limit ? String(line.prefix(limit)) + "..." : line
+    }
+
+    private func sidebarFormattedDate(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            return formatter.string(from: date)
+        } else if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMM d"
+            return formatter.string(from: date)
+        }
     }
 }

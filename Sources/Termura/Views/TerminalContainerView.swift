@@ -19,10 +19,14 @@ struct TerminalContainerView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = engine.terminalNSView
+        view.autoresizingMask = [.width, .height]
         if let termView = view as? LocalProcessTerminalView {
             applyTheme(theme, to: termView)
         }
         hideScroller(in: view)
+        // Register for file drops — handled via Coordinator.
+        view.registerForDraggedTypes([.fileURL, .URL])
+        context.coordinator.terminalNSView = view
         return view
     }
 
@@ -62,13 +66,39 @@ struct TerminalContainerView: NSViewRepresentable {
 // MARK: - Coordinator
 
 extension TerminalContainerView {
-    /// @MainActor coordinator: handles resize and keyboard routing.
+    /// @MainActor coordinator: handles drag-and-drop on the terminal NSView.
     @MainActor
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, NSDraggingDestination {
         private let viewModel: TerminalViewModel
+        /// Set by makeNSView so the coordinator can forward drag events.
+        weak var terminalNSView: NSView?
 
         init(viewModel: TerminalViewModel) {
             self.viewModel = viewModel
+        }
+
+        // MARK: - NSDraggingDestination
+
+        func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+            guard sender.draggingPasteboard.canReadObject(
+                forClasses: [NSURL.self],
+                options: [.urlReadingFileURLsOnly: true]
+            ) else {
+                return []
+            }
+            return .copy
+        }
+
+        func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+            guard let urls = sender.draggingPasteboard.readObjects(
+                forClasses: [NSURL.self],
+                options: [.urlReadingFileURLsOnly: true]
+            ) as? [URL], !urls.isEmpty else {
+                return false
+            }
+            let paths = urls.map(\.path.shellEscaped).joined(separator: " ")
+            viewModel.send(paths)
+            return true
         }
     }
 }

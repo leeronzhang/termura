@@ -10,9 +10,9 @@ struct ContextFileView: View {
     @State private var isSaving = false
 
     private var contextFilePath: String {
-        (projectRoot as NSString)
+        URL(fileURLWithPath: projectRoot)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
-            .appending("/\(AppConfig.SessionHandoff.contextFileName)")
+            .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
     }
 
     var body: some View {
@@ -98,8 +98,8 @@ struct ContextFileView: View {
 
     private func saveFile() {
         isSaving = true
-        let dirPath = (projectRoot as NSString)
-            .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
+        let dirPath = URL(fileURLWithPath: projectRoot)
+            .appendingPathComponent(AppConfig.SessionHandoff.directoryName).path
         let filePath = contextFilePath
         let text = content
         // Lifecycle: user-initiated save — Task completes quickly (file I/O);
@@ -108,7 +108,8 @@ struct ContextFileView: View {
             do {
                 if !FileManager.default.fileExists(atPath: dirPath) {
                     try FileManager.default.createDirectory(
-                        atPath: dirPath, withIntermediateDirectories: true)
+                        atPath: dirPath, withIntermediateDirectories: true
+                    )
                 }
                 try text.write(toFile: filePath, atomically: true, encoding: .utf8)
                 await MainActor.run {

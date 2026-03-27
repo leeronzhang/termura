@@ -9,6 +9,13 @@ extension SidebarView {
             sessionsHeader
             sessionList
         }
+        // AgentStateStore is ObservableObject but nested inside non-observable SessionScope.
+        // Explicitly subscribe and bump @State version to force re-renders when agent status changes.
+        // NOTE: Do NOT use .id(agentStateVersion) here — it destroys/recreates the view,
+        // which re-subscribes to the publisher, which fires immediately, creating an infinite loop.
+        .onReceive(sessionScope.agentStates.$agents) { _ in
+            agentStateVersion &+= 1
+        }
     }
 
     private var sessionsHeader: some View {
@@ -72,7 +79,7 @@ extension SidebarView {
         toggleExpand: (() -> Void)? = nil,
         isExpanded: Bool = true
     ) -> some View {
-        let agentState = projectContext.agentStateStore.agents[session.id]
+        let agentState = sessionScope.agentStates.agents[session.id]
         let tokens: String? = {
             guard let tokenTotal = agentState?.tokenCount, tokenTotal > 0 else { return nil }
             return MetadataFormatter.formatTokenCount(tokenTotal)
@@ -83,17 +90,33 @@ extension SidebarView {
             guard elapsed > 0 else { return nil }
             return MetadataFormatter.formatDuration(elapsed)
         }()
+        let isPrimary = sessionStore.activeSessionID == session.id
+            && activeContentTab?.sessionID == session.id
+        let isSecondary = splitSessionID == session.id
+        let isDualPaneMode = splitSessionID != nil
+        let isFocused = focusedPaneID == session.id
+        let activeState: Bool
+        let splitState: Bool
+        if isDualPaneMode {
+            // Dual pane: focused pane is "active", other pane is "in split"
+            activeState = (isPrimary || isSecondary) && isFocused
+            splitState = (isPrimary || isSecondary) && !isFocused
+        } else {
+            // Single pane: original behavior
+            activeState = isPrimary
+            splitState = false
+        }
         return SessionRowView(
             session: session,
-            isActive: sessionStore.activeSessionID == session.id
-                && activeContentTab?.sessionID == session.id,
+            isActive: activeState,
+            isInSplit: splitState,
             hasUnreadFailure: false,
             agentStatus: agentState?.status,
             agentType: agentState?.agentType ?? session.agentType,
             tokenSummary: tokens,
             durationText: duration,
             currentTaskSnippet: agentState?.currentTask,
-            onActivate: { sessionStore.activateSession(id: session.id) },
+            onActivate: { activateOrSplit(session: session) },
             onRename: { sessionStore.renameSession(id: session.id, title: $0) },
             onClose: { sessionStore.closeSession(id: session.id) },
             onToggleExpand: toggleExpand,
@@ -146,6 +169,16 @@ extension SidebarView {
         }
     }
 
+    /// In dual-pane mode, clicking a non-primary session opens it in the right pane.
+    /// In single-pane mode, activates the session normally.
+    private func activateOrSplit(session: SessionRecord) {
+        if splitSessionID != nil, session.id != sessionStore.activeSessionID {
+            onSetSplitSession?(session.id)
+        } else {
+            sessionStore.activateSession(id: session.id)
+        }
+    }
+
     var sessionFooter: some View {
         HStack {
             Spacer()
@@ -174,7 +207,7 @@ extension SidebarView {
             uniqueKeysWithValues: sessionStore.sessions.map { ($0.id, $0.title) }
         )
         AgentDashboardView(
-            agentStore: projectContext.agentStateStore,
+            agentStore: sessionScope.agentStates,
             sessionTitles: titles
         ) { sid in
             sessionStore.activateSession(id: sid)

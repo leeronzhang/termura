@@ -12,31 +12,31 @@ enum SidebarTab: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .sessions: return "terminal"
-        case .agents: return "poweroutlet.type.f"
-        case .notes: return "text.rectangle"
-        case .harness: return "pano"
-        case .project: return "folder"
+        case .sessions: "terminal"
+        case .agents: "poweroutlet.type.f"
+        case .notes: "text.rectangle"
+        case .harness: "pano"
+        case .project: "folder"
         }
     }
 
     var activeIcon: String {
         switch self {
-        case .sessions: return "terminal.fill"
-        case .agents: return "poweroutlet.type.f.fill"
-        case .notes: return "text.rectangle.fill"
-        case .harness: return "pano.fill"
-        case .project: return "folder.fill"
+        case .sessions: "terminal.fill"
+        case .agents: "poweroutlet.type.f.fill"
+        case .notes: "text.rectangle.fill"
+        case .harness: "pano.fill"
+        case .project: "folder.fill"
         }
     }
 
     var label: String {
         switch self {
-        case .sessions: return "Sessions"
-        case .agents: return "Agents"
-        case .notes: return "Notes"
-        case .harness: return "Harness"
-        case .project: return "Project"
+        case .sessions: "Sessions"
+        case .agents: "Agents"
+        case .notes: "Notes"
+        case .harness: "Harness"
+        case .project: "Project"
         }
     }
 }

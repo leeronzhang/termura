@@ -8,7 +8,7 @@ extension SidebarView {
     var harnessContent: some View {
         let projectRoot = activeSessionWorkingDirectory
         SidebarHarnessContent(
-            repository: projectContext.ruleFileRepository,
+            repository: dataScope.ruleFileRepository,
             projectRoot: projectRoot,
             onOpenFile: onOpenFile
         )

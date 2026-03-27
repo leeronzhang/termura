@@ -11,7 +11,7 @@ struct FlatTreeItem: Identifiable {
 
 // MARK: - Flatten helper
 
-extension Array where Element == FileTreeNode {
+extension [FileTreeNode] {
     /// Walk the tree and return only nodes that are currently visible
     /// (i.e. all ancestors are expanded). Each item carries its depth.
     func flattenVisible(expandedIDs: Set<String>) -> [FlatTreeItem] {
@@ -171,5 +171,4 @@ struct FileTreeRowView: View {
         case .renamed, .copied: .blue
         }
     }
-
 }

@@ -2,7 +2,10 @@ import SwiftUI
 
 /// Root layout: horizontal split between sidebar and terminal area.
 struct MainView: View {
-    @EnvironmentObject var projectContext: ProjectContext
+    @Environment(\.sessionScope) var sessionScope
+    @Environment(\.dataScope) var dataScope
+    @Environment(\.projectScope) var projectScope
+    @Environment(\.viewStateManager) var viewStateManager
     @Environment(\.themeManager) var themeManager
     @Environment(\.commandRouter) var commandRouter
     @Environment(\.notesViewModel) var notesViewModel
@@ -14,6 +17,10 @@ struct MainView: View {
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
     @State var showCloseSessionConfirm = false
     @State var splitRoot: SplitNode?
+    /// Session ID shown in the right pane of dual-pane mode. Nil = single pane.
+    @State var splitSessionID: SessionID?
+    /// Which pane is focused/active in dual-pane mode (for metadata display + sidebar highlight).
+    @State var focusedPaneID: SessionID?
     /// Non-terminal tabs (files, notes, diffs). Terminal tabs are derived from sessions.
     @State var openTabs: [ContentTab] = []
     @State var selectedContentTab: ContentTab?
@@ -21,8 +28,8 @@ struct MainView: View {
 
     // MARK: - Convenience accessors
 
-    var sessionStore: SessionStore { projectContext.sessionStore }
-    var engineStore: TerminalEngineStore { projectContext.engineStore }
+    var sessionStore: SessionStore { sessionScope.store }
+    var engineStore: TerminalEngineStore { sessionScope.engines }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -43,6 +50,21 @@ struct MainView: View {
             case .vertical: performSplit(axis: .vertical)
             case .horizontal: performSplit(axis: .horizontal)
             case .closePane: performCloseSplitPane()
+            }
+        }
+        .onChange(of: commandRouter.dualPaneToggleTick) { _, _ in
+            toggleDualPane()
+        }
+        .onChange(of: commandRouter.focusedDualPaneID) { _, newID in
+            guard let newID, splitSessionID != nil else { return }
+            focusedPaneID = newID
+        }
+        .onChange(of: sessionStore.sessions.count) { _, _ in
+            // Clear split if the secondary session was closed.
+            if let splitID = splitSessionID,
+               !sessionStore.sessions.contains(where: { $0.id == splitID }) {
+                splitSessionID = nil
+                commandRouter.isDualPaneActive = false
             }
         }
         .onChange(of: commandRouter.exportSessionID) { _, newID in
@@ -79,6 +101,9 @@ struct MainView: View {
             SidebarView(
                 isFullScreen: isFullScreen,
                 activeContentTab: resolvedSelectedTab,
+                splitSessionID: splitSessionID,
+                focusedPaneID: focusedPaneID,
+                onSetSplitSession: { setDualPaneSecondary(id: $0) },
                 onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) },
                 onOpenFile: { path, mode in openProjectFile(relativePath: path, mode: mode) }
             )

@@ -55,28 +55,28 @@ extension MainView {
     @ViewBuilder
     var selectedContentView: some View {
         switch resolvedSelectedTab {
-        case .terminal(let sessionID, _):
+        case let .terminal(sessionID, _):
             terminalView(for: sessionID)
                 .id(sessionID)
-        case .note(let noteID, _):
+        case let .note(noteID, _):
             noteEditorView(noteID: noteID)
                 .id(noteID)
-        case .diff(let path, let staged, let untracked):
+        case let .diff(path, staged, untracked):
             DiffContentView(
                 filePath: path,
                 isStaged: staged,
                 isUntracked: untracked,
-                gitService: projectContext.gitService,
+                gitService: projectScope.gitService,
                 projectRoot: activeProjectRoot
             )
             .id(resolvedSelectedTab.id)
-        case .file(let path, _):
+        case let .file(path, _):
             CodeEditorView(
                 filePath: path,
                 projectRoot: activeProjectRoot
             )
             .id(path)
-        case .preview(let path, _):
+        case let .preview(path, _):
             FilePreviewView(
                 filePath: path,
                 projectRoot: activeProjectRoot
@@ -106,8 +106,10 @@ extension MainView {
                 ),
                 renderLeaf: { id in AnyView(renderLeaf(sessionID: id)) }
             )
+        } else if let secondaryID = splitSessionID {
+            dualPaneView(primaryID: sessionID, secondaryID: secondaryID)
         } else if let engine = engineStore.engine(for: sessionID) {
-            let state = projectContext.viewState(for: sessionID, engine: engine)
+            let state = viewStateManager.viewState(for: sessionID, engine: engine)
             TerminalAreaView(
                 engine: engine,
                 sessionID: sessionID,
@@ -118,14 +120,92 @@ extension MainView {
         }
     }
 
+    @ViewBuilder
+    private func dualPaneView(primaryID: SessionID, secondaryID: SessionID) -> some View {
+        let focused = focusedPaneID ?? primaryID
+        HStack(spacing: 0) {
+            dualPaneTerminal(
+                sessionID: primaryID, isFocused: focused == primaryID, hideButtons: true
+            )
+
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .frame(width: 1)
+
+            dualPaneTerminal(
+                sessionID: secondaryID, isFocused: focused == secondaryID, hideButtons: false
+            )
+
+            dualPaneMetadata(focusedID: focused)
+        }
+        .onAppear {
+            focusedPaneID = primaryID
+            commandRouter.focusedDualPaneID = primaryID
+        }
+    }
+
+    @ViewBuilder
+    private func dualPaneTerminal(sessionID: SessionID, isFocused: Bool, hideButtons: Bool) -> some View {
+        if let engine = engineStore.engine(for: sessionID) {
+            let state = viewStateManager.viewState(for: sessionID, engine: engine)
+            TerminalAreaView(
+                engine: engine,
+                sessionID: sessionID,
+                forceHideMetadata: true,
+                isFocusedPane: isFocused,
+                hideToolbarButtons: hideButtons,
+                state: state
+            )
+            .id(sessionID)
+            .overlay(alignment: .top) {
+                if isFocused {
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(height: 2)
+                }
+            }
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        focusedPaneID = sessionID
+                        commandRouter.focusedDualPaneID = sessionID
+                    }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dualPaneMetadata(focusedID: SessionID) -> some View {
+        if let engine = engineStore.engine(for: focusedID) {
+            let state = viewStateManager.viewState(for: focusedID, engine: engine)
+            ResizableDivider(
+                width: .constant(AppConfig.UI.metadataPanelWidth),
+                minWidth: AppConfig.UI.metadataPanelMinWidth,
+                maxWidth: AppConfig.UI.metadataPanelMaxWidth,
+                dragFactor: -1.0
+            )
+            SessionMetadataBarView(
+                metadata: state.viewModel.currentMetadata,
+                timeline: state.timeline,
+                onSelectChunkID: { _ in }
+            )
+            .frame(width: AppConfig.UI.metadataPanelWidth)
+        }
+    }
+
     func noteEditorView(noteID: NoteID) -> some View {
         VStack(spacing: 0) {
-            TextField("Title", text: notes.editingTitle)
-                .font(AppUI.Font.title1Semibold)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, AppUI.Spacing.xl)
-                .padding(.top, AppUI.Spacing.xl)
-                .padding(.bottom, AppUI.Spacing.md)
+            HStack(spacing: AppUI.Spacing.md) {
+                TextField("Title", text: notes.editingTitle)
+                    .font(AppUI.Font.title1Semibold)
+                    .textFieldStyle(.plain)
+                Spacer()
+                noteFavoriteButton(noteID: noteID)
+            }
+            .padding(.horizontal, AppUI.Spacing.xl)
+            .padding(.top, AppUI.Spacing.xl)
+            .padding(.bottom, AppUI.Spacing.md)
             Divider()
             NoteEditorView(
                 title: notesViewModel.editingTitle,
@@ -136,10 +216,23 @@ extension MainView {
         .onAppear { notesViewModel.selectNote(id: noteID) }
     }
 
+    private func noteFavoriteButton(noteID: NoteID) -> some View {
+        let isFav = notesViewModel.selectedNote?.isFavorite ?? false
+        return Button {
+            notesViewModel.toggleFavorite(id: noteID)
+        } label: {
+            Image(systemName: isFav ? "star.fill" : "star")
+                .font(AppUI.Font.body)
+                .foregroundColor(isFav ? .yellow : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help(isFav ? "Remove from favorites" : "Add to favorites")
+    }
+
     @ViewBuilder
     func renderLeaf(sessionID: SessionID) -> some View {
         if let engine = engineStore.engine(for: sessionID) {
-            let state = projectContext.viewState(for: sessionID, engine: engine)
+            let state = viewStateManager.viewState(for: sessionID, engine: engine)
             TerminalAreaView(
                 engine: engine,
                 sessionID: sessionID,

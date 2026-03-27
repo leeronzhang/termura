@@ -128,7 +128,7 @@ final class SaveableTextView: NSTextView {
                     maxLineHeight = max(maxLineHeight, lineRect.height)
                     let top = lineRect.origin.y + origin.y
                     let bottom = lineRect.maxY + origin.y
-                    for lv in 0..<level {
+                    for lv in 0 ..< level {
                         var segs = levelSegments[lv, default: []]
                         if var last = segs.last, (top - last.maxY) < maxLineHeight * 2 {
                             last.maxY = bottom
