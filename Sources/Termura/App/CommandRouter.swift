@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Observation
 import OSLog
@@ -45,6 +46,18 @@ final class CommandRouter {
     var toggleTimelineTick: UInt = 0
     var toggleAgentDashboardTick: UInt = 0
     var showComposer: Bool = false
+
+    /// Closure injected by TerminalAreaView to insert text into the active Composer editor.
+    /// Non-nil only while the Composer is open; cleared on dismiss.
+    var composerInsertHandler: ((String) -> Void)?
+
+    /// True while the composer notes toggle is active (sidebar is showing notes via the button).
+    var isComposerNotesActive = false
+
+    /// Combine signal: sidebar notes toggle (stable reference for `.onReceive`).
+    let composerNotesToggled = PassthroughSubject<Bool, Never>() // swiftlint:disable:this private_subject
+    /// Combine signal: composer dismissed while notes was active.
+    let composerDismissed = PassthroughSubject<Void, Never>() // swiftlint:disable:this private_subject
 
     // MARK: - Data signals
 
@@ -117,8 +130,21 @@ final class CommandRouter {
     }
 
     func dismissComposer() {
+        composerInsertHandler = nil
+        let wasNotesActive = isComposerNotesActive
+        isComposerNotesActive = false
         withAnimation(.easeOut(duration: AppConfig.UI.composerDismissDuration)) {
             showComposer = false
         }
+        if wasNotesActive {
+            composerDismissed.send()
+        }
+    }
+
+    /// Toggles the sidebar Notes tab from the Composer notes button.
+    /// First click switches to Notes; second click restores the previous tab.
+    func toggleComposerNotes() {
+        isComposerNotesActive.toggle()
+        composerNotesToggled.send(isComposerNotesActive)
     }
 }

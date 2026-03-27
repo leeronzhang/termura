@@ -20,6 +20,7 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     let projectRoot: String?
     let repository: (any SessionRepositoryProtocol)?
     let clock: any AppClock
+    private let metricsCollector: (any MetricsCollectorProtocol)?
     var saveTask: Task<Void, Never>?
     /// Tracks in-flight persistence Tasks so they can be awaited during flush.
     var pendingWrites: [Task<Void, Never>] = []
@@ -29,13 +30,15 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         shell: String? = nil,
         projectRoot: String? = nil,
         repository: (any SessionRepositoryProtocol)? = nil,
-        clock: any AppClock = LiveClock()
+        clock: any AppClock = LiveClock(),
+        metricsCollector: (any MetricsCollectorProtocol)? = nil
     ) {
         self.engineStore = engineStore
         defaultShell = shell
         self.projectRoot = projectRoot
         self.repository = repository
         self.clock = clock
+        self.metricsCollector = metricsCollector
     }
 
     // MARK: - Persistence
@@ -44,7 +47,12 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         defer { hasLoadedPersistedSessions = true }
         guard let repo = repository else { return }
         do {
-            let loaded = try await repo.fetchAll()
+            var loaded = try await repo.fetchAll()
+            // Sanitize persisted titles — strip agent icon prefixes that may
+            // have been saved before the prefix list was expanded.
+            for idx in loaded.indices {
+                loaded[idx].title = AgentCoordinator.stripAgentPrefixes(loaded[idx].title)
+            }
             sessions = loaded
             restoredSessionIDs = Set(loaded.map(\.id))
             // Restore the most recently active session, falling back to the first.
@@ -85,6 +93,10 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         activeSessionID = record.id
         persistTracked { try await $0.save(record) }
         logger.info("Created session \(record.id) title=\(resolvedTitle)")
+        if let collector = metricsCollector {
+            Task { await collector.increment(.sessionCreated) }
+            Task { await collector.gauge(.activeSessions, value: Double(sessions.count)) }
+        }
         return record
     }
 
@@ -104,12 +116,23 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         if activeSessionID == id { activeSessionID = sessions.last?.id }
         persistTracked { try await $0.delete(id: id) }
         logger.info("Closed session \(id)")
+        if let collector = metricsCollector {
+            Task { await collector.increment(.sessionClosed) }
+            Task { await collector.gauge(.activeSessions, value: Double(sessions.count)) }
+        }
     }
 
     func activateSession(id: SessionID) {
+        let start = ContinuousClock.now
         guard sessions.contains(where: { $0.id == id }) else { return }
         activeSessionID = id
         ensureEngine(for: id)
+        let elapsed = ContinuousClock.now - start
+        let seconds = Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+        if let collector = metricsCollector {
+            Task { await collector.recordDuration(.sessionSwitchDuration, seconds: seconds) }
+        }
     }
 
     /// Creates a terminal engine for the session if one does not exist yet.
@@ -122,7 +145,7 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
 
     func renameSession(id: SessionID, title: String) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
-        sessions[idx].title = TerminalViewModel.stripAgentPrefixes(title)
+        sessions[idx].title = AgentCoordinator.stripAgentPrefixes(title)
         let updated = sessions[idx]
         scheduleDebounced { try await $0.save(updated) }
     }

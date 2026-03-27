@@ -8,7 +8,7 @@ final class MockTerminalEngineFactory: TerminalEngineFactory {
         self.engine = engine
     }
 
-    func makeEngine(for sessionID: SessionID, shell: String, currentDirectory: String? = nil) -> any TerminalEngine {
+    func makeEngine(for sessionID: SessionID, shell: String? = nil, currentDirectory: String? = nil) -> any TerminalEngine {
         engine
     }
 }

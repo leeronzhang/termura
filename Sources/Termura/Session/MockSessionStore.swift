@@ -15,9 +15,9 @@ final class MockSessionStore: ObservableObject, SessionStoreProtocol {
     }
 
     @discardableResult
-    func createSession(title: String = "Terminal", shell: String = "") -> SessionRecord {
+    func createSession(title: String? = nil, shell: String? = nil) -> SessionRecord {
         createCallCount += 1
-        let record = SessionRecord(title: title, orderIndex: sessions.count)
+        let record = SessionRecord(title: title ?? "Terminal", orderIndex: sessions.count)
         sessions.append(record)
         activeSessionID = record.id
         return record
@@ -84,8 +84,8 @@ final class MockSessionStore: ObservableObject, SessionStoreProtocol {
     // MARK: - Session Tree
 
     @discardableResult
-    func createBranch(from sessionID: SessionID, type: BranchType, title: String = "") async -> SessionRecord? {
-        let resolvedTitle = title.isEmpty ? "\(type.rawValue.capitalized) branch" : title
+    func createBranch(from sessionID: SessionID, type: BranchType, title: String? = nil) async -> SessionRecord? {
+        let resolvedTitle = title ?? "\(type.rawValue.capitalized) branch"
         let record = SessionRecord(title: resolvedTitle, parentID: sessionID, branchType: type)
         sessions.append(record)
         activeSessionID = record.id

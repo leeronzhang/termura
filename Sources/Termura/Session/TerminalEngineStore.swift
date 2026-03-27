@@ -18,7 +18,7 @@ final class TerminalEngineStore: ObservableObject {
 
     /// Create and store a new engine for the given session.
     @discardableResult
-    func createEngine(for sessionID: SessionID, shell: String, currentDirectory: String? = nil) -> any TerminalEngine {
+    func createEngine(for sessionID: SessionID, shell: String? = nil, currentDirectory: String? = nil) -> any TerminalEngine {
         let engine = factory.makeEngine(for: sessionID, shell: shell, currentDirectory: currentDirectory)
         engines[sessionID] = engine
         logger.info("Created engine for session \(sessionID)")

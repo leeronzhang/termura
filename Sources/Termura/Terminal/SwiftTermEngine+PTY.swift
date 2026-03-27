@@ -8,7 +8,8 @@ private let logger = Logger(subsystem: "com.termura.app", category: "SwiftTermEn
 // MARK: - PTY Lifecycle
 
 extension SwiftTermEngine {
-    func startProcess(shell: String, currentDirectory: String? = nil) {
+    func startProcess(shell: String? = nil, currentDirectory: String? = nil) {
+        let start = ContinuousClock.now
         let resolvedShell = resolveShell(shell)
         let sid = sessionID
         logger.info("Starting PTY shell=\(resolvedShell) session=\(sid) dir=\(currentDirectory ?? "~")")
@@ -19,10 +20,14 @@ extension SwiftTermEngine {
             currentDirectory: currentDirectory
         )
         isRunning = true
+        let elapsed = ContinuousClock.now - start
+        let seconds = Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+        logger.info("PTY started in \(seconds, format: .fixed(precision: 4))s session=\(sid)")
     }
 
-    private func resolveShell(_ shell: String) -> String {
-        guard shell.isEmpty else { return shell }
+    private func resolveShell(_ shell: String?) -> String {
+        if let shell, !shell.isEmpty { return shell }
         if let envShell = ProcessInfo.processInfo.environment["SHELL"], !envShell.isEmpty {
             return envShell
         }
@@ -34,7 +39,10 @@ extension SwiftTermEngine {
 
 extension SwiftTermEngine: LocalProcessTerminalViewDelegate {
     nonisolated func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {
-        // Size change is initiated by our own resize() call — no-op here
+        // SwiftTerm fires this after setFrameSize() recalculates terminal dimensions
+        // and sends SIGWINCH. Log for diagnostics; PTY resize is already handled by SwiftTerm.
+        let sid = sessionID
+        logger.debug("Terminal resized session=\(sid) cols=\(newCols) rows=\(newRows)")
     }
 
     nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {

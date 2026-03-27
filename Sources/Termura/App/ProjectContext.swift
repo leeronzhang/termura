@@ -41,6 +41,12 @@ final class ProjectContext {
     let commandRouter: CommandRouter
     /// Global service — referenced per-project for environment injection.
     let tokenCountingService: any TokenCountingServiceProtocol
+    /// Metrics collector — records counters, histograms, and gauges for observability.
+    let metricsCollector: any MetricsCollectorProtocol
+    /// Database health monitor — periodic SELECT 1 probe.
+    let dbHealthMonitor: DBHealthMonitor
+    /// Crash context — ring buffer + UserDefaults persistence.
+    let crashContext: CrashContext
     /// Per-project notes ViewModel — created here so views can share it via @EnvironmentObject.
     let notesViewModel: NotesViewModel
 
@@ -73,6 +79,9 @@ final class ProjectContext {
         gitService: any GitServiceProtocol,
         commandRouter: CommandRouter,
         tokenCountingService: any TokenCountingServiceProtocol,
+        metricsCollector: any MetricsCollectorProtocol,
+        dbHealthMonitor: DBHealthMonitor,
+        crashContext: CrashContext,
         notesViewModel: NotesViewModel,
         projectViewModel: ProjectViewModel
     ) {
@@ -98,6 +107,9 @@ final class ProjectContext {
         self.gitService = gitService
         self.commandRouter = commandRouter
         self.tokenCountingService = tokenCountingService
+        self.metricsCollector = metricsCollector
+        self.dbHealthMonitor = dbHealthMonitor
+        self.crashContext = crashContext
         self.notesViewModel = notesViewModel
         self.projectViewModel = projectViewModel
     }
@@ -131,7 +143,8 @@ final class ProjectContext {
         tokenCountingService: tokenCountingService,
         agentStateStore: agentStateStore,
         contextInjectionService: contextInjectionService,
-        sessionHandoffService: sessionHandoffService
+        sessionHandoffService: sessionHandoffService,
+        metricsCollector: metricsCollector
     )
 
     // MARK: - Factory
@@ -140,11 +153,19 @@ final class ProjectContext {
     static func open(
         at projectURL: URL,
         engineFactory: any TerminalEngineFactory,
-        tokenCountingService: any TokenCountingServiceProtocol
+        tokenCountingService: any TokenCountingServiceProtocol,
+        metricsCollector: (any MetricsCollectorProtocol)? = nil
     ) throws -> ProjectContext {
-        let db = try DatabaseService(pool: DatabaseService.makePool(at: projectURL))
+        let fallbackMetrics: any MetricsCollectorProtocol = metricsCollector ?? MetricsCollector()
+        let db = try DatabaseService(pool: DatabaseService.makePool(at: projectURL), metrics: fallbackMetrics)
         let repos = makeRepositories(db: db)
-        let services = makeServices(repos: repos, projectURL: projectURL, engineFactory: engineFactory)
+        let services = makeServices(
+            repos: repos, projectURL: projectURL, engineFactory: engineFactory,
+            metricsCollector: fallbackMetrics
+        )
+        let healthMonitor = DBHealthMonitor(db: db, metrics: fallbackMetrics)
+        let crashCtx = CrashContext(metrics: fallbackMetrics)
+        Task { await healthMonitor.start() }
 
         // Lifecycle: one-shot housekeeping — gitignore management is non-critical.
         let url = projectURL
@@ -174,6 +195,9 @@ final class ProjectContext {
             gitService: services.git,
             commandRouter: services.router,
             tokenCountingService: tokenCountingService,
+            metricsCollector: fallbackMetrics,
+            dbHealthMonitor: healthMonitor,
+            crashContext: crashCtx,
             notesViewModel: NotesViewModel(repository: repos.note),
             projectViewModel: ProjectViewModel(
                 gitService: services.git,
@@ -222,7 +246,8 @@ final class ProjectContext {
     }
 
     private static func makeServices(
-        repos: Repos, projectURL: URL, engineFactory: any TerminalEngineFactory
+        repos: Repos, projectURL: URL, engineFactory: any TerminalEngineFactory,
+        metricsCollector: any MetricsCollectorProtocol
     ) -> Svc {
         let eng = TerminalEngineStore(factory: engineFactory)
         let sum = BranchSummarizer()
@@ -232,9 +257,15 @@ final class ProjectContext {
         let emb = EmbeddingService()
         return Svc(
             engineStore: eng,
-            sessionStore: SessionStore(engineStore: eng, projectRoot: projectURL.path, repository: repos.session),
+            sessionStore: SessionStore(
+                engineStore: eng, projectRoot: projectURL.path,
+                repository: repos.session, metricsCollector: metricsCollector
+            ),
             agentState: AgentStateStore(),
-            search: SearchService(sessionRepository: repos.session, noteRepository: repos.note),
+            search: SearchService(
+                sessionRepository: repos.session, noteRepository: repos.note,
+                metrics: metricsCollector
+            ),
             archive: SessionArchiveService(repository: repos.session),
             summarizer: sum, handoff: hoff,
             injection: ContextInjectionService(handoffService: hoff),

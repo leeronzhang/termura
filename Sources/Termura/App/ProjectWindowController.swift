@@ -39,12 +39,14 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         preconditionFailure("Use init(projectContext:themeManager:fontSettings:)")
     }
 
-    // MARK: - NSWindowDelegate — intercept Cmd+W to close tabs instead of the window
+    // MARK: - NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // Route Cmd+W to close the active content tab instead of the window.
-        projectContext.commandRouter.requestCloseTab()
-        return false
+        // When triggered by the traffic light close button (mouse click),
+        // allow the window to close normally. When triggered by Cmd+W
+        // (keyboard shortcut via performClose), TabAwareWindow routes it
+        // to tab closure instead, and this delegate method is never reached.
+        return true
     }
 
     // MARK: - Window factory
@@ -78,14 +80,18 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
 // MARK: - Custom NSWindow that intercepts Cmd+W
 
 /// Overrides `performClose` so Cmd+W closes the active content tab
-/// instead of closing the entire window. Delegate-based approaches fail
-/// because NSHostingController can override the window delegate.
+/// instead of closing the entire window. Traffic light close button
+/// bypasses this and closes the window normally.
 final class TabAwareWindow: NSWindow {
     /// Set by ProjectWindowController after init.
     weak var commandRouter: CommandRouter?
 
     override func performClose(_ sender: Any?) {
-        if let router = commandRouter {
+        // Cmd+W triggers performClose with a keyboard event on the current event queue.
+        // The traffic light close button triggers performClose with a mouse event.
+        // Route only keyboard-initiated closes to tab closure.
+        let isKeyboardShortcut = NSApp.currentEvent?.type == .keyDown
+        if isKeyboardShortcut, let router = commandRouter {
             router.requestCloseTab()
         } else {
             super.performClose(sender)

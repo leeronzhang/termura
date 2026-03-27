@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let menuBarService: MenuBarService
     let themeImportService: ThemeImportService
     let recentProjects: RecentProjectsService
+    let metricsCollector: any MetricsCollectorProtocol
 
     // MARK: - Project coordinator
 
@@ -43,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarService = MenuBarService()
         themeImportService = ThemeImportService()
         recentProjects = RecentProjectsService()
+        metricsCollector = MetricsCollector()
         projectCoordinator = ProjectCoordinator()
 
         super.init()
@@ -51,12 +53,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let launchStart = ContinuousClock.now
+
+        // Check for prior crash context
+        if let priorCrash = CrashContext.loadPriorCrashContext() {
+            logger.warning(
+                "Prior crash context found: sessions=\(priorCrash.activeSessionCount) db=\(priorCrash.dbHealth)"
+            )
+        }
+        CrashContext.clearPersistedData()
+
         setupVisorShortcut()
         checkShellIntegrationOnboarding()
         setupMenuBarActivation()
         projectCoordinator.start(with: ProjectCoordinator.Dependencies(
             engineFactory: engineFactory,
             tokenCountingService: tokenCountingService,
+            metricsCollector: metricsCollector,
             themeManager: themeManager,
             fontSettings: fontSettings,
             notificationService: notificationService,
@@ -67,6 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         ))
         logger.info("Termura launched")
+
+        let launchElapsed = ContinuousClock.now - launchStart
+        let launchSeconds = Double(launchElapsed.components.seconds)
+            + Double(launchElapsed.components.attoseconds) / 1e18
+        let collector = metricsCollector
+        Task { await collector.recordDuration(.launchDuration, seconds: launchSeconds) }
     }
 
     /// Explicitly register bundled fonts via CoreText.

@@ -30,7 +30,7 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
 
     init(
         sessionID: SessionID,
-        shell: String,
+        shell: String? = nil,
         currentDirectory: String? = nil,
         columns: UInt16 = AppConfig.Terminal.ptyColumns,
         rows: UInt16 = AppConfig.Terminal.ptyRows
@@ -88,7 +88,9 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
     }
 
     func resize(columns: UInt16, rows: UInt16) async {
-        terminalView.terminal.resize(cols: Int(columns), rows: Int(rows))
+        // Use the view-level resize which sends SIGWINCH to the PTY,
+        // not just terminal.resize() which only changes the grid dimensions.
+        terminalView.resize(cols: Int(columns), rows: Int(rows))
     }
 
     func cursorLineContent() -> String? {

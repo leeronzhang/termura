@@ -6,7 +6,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "LibghosttyE
 
 /// Stub implementation of `TerminalEngine` for the libghostty backend.
 /// All methods are no-ops; streams are created but never yield events.
-/// Swap `AppConfig.Backend.activeBackend` to `.libghostty` once the
+/// Swap `TerminalBackend.active` to `.libghostty` once the
 /// native API is available.
 @MainActor
 final class LibghosttyEngine: TerminalEngine {

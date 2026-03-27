@@ -19,6 +19,7 @@ final class ProjectCoordinator {
     struct Dependencies {
         let engineFactory: any TerminalEngineFactory
         let tokenCountingService: any TokenCountingServiceProtocol
+        let metricsCollector: any MetricsCollectorProtocol
         let themeManager: ThemeManager
         let fontSettings: FontSettings
         let notificationService: NotificationService
@@ -57,7 +58,8 @@ final class ProjectCoordinator {
             let context = try ProjectContext.open(
                 at: url,
                 engineFactory: deps.engineFactory,
-                tokenCountingService: deps.tokenCountingService
+                tokenCountingService: deps.tokenCountingService,
+                metricsCollector: deps.metricsCollector
             )
             let controller = ProjectWindowController(
                 projectContext: context,

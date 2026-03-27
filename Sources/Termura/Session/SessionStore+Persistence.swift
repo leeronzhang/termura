@@ -9,12 +9,12 @@ extension SessionStore {
     // MARK: - Session Tree
 
     @discardableResult
-    func createBranch(from sessionID: SessionID, type: BranchType, title: String = "") async -> SessionRecord? {
+    func createBranch(from sessionID: SessionID, type: BranchType, title: String? = nil) async -> SessionRecord? {
         guard let repo = repository else {
             logger.warning("Cannot create branch without repository")
             return nil
         }
-        let resolvedTitle = title.isEmpty ? "\(type.rawValue.capitalized) branch" : title
+        let resolvedTitle = title ?? "\(type.rawValue.capitalized) branch"
         do {
             let branch = try await repo.createBranch(from: sessionID, type: type, title: resolvedTitle)
             sessions.append(branch)

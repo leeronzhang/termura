@@ -81,6 +81,7 @@ final class SessionViewStateManager {
     private let agentStateStore: AgentStateStore
     private let contextInjectionService: any ContextInjectionServiceProtocol
     private let sessionHandoffService: any SessionHandoffServiceProtocol
+    private let metricsCollector: (any MetricsCollectorProtocol)?
 
     init(
         commandRouter: CommandRouter,
@@ -88,7 +89,8 @@ final class SessionViewStateManager {
         tokenCountingService: any TokenCountingServiceProtocol,
         agentStateStore: AgentStateStore,
         contextInjectionService: any ContextInjectionServiceProtocol,
-        sessionHandoffService: any SessionHandoffServiceProtocol
+        sessionHandoffService: any SessionHandoffServiceProtocol,
+        metricsCollector: (any MetricsCollectorProtocol)? = nil
     ) {
         self.commandRouter = commandRouter
         self.sessionStore = sessionStore
@@ -96,6 +98,7 @@ final class SessionViewStateManager {
         self.agentStateStore = agentStateStore
         self.contextInjectionService = contextInjectionService
         self.sessionHandoffService = sessionHandoffService
+        self.metricsCollector = metricsCollector
     }
 
     /// Returns (or lazily creates) the per-session view state for the given session.
@@ -108,17 +111,31 @@ final class SessionViewStateManager {
         let outputStore = OutputStore(sessionID: sessionID, commandRouter: commandRouter)
         let modeCtrl = InputModeController()
         let timeline = SessionTimeline()
+
+        let coordinator = AgentCoordinator(
+            sessionID: sessionID,
+            agentStateStore: agentStateStore,
+            metricsCollector: metricsCollector
+        )
+        let processor = OutputProcessor(
+            sessionID: sessionID,
+            outputStore: outputStore,
+            tokenCountingService: tokenCountingService
+        )
+        let services = SessionServices(
+            contextInjectionService: contextInjectionService,
+            sessionHandoffService: sessionHandoffService,
+            isRestoredSession: sessionStore.isRestoredSession(id: sessionID)
+        )
+
         let vm = TerminalViewModel(
             sessionID: sessionID,
             engine: engine,
             sessionStore: sessionStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenCountingService,
             modeController: modeCtrl,
-            agentStateStore: agentStateStore,
-            isRestoredSession: sessionStore.isRestoredSession(id: sessionID),
-            contextInjectionService: contextInjectionService,
-            sessionHandoffService: sessionHandoffService
+            agentCoordinator: coordinator,
+            outputProcessor: processor,
+            sessionServices: services
         )
         let editorVM = EditorViewModel(engine: engine, modeController: modeCtrl)
 

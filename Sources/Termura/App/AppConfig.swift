@@ -136,6 +136,8 @@ enum AppConfig {
         static let fileTreeChevronWidth: Double = 12
         /// Content tab bar height (points, excluding title bar inset).
         static let contentTabBarHeight: Double = 44
+        /// Debounce delay before persisting file-tree expansion state (nanoseconds, 300ms).
+        static let expansionPersistDebounceNanoseconds: UInt64 = 300_000_000
         /// Scale factor for agent icon relative to the size parameter.
         static let agentIconScaleFactor: Double = 0.75
     }
@@ -279,13 +281,15 @@ enum AppConfig {
         static let globalDirectoryName = ".termura"
     }
 
-    enum TerminalBackend: String, Sendable {
-        case swiftTerm
-        case libghostty
+    enum Health {
+        static let probeIntervalSeconds: Double = 30.0  // DB health probe interval
+        static let degradedThreshold = 3                 // consecutive failures -> degraded
+        static let unhealthyThreshold = 5                // consecutive failures -> unhealthy
     }
 
-    enum Backend {
-        static let activeBackend: TerminalBackend = .swiftTerm
+    enum CrashDiagnostics {
+        static let ringBufferCapacity = 50               // max events in ring buffer
+        static let snapshotIntervalSeconds: Double = 60.0
     }
 
     enum SemanticSearch {
@@ -293,7 +297,6 @@ enum AppConfig {
         static let embeddingDimension = 384
         static let chunkOverlapTokens = 50
         static let chunkMaxTokens = 256
-        /// Top-K results to return.
-        static let topK = 20
+        static let topK = 20  // top-K results to return
     }
 }

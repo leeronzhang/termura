@@ -6,7 +6,7 @@ import Foundation
 struct SessionRecord: Identifiable, Hashable, Sendable {
     let id: SessionID
     var title: String
-    var workingDirectory: String
+    var workingDirectory: String?
     var createdAt: Date
     var lastActiveAt: Date
     var colorLabel: SessionColorLabel
@@ -15,7 +15,7 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
     /// Parent session ID — nil for root sessions (no branch parent).
     var parentID: SessionID?
     /// AI-generated summary of a completed branch, inserted into parent context.
-    var summary: String
+    var summary: String?
     /// Purpose categorization for branches.
     var branchType: BranchType
     /// Detected AI agent type running in this session (persisted for sidebar icon).
@@ -24,14 +24,14 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
     init(
         id: SessionID = SessionID(),
         title: String = "Terminal",
-        workingDirectory: String = "",
+        workingDirectory: String? = nil,
         createdAt: Date = Date(),
         lastActiveAt: Date = Date(),
         colorLabel: SessionColorLabel = .none,
         isPinned: Bool = false,
         orderIndex: Int = 0,
         parentID: SessionID? = nil,
-        summary: String = "",
+        summary: String? = nil,
         branchType: BranchType = .main,
         agentType: AgentType = .unknown
     ) {

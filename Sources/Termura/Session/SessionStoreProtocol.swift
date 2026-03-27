@@ -7,7 +7,7 @@ protocol SessionStoreProtocol: AnyObject {
     var activeSessionID: SessionID? { get }
 
     @discardableResult
-    func createSession(title: String, shell: String) -> SessionRecord
+    func createSession(title: String?, shell: String?) -> SessionRecord
     func closeSession(id: SessionID)
     func activateSession(id: SessionID)
     func renameSession(id: SessionID, title: String)
@@ -26,7 +26,7 @@ protocol SessionStoreProtocol: AnyObject {
     // MARK: - Session Tree
 
     @discardableResult
-    func createBranch(from sessionID: SessionID, type: BranchType, title: String) async -> SessionRecord?
+    func createBranch(from sessionID: SessionID, type: BranchType, title: String?) async -> SessionRecord?
     func navigateToParent(of sessionID: SessionID)
     func mergeBranchSummary(branchID: SessionID, summary: String, messageRepo: (any SessionMessageRepositoryProtocol)?) async
 }
