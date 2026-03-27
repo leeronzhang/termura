@@ -7,7 +7,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "MainView+Ac
 
 extension MainView {
     func openNoteTab(noteID: NoteID, title: String) {
-        let tab = ContentTab.note(noteID, title)
+        let tab = ContentTab.note(noteID: noteID, title: title)
         if !openTabs.contains(tab) {
             openTabs.append(tab)
         }
@@ -16,7 +16,7 @@ extension MainView {
     }
 
     func openDiffTab(path: String, staged: Bool, untracked: Bool = false) {
-        let tab = ContentTab.diff(path, staged, untracked)
+        let tab = ContentTab.diff(path: path, isStaged: staged, isUntracked: untracked)
         if !openTabs.contains(tab) {
             openTabs.append(tab)
         }
@@ -24,7 +24,7 @@ extension MainView {
     }
 
     func openFileTab(path: String, name: String) {
-        let tab = ContentTab.file(path, name)
+        let tab = ContentTab.file(path: path, name: name)
         if !openTabs.contains(tab) {
             openTabs.append(tab)
         }
@@ -33,7 +33,7 @@ extension MainView {
     }
 
     func openPreviewTab(path: String, name: String) {
-        let tab = ContentTab.preview(path, name)
+        let tab = ContentTab.preview(path: path, name: name)
         if !openTabs.contains(tab) {
             openTabs.append(tab)
         }
@@ -175,7 +175,7 @@ extension MainView {
 extension MainView {
     /// UserDefaults key for open tabs, scoped to the current project.
     private var tabsDefaultsKey: String {
-        "openTabs-\(sessionStore.projectRoot)"
+        "openTabs-\(sessionStore.projectRoot ?? "default")"
     }
 
     /// Saves persistable tabs (note/file) to UserDefaults.

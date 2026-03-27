@@ -23,7 +23,7 @@ enum SplitNodeMutations {
         switch root {
         case let .leaf(id):
             return id == targetID ? nil : root
-        case let .split(axis, first, second):
+        case let .split(axis: axis, first: first, second: second):
             let newFirst = removeLeaf(root: first, targetID: targetID)
             let newSecond = removeLeaf(root: second, targetID: targetID)
             switch (newFirst, newSecond) {
@@ -34,7 +34,7 @@ enum SplitNodeMutations {
             case (let remaining?, nil):
                 return remaining
             case let (firstNode?, secondNode?):
-                return .split(axis, firstNode, secondNode)
+                return .split(axis: axis, first: firstNode, second: secondNode)
             }
         }
     }
@@ -50,13 +50,13 @@ enum SplitNodeMutations {
         switch node {
         case let .leaf(id):
             if id == targetID {
-                return .split(axis, .leaf(id), .leaf(newID))
+                return .split(axis: axis, first: .leaf(id), second: .leaf(newID))
             }
             return node
-        case let .split(a, first, second):
+        case let .split(axis: a, first: first, second: second):
             let newFirst = replaceLeaf(node: first, targetID: targetID, newID: newID, axis: axis)
             let newSecond = replaceLeaf(node: second, targetID: targetID, newID: newID, axis: axis)
-            return .split(a, newFirst, newSecond)
+            return .split(axis: a, first: newFirst, second: newSecond)
         }
     }
 }

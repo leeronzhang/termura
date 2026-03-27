@@ -50,7 +50,7 @@ struct SearchResultRowView: View {
     private var subtitle: String {
         switch result {
         case let .session(s):
-            return s.workingDirectory.isEmpty ? "No directory" : s.workingDirectory
+            return s.workingDirectory ?? "No directory"
         case let .note(n):
             let preview = n.body.prefix(AppConfig.Search.previewLength)
             return preview.isEmpty ? "Empty note" : String(preview)

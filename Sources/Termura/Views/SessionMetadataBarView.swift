@@ -6,6 +6,7 @@ struct SessionMetadataBarView: View {
     var timeline: SessionTimeline?
     var onSelectChunkID: ((UUID) -> Void)?
 
+    @Environment(\.themeManager) private var themeManager
     @State private var showAllTurns = false
 
     var body: some View {
@@ -97,31 +98,28 @@ struct SessionMetadataBarView: View {
 
     @ViewBuilder
     private var contextWindowSection: some View {
+        let barColor = themeManager.current.foreground
         if metadata.contextWindowLimit > 0 {
             VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
                 sectionLabel("Context Window")
 
-                // Progress bar
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.secondary.opacity(AppUI.Opacity.whisper))
-                            .frame(height: 6)
+                            .fill(barColor.opacity(AppUI.Opacity.whisper))
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(contextBarColor)
+                            .fill(barColor.opacity(AppUI.Opacity.secondary))
                             .frame(
-                                width: geo.size.width * min(metadata.contextUsageFraction, 1.0),
-                                height: 6
+                                width: geo.size.width * min(metadata.contextUsageFraction, 1.0)
                             )
                     }
                 }
-                .frame(height: 6)
+                .frame(height: 16)
 
-                // Labels
                 HStack {
                     Text("\(Int(metadata.contextUsageFraction * 100))%")
                         .font(AppUI.Font.labelMedium)
-                        .foregroundColor(contextBarColor)
+                        .foregroundColor(.primary)
                     Spacer()
                     Text(
                         "\(MetadataFormatter.formatTokenCount(metadata.estimatedTokenCount))"
@@ -151,15 +149,15 @@ struct SessionMetadataBarView: View {
         }
     }
 
-    // MARK: - Tokens (compact)
+    // MARK: - Tokens
 
     private var tokenSummarySection: some View {
         VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
             sectionLabel("Tokens")
-            HStack(spacing: AppUI.Spacing.lg) {
-                tokenPill("Out", metadata.outputTokenCount, .blue)
-                tokenPill("In", metadata.inputTokenCount, .green)
-                tokenPill("Cache", metadata.cachedTokenCount, .purple)
+            VStack(spacing: AppUI.Spacing.lg) {
+                tokenBar("Output", metadata.outputTokenCount)
+                tokenBar("Input", metadata.inputTokenCount)
+                tokenBar("Cache", metadata.cachedTokenCount)
             }
         }
     }
@@ -228,21 +226,36 @@ struct SessionMetadataBarView: View {
         .monospacedDigit()
     }
 
-    private func tokenPill(_ label: String, _ value: Int, _ color: Color) -> some View {
+    private func tokenBar(_ label: String, _ value: Int) -> some View {
         let hasValue = value > 0
-        return HStack(spacing: AppUI.Spacing.xxs) {
-            RoundedRectangle(cornerRadius: 1)
-                .fill(hasValue ? color : color.opacity(AppUI.Opacity.tertiary))
-                .frame(width: 3, height: 12)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(MetadataFormatter.formatTokenCount(value))
-                    .font(AppUI.Font.labelMono)
-                    .foregroundColor(hasValue ? .primary : .secondary)
-                    .monospacedDigit()
-                Text(label)
-                    .font(AppUI.Font.micro)
-                    .foregroundColor(.secondary)
+        let maxTokens = max(
+            metadata.inputTokenCount,
+            metadata.outputTokenCount,
+            metadata.cachedTokenCount,
+            1
+        )
+        let fraction = min(Double(value) / Double(maxTokens), 1.0)
+        let barColor = themeManager.current.foreground
+        return HStack(spacing: AppUI.Spacing.smMd) {
+            Text(label)
+                .font(AppUI.Font.micro)
+                .foregroundColor(.secondary)
+                .frame(width: 40, alignment: .leading)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(barColor.opacity(AppUI.Opacity.whisper))
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(hasValue ? barColor.opacity(AppUI.Opacity.secondary) : .clear)
+                        .frame(width: max(geo.size.width * fraction, hasValue ? 2 : 0))
+                }
             }
+            .frame(height: 16)
+            Text(MetadataFormatter.formatTokenCount(value))
+                .font(AppUI.Font.captionMono)
+                .foregroundColor(hasValue ? .primary : .secondary)
+                .monospacedDigit()
+                .frame(width: 42, alignment: .trailing)
         }
     }
 
@@ -252,14 +265,5 @@ struct SessionMetadataBarView: View {
         guard metadata.agentElapsedTime > 60 else { return 0 }
         let total = metadata.inputTokenCount + metadata.outputTokenCount
         return Int(Double(total) / (metadata.agentElapsedTime / 60))
-    }
-
-    private var contextBarColor: Color {
-        if metadata.contextUsageFraction >= AppConfig.UI.tokenProgressWarningFraction {
-            return .red
-        } else if metadata.contextUsageFraction >= 0.5 {
-            return .orange
-        }
-        return .accentColor
     }
 }

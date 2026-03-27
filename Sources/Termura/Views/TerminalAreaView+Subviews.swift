@@ -153,16 +153,25 @@ extension TerminalAreaView {
                 .background(themeManager.current.background)
 
                 if commandRouter.showComposer && isFocusedPane {
-                    // Backdrop — dismiss handled by NSEvent mouse monitor in TerminalAreaView.
-                    themeManager.current.background.opacity(AppUI.Opacity.strong)
+                    // Backdrop — tapping dismisses composer (pure SwiftUI, no NSEvent monitor).
+                    Color.black.opacity(AppUI.Opacity.strong)
+                        .contentShape(Rectangle())
+                        .onTapGesture { commandRouter.dismissComposer() }
                         .transition(.opacity.animation(.easeOut(duration: AppUI.Animation.fadeOut)))
 
                     ComposerOverlayView(
                         editorViewModel: editorViewModel,
-                        notesViewModel: notesViewModel,
                         editorHandle: editorHandle,
+                        isNotesActive: commandRouter.isComposerNotesActive,
+                        onToggleNotes: { commandRouter.toggleComposerNotes() },
                         onDismiss: { commandRouter.dismissComposer() }
                     )
+                    .onAppear {
+                        let vm = editorViewModel
+                        commandRouter.composerInsertHandler = { text in
+                            vm.appendText("\n" + text)
+                        }
+                    }
                     .transition(
                         .move(edge: .bottom)
                             .animation(.spring(response: 0.35, dampingFraction: 0.85))

@@ -71,7 +71,7 @@ struct EditorInputView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.font = NSFont(name: AppConfig.Fonts.terminalFamily, size: AppConfig.Fonts.editorSize)
             ?? NSFont.monospacedSystemFont(ofSize: AppConfig.Fonts.editorSize, weight: .regular)
-        textView.placeholderString = "Type a command or prompt..."
+        textView.placeholderString = "Type a command, prompt, or insert from notes..."
         textView.typingAttributes = [
             .font: textView.font ?? NSFont.monospacedSystemFont(ofSize: AppConfig.Fonts.editorSize, weight: .regular),
             .foregroundColor: NSColor.textColor,
@@ -96,8 +96,8 @@ struct EditorInputView: NSViewRepresentable {
             coordinator?.handleControlSequence(seq)
         }
 
-        textView.drawsBackground = true
-        textView.backgroundColor = .editorInputBackground
+        textView.drawsBackground = false
+        textView.focusRingType = .none
         textView.textColor = .labelColor
         textView.insertionPointColor = .labelColor
     }

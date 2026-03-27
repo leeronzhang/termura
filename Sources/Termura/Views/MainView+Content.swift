@@ -8,7 +8,7 @@ extension MainView {
     /// All tabs: one per session (derived) + non-terminal tabs (user-opened files/notes).
     var allTabs: [ContentTab] {
         let sessionTabs = sessionStore.sessions.map {
-            ContentTab.terminal($0.id, $0.title)
+            ContentTab.terminal(sessionID: $0.id, title: $0.title)
         }
         return sessionTabs + openTabs
     }
@@ -18,9 +18,9 @@ extension MainView {
         if let tab = selectedContentTab, allTabs.contains(tab) { return tab }
         if let activeID = sessionStore.activeSessionID {
             let title = sessionStore.sessions.first { $0.id == activeID }?.title ?? "Terminal"
-            return .terminal(activeID, title)
+            return .terminal(sessionID: activeID, title: title)
         }
-        return allTabs.first ?? .terminal(SessionID(), "Terminal")
+        return allTabs.first ?? .terminal(sessionID: SessionID(), title: "Terminal")
     }
 
     @ViewBuilder
@@ -48,7 +48,7 @@ extension MainView {
             // When sidebar selection changes, switch to that session's terminal tab.
             guard let newID else { return }
             let title = sessionStore.sessions.first { $0.id == newID }?.title ?? "Terminal"
-            selectedContentTab = .terminal(newID, title)
+            selectedContentTab = .terminal(sessionID: newID, title: title)
         }
     }
 
@@ -61,11 +61,11 @@ extension MainView {
         case let .note(noteID, _):
             noteEditorView(noteID: noteID)
                 .id(noteID)
-        case let .diff(path, staged, untracked):
+        case let .diff(path, isStaged, isUntracked):
             DiffContentView(
                 filePath: path,
-                isStaged: staged,
-                isUntracked: untracked,
+                isStaged: isStaged,
+                isUntracked: isUntracked,
                 gitService: projectScope.gitService,
                 projectRoot: activeProjectRoot
             )
@@ -87,11 +87,11 @@ extension MainView {
 
     /// Project root with fallback to active session working directory.
     var activeProjectRoot: String {
-        if !sessionStore.projectRoot.isEmpty { return sessionStore.projectRoot }
+        if let root = sessionStore.projectRoot { return root }
         if let id = sessionStore.activeSessionID,
            let session = sessionStore.sessions.first(where: { $0.id == id }),
-           !session.workingDirectory.isEmpty {
-            return session.workingDirectory
+           let dir = session.workingDirectory {
+            return dir
         }
         return AppConfig.Paths.homeDirectory
     }

@@ -43,6 +43,8 @@ struct TerminalContainerView: NSViewRepresentable {
         if let termView = nsView as? LocalProcessTerminalView {
             applyTheme(theme, to: termView)
         }
+        // Re-hide scroller in case SwiftTerm re-adds it after theme/font changes.
+        hideScroller(in: nsView)
     }
 
     func makeCoordinator() -> Coordinator {

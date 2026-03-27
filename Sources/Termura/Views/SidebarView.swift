@@ -29,6 +29,8 @@ struct SidebarView: View {
     var sessionStore: SessionStore { sessionScope.store }
 
     @State private var selectedTab: SidebarTab = .sessions
+    /// Saved tab before composer auto-switched to .notes; restored on composer close.
+    @State private var tabBeforeComposer: SidebarTab?
     /// Incremented to force re-render when agent states change (ObservableObject nested
     /// inside non-observable SessionScope breaks SwiftUI's automatic observation).
     @State var agentStateVersion: UInt = 0
@@ -47,6 +49,27 @@ struct SidebarView: View {
         .onChange(of: commandRouter.toggleAgentDashboardTick) { _, _ in
             withAnimation(.easeInOut(duration: AppUI.Animation.panel)) {
                 selectedTab = (selectedTab == .agents) ? .sessions : .agents
+            }
+        }
+        .onReceive(commandRouter.composerNotesToggled) { active in
+            if active {
+                if tabBeforeComposer == nil { tabBeforeComposer = selectedTab }
+                withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                    selectedTab = .notes
+                }
+            } else if let previous = tabBeforeComposer {
+                withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                    selectedTab = previous
+                }
+                tabBeforeComposer = nil
+            }
+        }
+        .onReceive(commandRouter.composerDismissed) { _ in
+            if let previous = tabBeforeComposer {
+                withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                    selectedTab = previous
+                }
+                tabBeforeComposer = nil
             }
         }
     }

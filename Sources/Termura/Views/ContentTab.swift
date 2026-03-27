@@ -3,17 +3,17 @@ import SwiftUI
 /// Identifies an open tab in the main content area.
 /// Terminal tabs carry a SessionID so each session gets its own tab.
 enum ContentTab: Identifiable, Hashable, Codable {
-    case terminal(SessionID, String) // sessionID, session title
-    case note(NoteID, String)
-    case diff(String, Bool, Bool) // file path, isStaged, isUntracked
-    case file(String, String) // relativePath, fileName
-    case preview(String, String) // relativePath, fileName (read-only QuickLook)
+    case terminal(sessionID: SessionID, title: String)
+    case note(noteID: NoteID, title: String)
+    case diff(path: String, isStaged: Bool, isUntracked: Bool)
+    case file(path: String, name: String)
+    case preview(path: String, name: String)
 
     var id: String {
         switch self {
-        case let .terminal(sid, _): "terminal-\(sid)"
+        case let .terminal(sessionID, _): "terminal-\(sessionID)"
         case let .note(noteID, _): "note-\(noteID)"
-        case let .diff(path, staged, _): "diff-\(staged ? "staged" : "wt")-\(path)"
+        case let .diff(path, isStaged, _): "diff-\(isStaged ? "staged" : "wt")-\(path)"
         case let .file(path, _): "file-\(path)"
         case let .preview(path, _): "preview-\(path)"
         }
@@ -21,8 +21,8 @@ enum ContentTab: Identifiable, Hashable, Codable {
 
     var title: String {
         switch self {
-        case let .terminal(_, name): name.isEmpty ? "Terminal" : name
-        case let .note(_, name): name.isEmpty ? "Untitled" : name
+        case let .terminal(_, title): title.isEmpty ? "Terminal" : title
+        case let .note(_, title): title.isEmpty ? "Untitled" : title
         case let .diff(path, _, _): URL(fileURLWithPath: path).lastPathComponent
         case let .file(_, name): name
         case let .preview(_, name): name
@@ -55,7 +55,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
 
     /// The session ID if this is a terminal tab.
     var sessionID: SessionID? {
-        if case let .terminal(sid, _) = self { return sid }
+        if case let .terminal(sessionID, _) = self { return sessionID }
         return nil
     }
 

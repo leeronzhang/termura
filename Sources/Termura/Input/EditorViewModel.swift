@@ -60,6 +60,12 @@ final class EditorViewModel: ObservableObject {
         currentText = history.navigateNext() ?? ""
     }
 
+    /// Appends text to the current editor content without replacing existing input.
+    func appendText(_ text: String) {
+        guard !text.isEmpty else { return }
+        currentText += text
+    }
+
     /// Called by the NSViewRepresentable coordinator to sync text without cycles.
     func updateText(_ text: String) {
         guard text != currentText else { return }

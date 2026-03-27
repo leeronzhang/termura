@@ -178,11 +178,9 @@ struct TerminalAreaView: View {
             }
             return event
         }
-        // Mouse monitor: clicks on the backdrop (above composer) dismiss it.
-        // Clicks inside the composer card area pass through to SwiftUI buttons.
-        let composerHeight = AppConfig.UI.composerMaxHeight
+        // Mouse monitor: dual-pane focus tracking only.
+        // Composer backdrop dismissal is handled by SwiftUI tap gesture (TerminalAreaView+Subviews).
         mouseEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-            // Dual-pane focus tracking: check if click is within this terminal's NSView.
             if router.isDualPaneActive {
                 let termView = termEngine.terminalNSView
                 let loc = termView.convert(event.locationInWindow, from: nil)
@@ -190,20 +188,7 @@ struct TerminalAreaView: View {
                     router.focusedDualPaneID = sid
                 }
             }
-
-            guard router.showComposer else { return event }
-            // In dual-pane mode, only the focused pane handles composer backdrop clicks.
-            if router.isDualPaneActive, router.focusedDualPaneID != sid {
-                return event
-            }
-            // In window coordinates, y=0 is the bottom. Composer occupies the bottom portion.
-            // If click is in the composer area (y < composerHeight), let SwiftUI handle it.
-            if event.locationInWindow.y < composerHeight {
-                return event
-            }
-            // Click is on the backdrop — dismiss composer.
-            router.dismissComposer()
-            return nil
+            return event
         }
     }
 

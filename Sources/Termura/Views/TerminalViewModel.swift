@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import OSLog
 
@@ -6,60 +7,42 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalVie
 
 /// ViewModel bridging the terminal engine with output chunking, token counting,
 /// and session metadata for the terminal area view hierarchy.
+///
+/// Delegates agent detection/state to `AgentCoordinator`, output chunking/tokens
+/// to `OutputProcessor`, and context injection/handoff to `SessionServices`.
 @MainActor
 final class TerminalViewModel: ObservableObject {
     // MARK: - Published state
 
     @Published var currentMetadata: SessionMetadata
     /// True while an interactive tool (Claude Code `>`) is showing its prompt.
-    /// Drives the overlay layout: EditorInputView floats over the terminal bottom,
-    /// visually covering the tool's own cursor line.
     @Published var isInteractivePrompt: Bool = false
+    /// Currently pending risk alert (shown as sheet).
+    @Published var pendingRiskAlert: RiskAlert?
+    /// Context window warning alert (shown as sheet).
+    @Published var contextWindowAlert: ContextWindowAlert?
 
     // MARK: - Dependencies
 
     let sessionID: SessionID
     let engine: any TerminalEngine
     let sessionStore: any SessionStoreProtocol
-    let outputStore: OutputStore
-    let tokenCountingService: any TokenCountingServiceProtocol
+    let modeController: InputModeController
+    let agentCoordinator: AgentCoordinator
+    let outputProcessor: OutputProcessor
+    let sessionServices: SessionServices
+    let clock: any AppClock
+    let sessionStartTime: Date = .init()
 
     // MARK: - Internal state
 
-    let modeController: InputModeController
-    private let chunkDetector: ChunkDetector
-    private let fallbackDetector: FallbackChunkDetector
-    let agentDetector: AgentStateDetector
-    private let interventionService: InterventionService
-    let contextWindowMonitor: ContextWindowMonitor
-    let clock: any AppClock
-    weak var agentStateStore: AgentStateStore? // concrete: weak requires class type
-    let sessionStartTime: Date = .init()
-    /// Prevents repeated renames after the agent is already detected from output.
-    var hasDetectedAgentFromOutput = false
-    /// Tracks the last detected agent type so we can re-detect when a different agent starts.
-    var lastDetectedAgentType: AgentType?
-    private var streamTask: Task<Void, Never>?
-    private var shellTask: Task<Void, Never>?
     /// Debounced re-check for prompt detection after PTY output settles.
     var promptRecheckTask: Task<Void, Never>?
-    /// Bounded executor for background tasks — limits concurrent execution
-    /// and auto-cleans completed tasks to prevent unbounded accumulation.
+    /// Bounded executor for background tasks.
     private let taskExecutor: BoundedTaskExecutor
-    /// Context injection task — stored separately because it uses a sleep delay.
-    private var injectionTask: Task<Void, Never>?
-
-    // MARK: - Context injection & handoff
-
-    private let isRestoredSession: Bool
-    private let contextInjectionService: (any ContextInjectionServiceProtocol)?
-    let sessionHandoffService: (any SessionHandoffServiceProtocol)?
-    private var hasInjectedContext = false
-
-    /// Currently pending risk alert (shown as sheet).
-    @Published var pendingRiskAlert: RiskAlert?
-    /// Context window warning alert (shown as sheet).
-    @Published var contextWindowAlert: ContextWindowAlert?
+    private var streamTask: Task<Void, Never>?
+    private var shellTask: Task<Void, Never>?
+    private var cancellables: Set<AnyCancellable> = []
 
     // MARK: - Init
 
@@ -67,32 +50,21 @@ final class TerminalViewModel: ObservableObject {
         sessionID: SessionID,
         engine: any TerminalEngine,
         sessionStore: any SessionStoreProtocol,
-        outputStore: OutputStore,
-        tokenCountingService: any TokenCountingServiceProtocol,
         modeController: InputModeController,
-        agentStateStore: AgentStateStore? = nil,
-        isRestoredSession: Bool = false,
-        contextInjectionService: (any ContextInjectionServiceProtocol)? = nil,
-        sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil,
+        agentCoordinator: AgentCoordinator,
+        outputProcessor: OutputProcessor,
+        sessionServices: SessionServices,
         clock: any AppClock = LiveClock()
     ) {
         self.sessionID = sessionID
         self.engine = engine
         self.sessionStore = sessionStore
-        self.outputStore = outputStore
-        self.tokenCountingService = tokenCountingService
         self.modeController = modeController
-        self.agentStateStore = agentStateStore
-        self.isRestoredSession = isRestoredSession
-        self.contextInjectionService = contextInjectionService
-        self.sessionHandoffService = sessionHandoffService
+        self.agentCoordinator = agentCoordinator
+        self.outputProcessor = outputProcessor
+        self.sessionServices = sessionServices
         self.clock = clock
         taskExecutor = BoundedTaskExecutor(maxConcurrent: AppConfig.Runtime.maxConcurrentSessionTasks)
-        chunkDetector = ChunkDetector(sessionID: sessionID)
-        fallbackDetector = FallbackChunkDetector(sessionID: sessionID)
-        agentDetector = AgentStateDetector(sessionID: sessionID)
-        interventionService = InterventionService()
-        contextWindowMonitor = ContextWindowMonitor()
 
         let workingDir = AppConfig.Paths.homeDirectory
         currentMetadata = SessionMetadata.empty(
@@ -100,30 +72,31 @@ final class TerminalViewModel: ObservableObject {
             workingDirectory: workingDir
         )
 
+        // Forward @Published state from AgentCoordinator to keep view bindings stable.
+        agentCoordinator.$pendingRiskAlert
+            .receive(on: RunLoop.main)
+            .sink { [weak self] alert in self?.pendingRiskAlert = alert }
+            .store(in: &cancellables)
+        agentCoordinator.$contextWindowAlert
+            .receive(on: RunLoop.main)
+            .sink { [weak self] alert in self?.contextWindowAlert = alert }
+            .store(in: &cancellables)
+
         subscribeToOutput()
         subscribeToShellEvents()
     }
 
-    // Safe: SE-0371 allows deinit to access stored properties (exclusive ownership).
     deinit {
         streamTask?.cancel()
         shellTask?.cancel()
         promptRecheckTask?.cancel()
-        injectionTask?.cancel()
-        // taskExecutor cancels all tracked tasks in its own deinit.
     }
 
-    /// Spawns a background task inheriting the current actor context with bounded concurrency.
-    /// Use for fire-and-forget work that accesses non-Sendable dependencies (engine, sessionStore).
     func spawnTracked(_ operation: @escaping @MainActor () async -> Void) {
         taskExecutor.spawn(operation)
     }
 
-    /// Spawns a detached background task with bounded concurrency.
-    /// Use for heavy processing that must run off MainActor.
-    func spawnDetachedTracked(
-        _ operation: @Sendable @escaping () async -> Void
-    ) {
+    func spawnDetachedTracked(_ operation: @Sendable @escaping () async -> Void) {
         taskExecutor.spawnDetached(operation)
     }
 
@@ -131,30 +104,22 @@ final class TerminalViewModel: ObservableObject {
 
     func send(_ text: String) {
         let eng = engine
-        let service = tokenCountingService
+        let processor = outputProcessor
         let sid = sessionID
         spawnTracked {
             await eng.send(text)
-            await service.accumulateInput(for: sid, text: text)
+            await processor.accumulateInput(text, sessionID: sid)
         }
     }
 
-    /// Detect agent type from a submitted command and update session/agent state if matched.
+    /// Detect agent type from a submitted command.
     func detectAgentFromCommand(_ command: String) {
-        let detector = agentDetector
-        let store = sessionStore
-        let sid = sessionID
-        let stateStore = agentStateStore
-        spawnTracked {
-            guard let agentType = await detector.detectFromCommand(command) else { return }
-            let agentState = await detector.buildState()
-            // Already on MainActor via spawnTracked — no need for MainActor.run.
-            store.renameSession(id: sid, title: agentType.displayName)
-            store.setAgentType(id: sid, type: agentType)
-            if let state = agentState {
-                stateStore?.update(state: state)
-            }
-        }
+        agentCoordinator.detectAgentFromCommand(
+            command,
+            sessionStore: sessionStore,
+            sessionID: sessionID,
+            taskExecutor: taskExecutor
+        )
     }
 
     func resize(columns: UInt16, rows: UInt16) {
@@ -182,7 +147,17 @@ final class TerminalViewModel: ObservableObject {
         case let .processExited(code):
             let sid = sessionID
             logger.info("Session \(sid) process exited code=\(code)")
-            await generateHandoffIfNeeded(exitCode: code)
+            let detector = agentCoordinator.agentDetector
+            let agentState = await detector.buildState()
+            let session = sessionStore.sessions.first { $0.id == sessionID }
+            let chunks = Array(outputProcessor.outputStore.chunks)
+            sessionServices.generateHandoffIfNeeded(
+                session: session,
+                chunks: chunks,
+                agentState: agentState,
+                handoffService: sessionServices.sessionHandoffService,
+                taskExecutor: taskExecutor
+            )
 
         case let .titleChanged(title):
             sessionStore.renameSession(id: sessionID, title: title)
@@ -197,65 +172,32 @@ final class TerminalViewModel: ObservableObject {
         guard let text = String(data: data, encoding: .utf8) else { return }
         let stripped = ANSIStripper.strip(text)
         let sid = sessionID
-        let detector = chunkDetector
-        let fallback = fallbackDetector
-        let store = outputStore
-        let service = tokenCountingService
-        let agentDet = agentDetector
-        let intervention = interventionService
+        let processor = outputProcessor
+        let coordinator = agentCoordinator
+        let tokenService = outputProcessor.tokenCountingService
         spawnDetachedTracked { [weak self] in
-            await detector.appendRawOutput(text)
-            let chunks = await fallback.processOutput(stripped, raw: text)
-            await MainActor.run {
-                for chunk in chunks {
-                    store.append(chunk)
-                }
-            }
-            await service.accumulateOutput(for: sid, text: stripped)
-            _ = await agentDet.analyzeOutput(stripped)
-            if let stats = await agentDet.parseTokenStats(stripped) {
-                if let cached = stats.cachedTokens, cached > 0 {
-                    await service.accumulateCached(for: sid, count: cached)
-                }
-                if let cost = stats.totalCost {
-                    await agentDet.updateCost(cost)
-                }
-            }
-            if let risk = await intervention.detectRisk(in: stripped) {
-                await MainActor.run {
-                    self?.pendingRiskAlert = risk
+            await processor.processDataOutput(text, stripped: stripped, sessionID: sid)
+            await coordinator.analyzeOutput(stripped, sessionID: sid, tokenCountingService: tokenService)
+            await MainActor.run { @Sendable [weak self] in
+                guard let self else { return }
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    await agentCoordinator.updateAgentState(
+                        tokenCountingService: outputProcessor.tokenCountingService,
+                        sessionID: sessionID
+                    )
+                    await refreshMetadata()
                 }
             }
         }
         detectPromptFromScreenBuffer()
         schedulePromptRecheck()
-        detectAgentFromOutput(stripped)
-        await updateAgentState()
+        await agentCoordinator.detectAgentFromOutput(stripped, sessionStore: sessionStore, sessionID: sid)
+        await agentCoordinator.updateAgentState(
+            tokenCountingService: outputProcessor.tokenCountingService,
+            sessionID: sessionID
+        )
         await refreshMetadata()
-    }
-
-    // MARK: - Context injection
-
-    func injectContextIfNeeded() {
-        guard isRestoredSession, !hasInjectedContext else { return }
-        hasInjectedContext = true
-        let workingDir = currentMetadata.workingDirectory
-        guard !workingDir.isEmpty else { return }
-        guard let service = contextInjectionService else { return }
-        injectionTask?.cancel()
-        injectionTask = Task { @MainActor [weak self] in
-            guard let text = await service.buildInjectionText(projectRoot: workingDir) else { return }
-            do {
-                try await self?.clock.sleep(for: .nanoseconds(AppConfig.SessionHandoff.injectionDelayNanoseconds))
-            } catch is CancellationError {
-                return
-            } catch {
-                // Non-critical: context injection is supplementary; session functions without it.
-                logger.warning("Context injection delay failed: \(error.localizedDescription)")
-                return
-            }
-            await self?.engine.send(text)
-        }
     }
 
     // MARK: - Shell events subscription
@@ -271,12 +213,15 @@ final class TerminalViewModel: ObservableObject {
     }
 
     private func handleShellEvent(_ event: ShellIntegrationEvent) async {
-        // Drive editor visibility: show input at prompt, hide while executing.
         switch event {
         case .promptStarted:
             isInteractivePrompt = false
             modeController.switchToEditor()
-            injectContextIfNeeded()
+            sessionServices.injectContextIfNeeded(
+                workingDirectory: currentMetadata.workingDirectory,
+                engine: engine,
+                clock: clock
+            )
         case .executionFinished:
             isInteractivePrompt = false
             modeController.switchToEditor()
@@ -287,9 +232,50 @@ final class TerminalViewModel: ObservableObject {
             break
         }
 
-        let detector = chunkDetector
-        guard let chunk = await detector.handleShellEvent(event) else { return }
-        outputStore.append(chunk)
-        await refreshMetadata()
+        if let chunk = await outputProcessor.handleShellEvent(event) {
+            _ = chunk
+            await refreshMetadata()
+        }
+    }
+
+    // MARK: - Metadata
+
+    func refreshMetadata(workingDirectory: String? = nil) async {
+        let service = outputProcessor.tokenCountingService
+        let sid = sessionID
+        let breakdown = await service.tokenBreakdown(for: sid)
+        let tokens = breakdown.totalTokens
+        let elapsed = Date().timeIntervalSince(sessionStartTime)
+        let cmdCount = outputProcessor.outputStore.chunks.count
+        let dir = workingDirectory ?? currentMetadata.workingDirectory
+        let agentDet = agentCoordinator.agentDetector
+        let agentState = await agentDet.buildState()
+
+        let ctxLimit = agentState?.contextWindowLimit ?? 0
+        let ctxFraction = agentState?.contextUsageFraction ?? 0
+        let agentElapsed = agentState.map {
+            Date().timeIntervalSince($0.startedAt)
+        } ?? 0
+        let cost = agentState?.estimatedCostUSD ?? 0
+
+        currentMetadata = SessionMetadata(
+            sessionID: sessionID,
+            estimatedTokenCount: tokens,
+            totalCharacterCount: tokens * Int(AppConfig.AI.tokenEstimateDivisor),
+            inputTokenCount: breakdown.inputTokens,
+            outputTokenCount: breakdown.outputTokens,
+            cachedTokenCount: breakdown.cachedTokens,
+            estimatedCostUSD: cost,
+            sessionDuration: elapsed,
+            commandCount: cmdCount,
+            workingDirectory: dir,
+            activeAgentCount: agentCoordinator.agentStateStore?.activeAgentCount ?? 0,
+            currentAgentType: agentState?.agentType,
+            currentAgentStatus: agentState?.status,
+            currentAgentTask: agentState?.currentTask,
+            agentElapsedTime: agentElapsed,
+            contextWindowLimit: ctxLimit,
+            contextUsageFraction: ctxFraction
+        )
     }
 }

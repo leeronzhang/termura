@@ -99,7 +99,7 @@ struct AgentDashboardView: View {
                 Spacer(minLength: 0)
                 elapsedLabel(agent)
             }
-            .padding(.horizontal, AppUI.Spacing.md)
+            .padding(.horizontal, AppUI.Spacing.lg)
             .padding(.vertical, AppUI.Spacing.md)
             .background(
                 agent.needsAttention

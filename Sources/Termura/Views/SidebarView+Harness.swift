@@ -16,9 +16,9 @@ extension SidebarView {
 
     var activeSessionWorkingDirectory: String {
         if let activeID = sessionStore.activeSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == activeID }) {
-            let dir = session.workingDirectory
-            if !dir.isEmpty { return dir }
+           let session = sessionStore.sessions.first(where: { $0.id == activeID }),
+           let dir = session.workingDirectory {
+            return dir
         }
         return AppConfig.Paths.homeDirectory
     }

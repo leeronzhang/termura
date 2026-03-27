@@ -5,9 +5,8 @@ import SwiftUI
 extension SidebarView {
     @ViewBuilder
     var projectContent: some View {
-        let root = sessionStore.projectRoot.isEmpty
-            ? activeSessionWorkingDirectory
-            : sessionStore.projectRoot
+        let root = sessionStore.projectRoot
+            ?? activeSessionWorkingDirectory
         if !root.isEmpty {
             SidebarProjectContent(
                 viewModel: projectScope.viewModel,
@@ -50,7 +49,7 @@ struct SidebarProjectContent: View {
 
     private var gitHostRow: some View {
         HStack {
-            Text(git.remoteHost.isEmpty ? "Git" : git.remoteHost)
+            Text(git.remoteHost ?? "Git")
                 .panelHeaderStyle()
             Spacer()
             ProgressView()
@@ -80,8 +79,8 @@ struct SidebarProjectContent: View {
                 .font(AppUI.Font.labelMono)
                 .foregroundColor(.primary)
                 .lineLimit(1)
-            if !git.lastCommit.isEmpty {
-                let hash = String(git.lastCommit.prefix(while: { $0 != " " }))
+            if let commit = git.lastCommit {
+                let hash = String(commit.prefix(while: { $0 != " " }))
                 Text(hash.prefix(8))
                     .font(AppUI.Font.captionMono)
                     .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))

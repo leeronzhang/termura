@@ -40,7 +40,11 @@ extension TerminalViewModel {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if isAIPromptLine(trimmed) {
                 isInteractivePrompt = true
-                injectContextIfNeeded()
+                sessionServices.injectContextIfNeeded(
+                    workingDirectory: currentMetadata.workingDirectory,
+                    engine: engine,
+                    clock: clock
+                )
                 return
             }
         }

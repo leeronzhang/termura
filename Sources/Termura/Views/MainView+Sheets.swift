@@ -46,9 +46,9 @@ extension MainView {
     /// Working directory of the active session, falling back to home directory.
     var activeSessionWorkingDirectory: String {
         if let activeID = sessionStore.activeSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == activeID }) {
-            let dir = session.workingDirectory
-            if !dir.isEmpty { return dir }
+           let session = sessionStore.sessions.first(where: { $0.id == activeID }),
+           let dir = session.workingDirectory {
+            return dir
         }
         return AppConfig.Paths.homeDirectory
     }

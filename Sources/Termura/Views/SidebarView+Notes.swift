@@ -29,82 +29,118 @@ extension SidebarView {
     }
 
     func notesList(vm: NotesViewModel) -> some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: AppUI.Spacing.xxs) {
+        let composerActive = commandRouter.showComposer
+        return ScrollView(.vertical, showsIndicators: false) {
+            LazyVStack(spacing: AppUI.Spacing.sm) {
                 ForEach(vm.notes) { note in
-                    noteRow(note: note, isActive: vm.selectedNoteID == note.id)
-                        .contextMenu {
-                            Button {
-                                vm.toggleFavorite(id: note.id)
-                            } label: {
-                                Text(note.isFavorite ? "Unfavorite" : "Favorite")
-                            }
-                            Button("Delete", role: .destructive) {
-                                vm.deleteNote(id: note.id)
-                            }
+                    SidebarNoteRow(
+                        note: note,
+                        isActive: vm.selectedNoteID == note.id,
+                        composerActive: composerActive,
+                        onOpen: { onOpenNote?(note.id, note.title) },
+                        onInsert: { commandRouter.composerInsertHandler?($0) },
+                        onToggleFavorite: { vm.toggleFavorite(id: note.id) }
+                    )
+                    .contextMenu {
+                        Button {
+                            vm.toggleFavorite(id: note.id)
+                        } label: {
+                            Text(note.isFavorite ? "Unfavorite" : "Favorite")
                         }
+                        Button("Delete", role: .destructive) {
+                            vm.deleteNote(id: note.id)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, AppUI.Spacing.lg)
         }
     }
+}
 
-    func noteRow(note: NoteRecord, isActive: Bool) -> some View {
-        Button {
-            onOpenNote?(note.id, note.title)
-        } label: {
-            HStack(alignment: .top, spacing: AppUI.Spacing.md) {
-                FileTypeIcon.image(for: "note.md")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: AppUI.Size.fileTypeIcon, height: AppUI.Size.fileTypeIcon)
-                    .foregroundColor(.secondary)
-                    .padding(.top, AppUI.Spacing.xxs)
+// MARK: - Note Row (owns hover state)
 
-                VStack(alignment: .leading, spacing: AppUI.Spacing.xxs) {
-                    HStack(spacing: AppUI.Spacing.smMd) {
-                        Text(note.title.isEmpty ? "Untitled" : note.title)
-                            .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
-                            .foregroundColor(isActive ? .primary : .secondary)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(sidebarFormattedDate(note.updatedAt))
-                            .font(AppUI.Font.micro)
-                            .foregroundColor(.secondary)
-                    }
+/// Standalone row view for sidebar notes. Owns `@State isHovered` for
+/// composer-aware insert button that appears on mouse hover.
+private struct SidebarNoteRow: View {
+    let note: NoteRecord
+    let isActive: Bool
+    let composerActive: Bool
+    let onOpen: () -> Void
+    let onInsert: (String) -> Void
+    let onToggleFavorite: () -> Void
+    @Environment(\.themeManager) private var themeManager
 
-                    if let preview = sidebarNotePreview(note.body) {
-                        Text(preview)
-                            .font(AppUI.Font.caption)
-                            .foregroundColor(.secondary.opacity(AppUI.Opacity.secondary))
-                            .lineLimit(1)
-                    }
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: AppUI.Spacing.smMd) {
+            favoriteIcon
+                .padding(.top, AppUI.Spacing.xxs)
+            VStack(alignment: .leading, spacing: AppUI.Spacing.xxs) {
+                HStack {
+                    Text(note.title.isEmpty ? "Untitled" : note.title)
+                        .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
+                        .foregroundColor(isActive ? .primary : .secondary)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(formattedDate(note.updatedAt))
+                        .font(AppUI.Font.micro)
+                        .foregroundColor(.secondary)
                 }
-
-                favoriteButton(note: note)
+                if let preview = notePreview(note.body) {
+                    Text(preview)
+                        .font(AppUI.Font.caption)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.secondary))
+                        .lineLimit(1)
+                }
             }
-            .padding(.horizontal, AppUI.Spacing.lg)
-            .padding(.vertical, AppUI.Spacing.smMd)
-            .background(
-                isActive
-                    ? Color.accentColor.opacity(AppUI.Opacity.selected)
-                    : Color.clear
-            )
-            .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
-            .overlay(
-                RoundedRectangle(cornerRadius: AppUI.Radius.md)
-                    .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
-            )
+        }
+        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.vertical, AppUI.Spacing.md)
+        .background(rowBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
+        .overlay(alignment: .trailing) {
+            if isHovered && composerActive { insertButton.padding(.trailing, AppUI.Spacing.lg) }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: AppUI.Radius.md)
+                .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { rowTapped() }
+        .onHover { isHovered = $0 }
+        .draggable(note.body)
+    }
+
+    private func rowTapped() {
+        if composerActive {
+            onInsert(note.body)
+        } else {
+            onOpen()
+        }
+    }
+
+    private var rowBackground: some View {
+        RoundedRectangle(cornerRadius: AppUI.Radius.md)
+            .fill(isActive ? Color.accentColor.opacity(AppUI.Opacity.selected) : .clear)
+    }
+
+    private var insertButton: some View {
+        Button {
+            onInsert(note.body)
+        } label: {
+            Image(systemName: "arrow.right.circle.fill")
+                .font(.system(size: 14))
+                .foregroundColor(.accentColor)
         }
         .buttonStyle(.plain)
+        .help("Insert into Composer")
+        .transition(.opacity)
     }
 
-    // MARK: - Private Helpers
-
-    private func favoriteButton(note: NoteRecord) -> some View {
-        Button {
-            notesViewModel.toggleFavorite(id: note.id)
-        } label: {
+    private var favoriteIcon: some View {
+        Button { onToggleFavorite() } label: {
             Image(systemName: note.isFavorite ? "star.fill" : "star")
                 .font(.system(size: 11))
                 .foregroundColor(
@@ -117,7 +153,9 @@ extension SidebarView {
         .help(note.isFavorite ? "Remove from favorites" : "Add to favorites")
     }
 
-    private func sidebarNotePreview(_ body: String) -> String? {
+    // MARK: - Helpers
+
+    private func notePreview(_ body: String) -> String? {
         let line = body.components(separatedBy: .newlines)
             .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard let line, !line.isEmpty else { return nil }
@@ -125,7 +163,7 @@ extension SidebarView {
         return line.count > limit ? String(line.prefix(limit)) + "..." : line
     }
 
-    private func sidebarFormattedDate(_ date: Date) -> String {
+    private func formattedDate(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
             let formatter = DateFormatter()

@@ -39,11 +39,14 @@ struct SessionRowView: View {
                 agentStatsLine
             }
         }
-        .padding(.horizontal, AppUI.Spacing.md)
+        .padding(.horizontal, AppUI.Spacing.lg)
         .padding(.vertical, AppUI.Spacing.md)
         .background(rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
         .overlay(glowBorder)
+        .overlay(alignment: .topTrailing) {
+            if isHovered { closeButton.padding(AppUI.Spacing.smMd) }
+        }
         .onTapGesture { onActivate() }
         .onHover { isHovered = $0 }
         .accessibilityElement(children: .combine)
@@ -84,7 +87,7 @@ struct SessionRowView: View {
     private var titleRow: some View {
         HStack(spacing: AppUI.Spacing.smMd) {
             titleLabel
-            Spacer(minLength: AppUI.Spacing.sm)
+            Spacer(minLength: 0)
             if hasUnreadFailure {
                 Circle()
                     .fill(Color.red)
@@ -102,7 +105,6 @@ struct SessionRowView: View {
                 }
                 .buttonStyle(.plain)
             }
-            closeButton
         }
     }
 
@@ -176,11 +178,14 @@ struct SessionRowView: View {
             }
         } label: {
             Image(systemName: "xmark")
-                .font(AppUI.Font.micro)
-                .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.secondary))
+                .frame(width: 20, height: 20)
+                .background(themeManager.current.background.opacity(AppUI.Opacity.strong))
+                .clipShape(Circle())
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .opacity(isHovered ? 1 : 0)
         .alert("Close Active Session?", isPresented: $showCloseConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Stop & Close", role: .destructive) { onClose() }

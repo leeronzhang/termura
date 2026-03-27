@@ -10,7 +10,7 @@ struct SplitPaneView: View {
         switch node {
         case let .leaf(sessionID):
             renderLeaf(sessionID)
-        case let .split(axis, _, _):
+        case let .split(axis: axis, first: _, second: _):
             splitView(axis: axis)
         }
     }
@@ -48,14 +48,14 @@ enum SplitAxis: String, Sendable, Codable {
 /// A leaf holds a single session; a split holds two children.
 indirect enum SplitNode: Sendable {
     case leaf(SessionID)
-    case split(SplitAxis, SplitNode, SplitNode)
+    case split(axis: SplitAxis, first: SplitNode, second: SplitNode)
 
     /// The depth of the deepest leaf.
     var depth: Int {
         switch self {
         case .leaf:
             0
-        case let .split(_, first, second):
+        case let .split(axis: _, first: first, second: second):
             1 + max(first.depth, second.depth)
         }
     }
@@ -70,7 +70,7 @@ indirect enum SplitNode: Sendable {
         switch self {
         case let .leaf(id):
             [id]
-        case let .split(_, first, second):
+        case let .split(axis: _, first: first, second: second):
             first.allSessionIDs + second.allSessionIDs
         }
     }
@@ -82,12 +82,12 @@ extension Binding where Value == SplitNode {
     var first: Binding<SplitNode> {
         Binding<SplitNode>(
             get: {
-                if case let .split(_, firstNode, _) = wrappedValue { return firstNode }
+                if case let .split(axis: _, first: firstNode, second: _) = wrappedValue { return firstNode }
                 return wrappedValue
             },
             set: { newValue in
-                if case let .split(axis, _, secondNode) = wrappedValue {
-                    wrappedValue = .split(axis, newValue, secondNode)
+                if case let .split(axis: axis, first: _, second: secondNode) = wrappedValue {
+                    wrappedValue = .split(axis: axis, first: newValue, second: secondNode)
                 }
             }
         )
@@ -96,12 +96,12 @@ extension Binding where Value == SplitNode {
     var second: Binding<SplitNode> {
         Binding<SplitNode>(
             get: {
-                if case let .split(_, _, secondNode) = wrappedValue { return secondNode }
+                if case let .split(axis: _, first: _, second: secondNode) = wrappedValue { return secondNode }
                 return wrappedValue
             },
             set: { newValue in
-                if case let .split(axis, firstNode, _) = wrappedValue {
-                    wrappedValue = .split(axis, firstNode, newValue)
+                if case let .split(axis: axis, first: firstNode, second: _) = wrappedValue {
+                    wrappedValue = .split(axis: axis, first: firstNode, second: newValue)
                 }
             }
         )
