@@ -32,7 +32,7 @@ struct ContextFileView: View {
             footer
         }
         .frame(minWidth: AppConfig.UI.contextFileEditMinWidth, minHeight: AppConfig.UI.contextFileEditMinHeight)
-        .onAppear { loadFile() }
+        .task { await loadFile() }
     }
 
     private var header: some View {
@@ -84,16 +84,15 @@ struct ContextFileView: View {
         return path
     }
 
-    private func loadFile() {
+    private func loadFile() async {
         let path = contextFilePath
-        Task.detached {
-            do {
-                let text = try String(contentsOfFile: path, encoding: .utf8)
-                await MainActor.run { content = text }
-            } catch {
-                let msg = "Could not read context.md: \(error.localizedDescription)"
-                await MainActor.run { errorMessage = msg }
-            }
+        do {
+            let text = try await Task.detached {
+                try String(contentsOfFile: path, encoding: .utf8)
+            }.value
+            content = text
+        } catch {
+            errorMessage = "Could not read context.md: \(error.localizedDescription)"
         }
     }
 
@@ -103,6 +102,8 @@ struct ContextFileView: View {
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
         let filePath = contextFilePath
         let text = content
+        // Lifecycle: user-initiated save — Task completes quickly (file I/O);
+        // even if sheet dismisses, the write finishes harmlessly.
         Task.detached {
             do {
                 if !FileManager.default.fileExists(atPath: dirPath) {

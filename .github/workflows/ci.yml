@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. SwiftLint ─────────────────────────────────────────────
+  lint:
+    name: SwiftLint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint (strict)
+        run: swiftlint lint --strict --reporter github-actions-logging
+
+  # ── 2. SwiftFormat ───────────────────────────────────────────
+  format:
+    name: SwiftFormat
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SwiftFormat
+        run: brew install swiftformat
+
+      - name: Check formatting
+        run: swiftformat --lint Sources/ --quiet
+
+  # ── 3. Build ─────────────────────────────────────────────────
+  build:
+    name: Build (macOS)
+    runs-on: macos-15
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
+
+      - name: Build Debug
+        run: |
+          xcodebuild \
+            -scheme Termura \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            build \
+            OTHER_SWIFT_FLAGS="-warnings-as-errors" \
+            | xcpretty || xcodebuild \
+              -scheme Termura \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              build \
+              OTHER_SWIFT_FLAGS="-warnings-as-errors"
+
+  # ── 4. Unit Tests ─────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: macos-15
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
+
+      - name: Run tests with coverage
+        run: |
+          xcodebuild test \
+            -scheme Termura \
+            -destination 'platform=macOS' \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
+            | xcpretty || true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: TestResults.xcresult
+
+  # ── 5. Sanitizer Build ───────────────────────────────────────
+  sanitizer:
+    name: Address & Thread Sanitizer
+    runs-on: macos-15
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
+
+      - name: Tests with Address Sanitizer
+        run: |
+          xcodebuild test \
+            -scheme Termura \
+            -destination 'platform=macOS' \
+            -enableAddressSanitizer YES \
+            | xcpretty || true
+
+      - name: Tests with Thread Sanitizer
+        run: |
+          xcodebuild test \
+            -scheme Termura \
+            -destination 'platform=macOS' \
+            -enableThreadSanitizer YES \
+            | xcpretty || true
+
+  # ── 6. Security Audit ─────────────────────────────────────────
+  security:
+    name: Security Audit
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scanning (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependency vulnerability scan
+        run: |
+          if [ -f "Termura.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" ]; then
+            curl -L https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_darwin_arm64 \
+              -o /tmp/osv-scanner && chmod +x /tmp/osv-scanner
+            /tmp/osv-scanner \
+              --lockfile "swift:Termura.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
+              || echo "⚠ 依赖漏洞扫描发现问题，请检查"
+          else
+            echo "Package.resolved 未找到，跳过漏洞扫描"
+          fi

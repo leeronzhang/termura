@@ -79,7 +79,7 @@ struct ContentTabBar: View {
 
     /// Extra top space so the tab content aligns with the sidebar icons,
     /// sitting just below the traffic-light buttons in non-fullscreen.
-    private var titleBarTop: CGFloat { isFullScreen ? 0 : 6 }
+    private var titleBarTop: CGFloat { isFullScreen ? 0 : AppUI.Spacing.smMd }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -116,5 +116,7 @@ struct ContentTabBar: View {
         .background(isSelected ? Color(nsColor: .windowBackgroundColor) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture { selectedTab = tab }
+        .accessibilityLabel(tab.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

@@ -16,6 +16,8 @@ struct AgentStatusBadgeView: View {
             .help(helpText)
             .onAppear { updatePulse() }
             .onChange(of: status) { _, _ in updatePulse() }
+            .accessibilityLabel("\(agentType.displayName): \(status.rawValue)")
+            .accessibilityValue(helpText)
     }
 
     @ViewBuilder

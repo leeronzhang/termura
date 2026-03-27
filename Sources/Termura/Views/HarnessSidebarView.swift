@@ -19,7 +19,7 @@ struct HarnessSidebarView: View {
         }
         .frame(minWidth: 260, maxWidth: 320)
         .background(.ultraThinMaterial)
-        .onAppear { Task { await viewModel.loadRuleFiles() } }
+        .task { await viewModel.loadRuleFiles() }
     }
 
     private var header: some View {

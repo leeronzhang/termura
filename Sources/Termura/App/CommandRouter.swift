@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import OSLog
+import SwiftUI
 
 private let logger = Logger(subsystem: "com.termura.app", category: "CommandRouter")
 
@@ -35,7 +36,6 @@ final class CommandRouter {
 
     var toggleTimelineTick: UInt = 0
     var toggleAgentDashboardTick: UInt = 0
-    var toggleComposerTick: UInt = 0
     var showComposer: Bool = false
 
     // MARK: - Data signals
@@ -96,6 +96,14 @@ final class CommandRouter {
     }
 
     func toggleComposer() {
-        showComposer.toggle()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            showComposer.toggle()
+        }
+    }
+
+    func dismissComposer() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            showComposer = false
+        }
     }
 }

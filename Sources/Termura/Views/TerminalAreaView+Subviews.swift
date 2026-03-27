@@ -59,9 +59,7 @@ extension TerminalAreaView {
     @ViewBuilder
     private var toolbarButtons: some View {
         Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                commandRouter.showComposer.toggle()
-            }
+            commandRouter.toggleComposer()
         } label: {
             Image(systemName: "menubar.dock.rectangle")
                 .font(AppUI.Font.toolbarIcon)
@@ -120,21 +118,6 @@ extension TerminalAreaView {
         return path
     }
 
-    // MARK: - Intervention toolbar
-
-    func interventionBar(agentType: AgentType, status: AgentStatus) -> some View {
-        InterventionToolbarView(
-            agentType: agentType,
-            status: status,
-            onPause: { Task { await engine.send("\u{03}") } },
-            onResume: { Task { await engine.send("\n") } },
-            onInsertDirective: { directive in Task { await engine.send(directive + "\n") } }
-        )
-        .floatingCard()
-        .padding(.horizontal, AppUI.Spacing.lg)
-        .padding(.bottom, AppUI.Spacing.smMd)
-    }
-
     // MARK: - Terminal / output stack
 
     @ViewBuilder
@@ -152,26 +135,19 @@ extension TerminalAreaView {
                     fontSize: fontSettings.terminalFontSize
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, AppUI.Spacing.xxl)
+                .background(themeManager.current.background)
 
                 if commandRouter.showComposer {
-                    // Backdrop — covers exactly the terminal content area.
+                    // Backdrop — dismiss handled by NSEvent mouse monitor in TerminalAreaView.
                     themeManager.current.background.opacity(AppUI.Opacity.strong)
                         .transition(.opacity.animation(.easeOut(duration: AppUI.Animation.fadeOut)))
-                        .onTapGesture {
-                            withAnimation(.easeOut(duration: AppUI.Animation.panel)) {
-                                commandRouter.showComposer = false
-                            }
-                        }
 
                     ComposerOverlayView(
                         editorViewModel: editorViewModel,
                         notesViewModel: notesViewModel,
                         editorHandle: editorHandle,
-                        onDismiss: {
-                            withAnimation(.easeOut(duration: AppUI.Animation.panel)) {
-                                commandRouter.showComposer = false
-                            }
-                        }
+                        onDismiss: { commandRouter.dismissComposer() }
                     )
                     .transition(
                         .move(edge: .bottom)
@@ -192,5 +168,3 @@ extension String {
         "'" + replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
-
-// Editor overlay and divider handle removed — replaced by on-demand ComposerOverlayView.

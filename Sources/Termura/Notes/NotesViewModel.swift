@@ -7,7 +7,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "NotesViewMo
 @Observable @MainActor
 final class NotesViewModel {
     private(set) var notes: [NoteRecord] = []
-    private(set) var snippets: [NoteRecord] = []
     var selectedNoteID: NoteID?
     var editingTitle: String = "" {
         didSet { scheduleAutoSave() }
@@ -36,8 +35,8 @@ final class NotesViewModel {
         }
     }
 
-    func createNote() {
-        let note = NoteRecord(title: "Untitled")
+    func createNote(title: String = "Untitled", body: String = "") {
+        let note = NoteRecord(title: title, body: body)
         notes.insert(note, at: 0)
         selectedNoteID = note.id
         editingTitle = note.title
@@ -60,6 +59,20 @@ final class NotesViewModel {
         editingBody = note.body
     }
 
+    func toggleFavorite(id: NoteID) {
+        guard let idx = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[idx].isFavorite.toggle()
+        let updated = notes[idx]
+        Task {
+            do {
+                try await repository.save(updated)
+            } catch {
+                errorMessage = "Failed to update favorite: \(error.localizedDescription)"
+                logger.error("Failed to update favorite: \(error)")
+            }
+        }
+    }
+
     func deleteNote(id: NoteID) {
         notes.removeAll { $0.id == id }
         if selectedNoteID == id {
@@ -77,54 +90,6 @@ final class NotesViewModel {
         }
     }
 
-    // MARK: - Snippets
-
-    func loadSnippets() async {
-        do {
-            snippets = try await repository.fetchSnippets()
-        } catch {
-            errorMessage = "Failed to load snippets: \(error.localizedDescription)"
-            logger.error("Failed to load snippets: \(error)")
-        }
-    }
-
-    func createSnippet(title: String, body: String) {
-        let snippet = NoteRecord(title: title, body: body, isSnippet: true)
-        snippets.insert(snippet, at: 0)
-        // Lifecycle: fire-and-forget persistence — snippet is already in the in-memory array.
-        Task {
-            do {
-                try await repository.save(snippet)
-            } catch {
-                errorMessage = "Failed to save snippet: \(error.localizedDescription)"
-                logger.error("Failed to save snippet: \(error)")
-            }
-        }
-    }
-
-    func deleteSnippet(id: NoteID) {
-        snippets.removeAll { $0.id == id }
-        // Lifecycle: fire-and-forget persistence — snippet is already removed from in-memory array.
-        Task {
-            do {
-                try await repository.delete(id: id)
-            } catch {
-                errorMessage = "Failed to delete snippet: \(error.localizedDescription)"
-                logger.error("Failed to delete snippet: \(error)")
-            }
-        }
-    }
-
-    func searchSnippets(query: String) async -> [NoteRecord] {
-        do {
-            return try await repository.searchSnippets(query: query)
-        } catch {
-            errorMessage = "Failed to search snippets: \(error.localizedDescription)"
-            logger.error("Failed to search snippets: \(error)")
-            return []
-        }
-    }
-
     // MARK: - Private
 
     /// Debounces title/body edits before persisting to the repository.
@@ -133,7 +98,10 @@ final class NotesViewModel {
         autoSaveTask = Task { [weak self] in
             do {
                 try await Task.sleep(for: .seconds(AppConfig.Runtime.notesAutoSaveSeconds))
-            } catch { return }
+            } catch {
+                // CancellationError is expected — next edit restarts the debounce.
+                return
+            }
             guard let self else { return }
             persistCurrentNote(title: editingTitle, body: editingBody)
         }

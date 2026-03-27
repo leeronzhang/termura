@@ -73,6 +73,58 @@ final class DatabaseMigrationsTests: XCTestCase {
         }
     }
 
+    // MARK: - Real data migration (insert → query roundtrip)
+
+    func testInsertAndQuerySessionRoundtrip() async throws {
+        let repo = SessionRepository(db: dbService)
+        let session = SessionRecord(
+            title: "Migration Test",
+            workingDirectory: "/tmp/test",
+            orderIndex: 0
+        )
+        try await repo.save(session)
+
+        let loaded = try await repo.fetchAll()
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded.first?.title, "Migration Test")
+        XCTAssertEqual(loaded.first?.workingDirectory, "/tmp/test")
+    }
+
+    func testInsertNoteWithFTSSearch() async throws {
+        let repo = NoteRepository(db: dbService)
+        let note = NoteRecord(title: "Search Target", body: "findable content here")
+        try await repo.save(note)
+
+        let results = try await repo.search(query: "findable")
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results.first?.title, "Search Target")
+    }
+
+    func testSessionBranchCreation() async throws {
+        let repo = SessionRepository(db: dbService)
+        let parent = SessionRecord(title: "Parent", orderIndex: 0)
+        try await repo.save(parent)
+
+        let branch = try await repo.createBranch(
+            from: parent.id, type: .experiment, title: "Child Branch"
+        )
+        XCTAssertEqual(branch.parentID, parent.id)
+        XCTAssertEqual(branch.branchType, .experiment)
+
+        let children = try await repo.fetchChildren(of: parent.id)
+        XCTAssertEqual(children.count, 1)
+    }
+
+    func testAgentTypeColumnMigration() async throws {
+        let repo = SessionRepository(db: dbService)
+        var session = SessionRecord(title: "Agent Test", orderIndex: 0)
+        session.agentType = .claudeCode
+        try await repo.save(session)
+
+        let loaded = try await repo.fetchAll()
+        XCTAssertEqual(loaded.first?.agentType, .claudeCode)
+    }
+
     // MARK: - Foreign key cascades
 
     func testDeleteSessionCascadesSnapshots() async throws {

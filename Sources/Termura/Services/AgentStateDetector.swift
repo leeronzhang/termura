@@ -4,20 +4,22 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "AgentStateDetector")
 
 /// Precompiled regex patterns for parsing token stats from agent output.
+/// Uses non-optional types — the hard-coded patterns are guaranteed well-formed.
+/// A compilation failure here would indicate a system-level issue, so we trap immediately
+/// rather than silently degrading all token parsing for the lifetime of the process.
 private enum TokenStatRegex {
-    static let cost: NSRegularExpression? = compile("Total cost:\\s*\\$([\\d.]+)")
-    static let input: NSRegularExpression? = compile("Input:\\s*([\\d,.]+)k?")
-    static let output: NSRegularExpression? = compile("Output:\\s*([\\d,.]+)k?")
-    static let cache: NSRegularExpression? = compile("Cache read:\\s*([\\d,.]+)k?")
+    static let cost = compile("Total cost:\\s*\\$([\\d.]+)")
+    static let input = compile("Input:\\s*([\\d,.]+)k?")
+    static let output = compile("Output:\\s*([\\d,.]+)k?")
+    static let cache = compile("Cache read:\\s*([\\d,.]+)k?")
 
-    private static func compile(_ pattern: String) -> NSRegularExpression? {
+    private static func compile(_ pattern: String) -> NSRegularExpression {
         do {
             return try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
         } catch {
-            // Non-critical: static regex — the hard-coded patterns are well-formed.
-            // If compilation fails here it indicates a system-level issue, not a code defect.
-            logger.error("Failed to compile regex '\(pattern)': \(error)")
-            return nil
+            // These are hard-coded, well-formed patterns. If compilation fails,
+            // the process is in a broken state (e.g., ICU library missing).
+            preconditionFailure("Failed to compile static regex '\(pattern)': \(error)")
         }
     }
 }
@@ -28,6 +30,7 @@ actor AgentStateDetector {
     private var detectedType: AgentType?
     private var currentStatus: AgentStatus = .idle
     private var detectedAt: Date?
+    private var parsedCost: Double = 0
     private let sessionID: SessionID
 
     init(sessionID: SessionID) {
@@ -49,6 +52,11 @@ actor AgentStateDetector {
             }
         }
         return nil
+    }
+
+    /// Update the accumulated cost from parsed agent output.
+    func updateCost(_ cost: Double) {
+        parsedCost = cost
     }
 
     /// Directly set the detected agent type (used when detection happens outside the detector).
@@ -84,6 +92,7 @@ actor AgentStateDetector {
             agentType: type,
             status: currentStatus,
             tokenCount: tokenCount,
+            estimatedCostUSD: parsedCost,
             startedAt: detectedAt ?? Date()
         )
     }
@@ -132,11 +141,10 @@ actor AgentStateDetector {
 
     private static func extractDouble(
         from text: String,
-        pattern: NSRegularExpression?
+        pattern: NSRegularExpression
     ) -> Double? {
-        guard let regex = pattern else { return nil }
         let range = NSRange(text.startIndex..., in: text)
-        guard let match = regex.firstMatch(in: text, range: range),
+        guard let match = pattern.firstMatch(in: text, range: range),
               match.numberOfRanges > 1,
               let captureRange = Range(match.range(at: 1), in: text) else {
             return nil
@@ -146,13 +154,11 @@ actor AgentStateDetector {
 
     private static func extractTokenCount(
         from text: String,
-        pattern: NSRegularExpression?
+        pattern: NSRegularExpression
     ) -> Int? {
         guard let value = extractDouble(from: text, pattern: pattern) else { return nil }
-        // If the matched text ends with 'k', the value is in thousands
-        guard let regex = pattern else { return nil }
         let range = NSRange(text.startIndex..., in: text)
-        guard let match = regex.firstMatch(in: text, range: range),
+        guard let match = pattern.firstMatch(in: text, range: range),
               let fullRange = Range(match.range, in: text) else { return nil }
         let matched = String(text[fullRange])
         if matched.lowercased().hasSuffix("k") {

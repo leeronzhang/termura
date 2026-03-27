@@ -85,5 +85,7 @@ struct SidebarTabBar: View {
         }
         .buttonStyle(.plain)
         .help(tab.label)
+        .accessibilityLabel(tab.label)
+        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
 }

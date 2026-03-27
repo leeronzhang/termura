@@ -14,17 +14,6 @@ final class InputModeControllerTests: XCTestCase {
         XCTAssertEqual(controller.mode, .passthrough)
     }
 
-    func testToggleModeSwitchesToEditor() {
-        controller.toggleMode()
-        XCTAssertEqual(controller.mode, .editor)
-    }
-
-    func testDoubleToggleReturnsToPassthrough() {
-        controller.toggleMode()
-        controller.toggleMode()
-        XCTAssertEqual(controller.mode, .passthrough)
-    }
-
     func testSwitchToPassthroughSetsPassthrough() {
         controller.switchToPassthrough()
         XCTAssertEqual(controller.mode, .passthrough)

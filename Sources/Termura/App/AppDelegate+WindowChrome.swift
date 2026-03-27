@@ -58,7 +58,7 @@ extension AppDelegate {
             object: window,
             queue: .main
         ) { [weak window] _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 guard let window else { return }
                 Self.addFullScreenLabel(to: window)
             }
@@ -70,7 +70,7 @@ extension AppDelegate {
             object: window,
             queue: .main
         ) { [weak self, weak window] _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 guard let self, let window else { return }
                 Self.removeFullScreenLabel(from: window)
                 self.trafficLightContainer(in: window)?.alphaValue = 0
@@ -83,25 +83,22 @@ extension AppDelegate {
             object: window,
             queue: .main
         ) { [weak self, weak window] _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self, weak window] in
                 guard let self, let window else { return }
-                Task { @MainActor [weak self, weak window] in
-                    guard let self, let window else { return }
-                    do {
-                        try await Task.sleep(nanoseconds: AppConfig.UI.fullScreenExitDelayNanoseconds)
-                    } catch is CancellationError {
-                        return
-                    } catch {
-                        // Non-critical: fullscreen transition chrome is cosmetic.
-                        logger.warning("Full-screen exit delay failed: \(error.localizedDescription)")
-                        return
-                    }
-                    self.disableTitlebarEffect(in: window)
-                    self.adjustTrafficLights(in: window)
-                    await NSAnimationContext.runAnimationGroup { ctx in
-                        ctx.duration = AppConfig.UI.trafficLightFadeSeconds
-                        self.trafficLightContainer(in: window)?.animator().alphaValue = 1
-                    }
+                do {
+                    try await Task.sleep(nanoseconds: AppConfig.UI.fullScreenExitDelayNanoseconds)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    // Non-critical: fullscreen transition chrome is cosmetic.
+                    logger.warning("Full-screen exit delay failed: \(error.localizedDescription)")
+                    return
+                }
+                self.disableTitlebarEffect(in: window)
+                self.adjustTrafficLights(in: window)
+                await NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = AppConfig.UI.trafficLightFadeSeconds
+                    self.trafficLightContainer(in: window)?.animator().alphaValue = 1
                 }
             }
         }

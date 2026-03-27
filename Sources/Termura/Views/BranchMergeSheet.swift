@@ -24,7 +24,7 @@ struct BranchMergeSheet: View {
         .padding(AppUI.Spacing.xxl)
         .frame(width: AppConfig.UI.branchMergeSheetWidth)
         .frame(minHeight: 350)
-        .onAppear { generateSummary() }
+        .task { await generateSummary() }
     }
 
     private var header: some View {
@@ -87,17 +87,13 @@ struct BranchMergeSheet: View {
         }
     }
 
-    private func generateSummary() {
+    private func generateSummary() async {
         isGenerating = true
         let capturedChunks = chunks
         let branchType = branchSession.branchType
-        Task {
-            let result = await summarizer.summarize(chunks: capturedChunks, branchType: branchType)
-            await MainActor.run {
-                summary = result
-                isGenerating = false
-            }
-        }
+        let result = await summarizer.summarize(chunks: capturedChunks, branchType: branchType)
+        summary = result
+        isGenerating = false
     }
 
     private var branchIcon: String {

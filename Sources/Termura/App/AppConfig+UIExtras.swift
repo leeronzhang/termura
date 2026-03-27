@@ -33,27 +33,13 @@ extension AppConfig.UI {
     static let editorIndentWidth = 4
     /// Line number font size reduction relative to editor size.
     static let lineNumberFontSizeReduction: CGFloat = 3
+
+    // MARK: - Editor Background
+
     /// Dark editor background white channel value.
     static let editorBackgroundDark: CGFloat = 0.13
     /// Light editor background white channel value.
     static let editorBackgroundLight: CGFloat = 0.97
-
-    // MARK: - Composer Overlay
-
-    /// Composer card corner radius.
-    static let composerCornerRadius: CGFloat = 12
-    /// Composer shadow card opacity.
-    static let composerShadowOpacity: Double = 0.4
-    /// Composer shadow radius.
-    static let composerShadowRadius: CGFloat = 24
-    /// Composer shadow Y offset.
-    static let composerShadowY: CGFloat = 8
-    /// Close-button font size for composer overlay.
-    static let composerCloseIconSize: CGFloat = 16
-    /// Snippet row corner radius.
-    static let snippetRowCornerRadius: CGFloat = 6
-    /// Save-confirmation badge display duration (nanoseconds).
-    static let saveConfirmDurationNanoseconds: UInt64 = 1_500_000_000
 
     // MARK: - File Preview
 

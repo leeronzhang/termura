@@ -135,20 +135,15 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].isPinned = true
         let updated = sessions[idx]
-        persistAsync {
-            try await $0.setPinned(id: id, pinned: true)
-            try await $0.save(updated)
-        }
+        // save() persists the full record including isPinned — no separate setPinned needed.
+        persistAsync { try await $0.save(updated) }
     }
 
     func unpinSession(id: SessionID) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].isPinned = false
         let updated = sessions[idx]
-        persistAsync {
-            try await $0.setPinned(id: id, pinned: false)
-            try await $0.save(updated)
-        }
+        persistAsync { try await $0.save(updated) }
     }
 
     func setAgentType(id: SessionID, type: AgentType) {

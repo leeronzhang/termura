@@ -1,164 +1,118 @@
 import SwiftUI
 
 /// Bottom sheet composer within the terminal area.
-/// Slides up from the bottom, same width as the terminal.
 struct ComposerOverlayView: View {
     @ObservedObject var editorViewModel: EditorViewModel
     var notesViewModel: NotesViewModel
     let editorHandle: EditorViewHandle
     let onDismiss: () -> Void
+    @Environment(\.themeManager) private var themeManager
 
-    enum Tab { case compose, snippets }
-    @State private var activeTab: Tab = .compose
-    @State private var snippetSearch: String = ""
+    @State private var showNotes = false
+    @State private var noteSearch: String = ""
     @State private var showSaveConfirm = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            cardHeader
-            cardContent
-            cardFooter
+        HStack(spacing: 0) {
+            // Left: editor area with header and floating send
+            ZStack(alignment: .bottomTrailing) {
+                VStack(spacing: 0) {
+                    cardHeader
+                    editorArea
+                }
+                sendButton
+                    .padding(.trailing, AppUI.Spacing.xxxxl)
+                    .padding(.bottom, AppUI.Spacing.xxl)
+            }
+
+            if showNotes {
+                Divider()
+                notesPanel
+                    .frame(width: AppConfig.UI.composerNotesPanelWidth)
+            }
         }
         .background(Color(nsColor: .controlBackgroundColor))
-        .frame(height: AppConfig.UI.composerMaxHeight)
-        .onAppear {
-            Task { await notesViewModel.loadSnippets() }
-            focusEditor()
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(themeManager.current.sidebarText.opacity(AppUI.Opacity.softBorder))
+                .frame(height: 0.5)
         }
+        .frame(height: AppConfig.UI.composerMaxHeight)
+        .task { await notesViewModel.loadNotes() }
+        .onAppear { focusEditor() }
     }
 
-    // MARK: - Header
+    // MARK: - Header (notes icon + close)
 
     private var cardHeader: some View {
         HStack(spacing: AppUI.Spacing.lgXl) {
-            tabLabel("Compose", tab: .compose)
-            tabLabel("Snippets", tab: .snippets)
             Spacer()
+            Button {
+                withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                    showNotes.toggle()
+                }
+            } label: {
+                Image(systemName: showNotes ? "text.rectangle.fill" : "text.rectangle")
+                    .font(.system(size: 13))
+                    .foregroundColor(showNotes ? .accentColor : .secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Notes")
+
             Button { onDismiss() } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: AppConfig.UI.composerCloseIconSize))
-                    .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
-        .padding(.vertical, AppUI.Spacing.lgXl)
+        .padding(.top, AppUI.Spacing.lgXl)
+        .padding(.bottom, AppUI.Spacing.sm)
     }
 
-    private func tabLabel(_ title: String, tab: Tab) -> some View {
-        let isActive = activeTab == tab
-        return Button {
-            withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
-                activeTab = tab
-                if tab == .compose { focusEditor() }
-            }
-        } label: {
-            Text(title)
-                .font(isActive ? AppUI.Font.labelMedium : AppUI.Font.label)
-                .foregroundColor(isActive ? .primary : .secondary)
-                .overlay(alignment: .bottom) {
-                    if isActive {
-                        Rectangle()
-                            .fill(Color.accentColor)
-                            .frame(height: 2)
-                            .offset(y: 4)
-                    }
-                }
-        }
-        .buttonStyle(.plain)
+    // MARK: - Editor
+
+    private var editorArea: some View {
+        EditorInputView(viewModel: editorViewModel, viewHandle: editorHandle)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, AppUI.Spacing.xxl)
+            .padding(.vertical, AppUI.Spacing.sm)
     }
 
-    // MARK: - Content
-
-    @ViewBuilder
-    private var cardContent: some View {
-        switch activeTab {
-        case .compose:
-            EditorInputView(viewModel: editorViewModel, viewHandle: editorHandle)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, AppUI.Spacing.xxl)
-                .padding(.vertical, AppUI.Spacing.lgXl)
-        case .snippets:
-            ComposerSnippetsView(
-                editorViewModel: editorViewModel,
-                notesViewModel: notesViewModel,
-                snippetSearch: $snippetSearch,
-                onSwitchToCompose: { switchToCompose() },
-                onDismiss: onDismiss
-            )
-        }
-    }
-
-    // MARK: - Footer
-
-    private var cardFooter: some View {
-        HStack(spacing: AppUI.Spacing.md) {
-            if activeTab == .compose {
-                saveSnippetButton
-                Spacer()
-                Text("Cmd+Enter to send")
-                    .font(AppUI.Font.captionMono)
-                    .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
-                sendButton
-            } else {
-                Text("Click to edit, arrow to send")
-                    .font(AppUI.Font.captionMono)
-                    .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
-                Spacer()
-            }
-        }
-        .padding(.horizontal, AppUI.Spacing.xxl)
-        .padding(.vertical, AppUI.Spacing.lgXl)
-    }
-
-    private var saveSnippetButton: some View {
-        Button {
-            let text = editorViewModel.currentText
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return }
-            let firstLine = text.components(separatedBy: .newlines).first ?? text
-            notesViewModel.createSnippet(title: firstLine, body: text)
-            showSaveConfirm = true
-            Task { @MainActor in
-                do {
-                    try await Task.sleep(nanoseconds: AppConfig.UI.saveConfirmDurationNanoseconds)
-                } catch {
-                    // Non-critical: UI confirmation badge dismissed early on cancellation.
-                    return
-                }
-                showSaveConfirm = false
-            }
-        } label: {
-            Label(
-                showSaveConfirm ? "Saved" : "Save Snippet",
-                systemImage: showSaveConfirm ? "checkmark" : "bookmark"
-            )
-            .font(AppUI.Font.captionMono)
-            .foregroundColor(showSaveConfirm ? .green : .primary)
-            .padding(.horizontal, AppUI.Spacing.lg)
-            .padding(.vertical, AppUI.Spacing.smMd)
-            .background(Capsule().fill(Color.secondary.opacity(AppUI.Opacity.tint)))
-        }
-        .buttonStyle(.plain)
-        .disabled(editorViewModel.currentText
-            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-    }
+    // MARK: - Floating Send
 
     private var sendButton: some View {
         Button {
             editorViewModel.submit()
             onDismiss()
         } label: {
-            Label("Send", systemImage: "paperplane.fill")
-                .font(AppUI.Font.labelMedium)
+            Image(systemName: "paperplane.fill")
+                .font(.system(size: 14))
                 .foregroundColor(.white)
-                .padding(.horizontal, AppUI.Spacing.lgXl)
-                .padding(.vertical, AppUI.Spacing.smMd)
-                .background(Capsule().fill(Color.accentColor))
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color.accentColor))
+                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
         .disabled(editorViewModel.currentText
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    // MARK: - Notes Panel
+
+    private var notesPanel: some View {
+        ComposerNotesListView(
+            editorViewModel: editorViewModel,
+            notesViewModel: notesViewModel,
+            noteSearch: $noteSearch,
+            onSelectNote: { focusEditor() },
+            onDismiss: onDismiss
+        )
     }
 
     // MARK: - Focus
@@ -167,20 +121,15 @@ struct ComposerOverlayView: View {
         Task { @MainActor in
             do {
                 try await Task.sleep(nanoseconds: AppConfig.UI.editorFocusDelayNanoseconds)
+            } catch is CancellationError {
+                return
             } catch {
-                // Non-critical: focus attempt is cosmetic; user can click the editor manually.
+                // Non-critical: focus is cosmetic; user can click the editor manually.
                 return
             }
             guard let textView = editorHandle.textView,
                   let window = textView.window else { return }
             window.makeFirstResponder(textView)
         }
-    }
-
-    private func switchToCompose() {
-        withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
-            activeTab = .compose
-        }
-        focusEditor()
     }
 }

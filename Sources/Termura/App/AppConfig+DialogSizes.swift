@@ -28,6 +28,7 @@ extension AppConfig.UI {
     static let composerMinHeight: Double = 160
     static let composerMaxHeight: Double = 400
     static let composerEditorMinHeight: Double = 80
+    static let composerNotesPanelWidth: Double = 340
     // Divider
     static let dividerLineWidth: Double = 1
     static let dividerHitTarget: Double = 9

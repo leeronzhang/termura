@@ -10,10 +10,6 @@ final class InputModeController: ObservableObject {
 
     @Published private(set) var mode: Mode = .passthrough
 
-    func toggleMode() {
-        mode = (mode == .editor) ? .passthrough : .editor
-    }
-
     func switchToEditor() {
         mode = .editor
     }

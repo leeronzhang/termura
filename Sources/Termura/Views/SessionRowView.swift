@@ -44,6 +44,10 @@ struct SessionRowView: View {
         .overlay(glowBorder)
         .onTapGesture { onActivate() }
         .onHover { isHovered = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Session: \(session.title)")
+        .accessibilityValue(isActive ? "Active" : "")
+        .accessibilityAddTraits(isActive ? .isSelected : [])
         .contextMenu { contextMenuItems }
         .animation(.easeOut(duration: AppUI.Animation.quick), value: isHovered)
         .onChange(of: isWaiting) { _, waiting in

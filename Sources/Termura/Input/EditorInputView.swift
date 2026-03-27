@@ -45,6 +45,7 @@ struct EditorInputView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
 
         // Use the NSTextView's built-in TextKit stack as-is; do NOT replace the layout manager.
         textView.minSize = NSSize(width: 0, height: AppConfig.UI.editorMinHeightPoints)
@@ -71,6 +72,11 @@ struct EditorInputView: NSViewRepresentable {
         textView.font = NSFont(name: AppConfig.Fonts.terminalFamily, size: AppConfig.Fonts.editorSize)
             ?? NSFont.monospacedSystemFont(ofSize: AppConfig.Fonts.editorSize, weight: .regular)
         textView.placeholderString = "Type a command or prompt..."
+        textView.typingAttributes = [
+            .font: textView.font ?? NSFont.monospacedSystemFont(ofSize: AppConfig.Fonts.editorSize, weight: .regular),
+            .foregroundColor: NSColor.textColor,
+            .strikethroughStyle: 0
+        ]
         textView.delegate = coordinator
 
         // Register in handle so TerminalAreaView's key-routing monitor can find us

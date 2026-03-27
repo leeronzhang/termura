@@ -31,7 +31,6 @@ struct TerminalAreaView: View {
     var notesViewModel: NotesViewModel { projectContext.notesViewModel }
     var timeline: SessionTimeline { state.timeline }
 
-    @State var showTimeline = false
     @State var showMetadata = true
     @State private var showExportSheet = false
     @State var showContextSheet = false
@@ -42,6 +41,7 @@ struct TerminalAreaView: View {
     var editorHandle: EditorViewHandle { state.editorHandle }
     /// Token returned by NSEvent.addLocalMonitorForEvents; retained for removal on disappear.
     @State private var keyEventMonitor: Any?
+    @State private var mouseEventMonitor: Any?
 
     // MARK: - Body
 
@@ -67,10 +67,6 @@ struct TerminalAreaView: View {
             .onChange(of: viewModel.currentMetadata.workingDirectory) { _, _ in
                 checkContextFileExists()
             }
-            .onChange(of: commandRouter.toggleTimelineTick) { _, _ in
-                withAnimation { showTimeline.toggle() }
-            }
-            // Composer toggle is handled directly in the key router and toolbar button.
     }
 
     // MARK: - Extracted layout
@@ -144,11 +140,14 @@ struct TerminalAreaView: View {
 
             guard let window = NSApp.keyWindow else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            // Intercept Cmd+K directly to toggle composer — prevents NSView from consuming it.
+            // Intercept Cmd+K directly to toggle composer.
             if flags == .command, event.charactersIgnoringModifiers == "k" {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                    router.showComposer.toggle()
-                }
+                router.toggleComposer()
+                return nil
+            }
+            // Escape closes composer (without clearing text).
+            if router.showComposer, event.keyCode == 53 {
+                router.dismissComposer()
                 return nil
             }
             // Let other Cmd-key shortcuts pass through to the menu system.
@@ -166,12 +165,30 @@ struct TerminalAreaView: View {
             }
             return event
         }
+        // Mouse monitor: clicks on the backdrop (above composer) dismiss it.
+        // Clicks inside the composer card area pass through to SwiftUI buttons.
+        let composerHeight = AppConfig.UI.composerMaxHeight
+        mouseEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            guard router.showComposer else { return event }
+            // In window coordinates, y=0 is the bottom. Composer occupies the bottom portion.
+            // If click is in the composer area (y < composerHeight), let SwiftUI handle it.
+            if event.locationInWindow.y < composerHeight {
+                return event
+            }
+            // Click is on the backdrop — dismiss composer.
+            router.dismissComposer()
+            return nil
+        }
     }
 
     private func removeKeyRouter() {
         if let monitor = keyEventMonitor {
             NSEvent.removeMonitor(monitor)
             keyEventMonitor = nil
+        }
+        if let monitor = mouseEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseEventMonitor = nil
         }
     }
 }
@@ -225,5 +242,3 @@ private struct TerminalAreaSheets: ViewModifier {
             }
     }
 }
-
-// EditorOverlayHeightKey removed — editor overlay replaced by on-demand ComposerOverlayView.
