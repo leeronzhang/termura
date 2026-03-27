@@ -32,6 +32,14 @@ final class CommandRouter {
         case vertical, horizontal, closePane
     }
 
+    // MARK: - Dual pane
+
+    /// Whether dual-pane (side-by-side) mode is active. Toolbar reads this for visual state.
+    var isDualPaneActive = false
+    var dualPaneToggleTick: UInt = 0
+    /// Tracks which pane was last clicked in dual-pane mode (set by NSEvent monitors).
+    var focusedDualPaneID: SessionID?
+
     // MARK: - Per-terminal toggles
 
     var toggleTimelineTick: UInt = 0
@@ -95,14 +103,21 @@ final class CommandRouter {
         toggleAgentDashboardTick &+= 1
     }
 
+    func toggleDualPane() {
+        dualPaneToggleTick &+= 1
+    }
+
     func toggleComposer() {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+        withAnimation(.spring(
+            response: AppConfig.UI.composerSpringResponse,
+            dampingFraction: AppConfig.UI.composerSpringDamping
+        )) {
             showComposer.toggle()
         }
     }
 
     func dismissComposer() {
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(.easeOut(duration: AppConfig.UI.composerDismissDuration)) {
             showComposer = false
         }
     }

@@ -116,6 +116,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            // Restore last project or show picker if no windows are visible
+            projectCoordinator.restoreLastProjectOrShowPicker()
+        }
+        return true
+    }
+
     // MARK: - Project management (delegated to ProjectCoordinator)
 
     func openProject(at url: URL) {

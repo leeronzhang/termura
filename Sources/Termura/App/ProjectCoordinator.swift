@@ -36,7 +36,7 @@ final class ProjectCoordinator {
     func start(with dependencies: Dependencies) {
         deps = dependencies
         observeWindowFocus()
-        openLastProjectOrShowPicker()
+        restoreLastProjectOrShowPicker()
     }
 
     // MARK: - Project management
@@ -71,6 +71,8 @@ final class ProjectCoordinator {
             persistOpenProjects()
             controller.showWindow(nil)
             if let window = controller.window {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
                 deps.windowChromeConfigurator(window)
             }
 
@@ -101,6 +103,7 @@ final class ProjectCoordinator {
     }
 
     func showProjectPicker() {
+        NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -116,16 +119,30 @@ final class ProjectCoordinator {
         }
     }
 
+    /// Restore the most recently opened project or show the picker.
+    /// Called on launch and on Dock icon click.
+    func restoreLastProjectOrShowPicker() {
+        Task { @MainActor [weak self] in
+            await ProjectMigrationService.migrateIfNeeded()
+            if let lastURL = self?.deps?.recentProjects.lastOpened() {
+                self?.openProject(at: lastURL)
+            } else {
+                self?.showProjectPicker()
+            }
+        }
+    }
+
     // MARK: - Termination
 
     func handleTermination() -> NSApplication.TerminateReply {
+        let contexts = projectWindows.values.map(\.projectContext)
         let handoffItems: [TerminationHandoffItem] = projectWindows.values.compactMap { controller in
             let ctx = controller.projectContext
             guard let activeID = ctx.sessionStore.activeSessionID,
                   let session = ctx.sessionStore.sessions.first(where: { $0.id == activeID }) else {
                 return nil
             }
-            let chunks = ctx.outputStores[activeID]?.chunks ?? []
+            let chunks = ctx.viewStateManager.outputStores[activeID].map { Array($0.chunks) } ?? []
             let agentState = ctx.agentStateStore.agents[activeID]
                 ?? AgentState(sessionID: activeID, agentType: .unknown)
             return TerminationHandoffItem(
@@ -135,11 +152,20 @@ final class ProjectCoordinator {
                 agentState: agentState
             )
         }
-        guard !handoffItems.isEmpty else { return .terminateNow }
 
-        // Lifecycle: termination handoff — app waits for reply(toApplicationShouldTerminate:)
-        // before actually exiting, so this Task is guaranteed to complete.
+        // Even without handoff items, flush pending writes to DB before exiting.
+        let needsDefer = !handoffItems.isEmpty || !contexts.isEmpty
+
+        guard needsDefer else { return .terminateNow }
+
+        // Lifecycle: termination — app waits for reply(toApplicationShouldTerminate:)
+        // before actually exiting, so these Tasks are guaranteed to complete.
         Task.detached {
+            // Flush all pending persistence writes to guarantee DB consistency.
+            for ctx in contexts {
+                await ctx.flushPendingWrites()
+            }
+
             for item in handoffItems {
                 do {
                     try await item.handoff.generateHandoff(
@@ -183,17 +209,6 @@ final class ProjectCoordinator {
                     activeContext = controller.projectContext
                     return
                 }
-            }
-        }
-    }
-
-    private func openLastProjectOrShowPicker() {
-        Task { @MainActor [weak self] in
-            await ProjectMigrationService.migrateIfNeeded()
-            if let lastURL = self?.deps?.recentProjects.lastOpened() {
-                self?.openProject(at: lastURL)
-            } else {
-                self?.showProjectPicker()
             }
         }
     }

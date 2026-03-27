@@ -3,10 +3,12 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "ProjectContext")
 
-/// Per-project dependency container. Each window owns exactly one `ProjectContext`
+/// Per-project composition root. Each window owns exactly one `ProjectContext`
 /// whose services are backed by `<projectURL>/.termura/termura.db`.
+/// Not injected into views — feature-scoped containers (SessionScope, DataScope,
+/// ProjectScope, SessionViewStateManager) are injected via @Environment instead.
 @MainActor
-final class ProjectContext: ObservableObject {
+final class ProjectContext {
     let projectURL: URL
 
     // MARK: - Core infrastructure
@@ -103,6 +105,35 @@ final class ProjectContext: ObservableObject {
     /// Project display name (directory basename).
     var displayName: String { projectURL.lastPathComponent }
 
+    // MARK: - Feature scopes (injected into SwiftUI environment)
+
+    private(set) lazy var sessionScope = SessionScope(
+        store: sessionStore,
+        engines: engineStore,
+        agentStates: agentStateStore
+    )
+
+    private(set) lazy var dataScope = DataScope(
+        searchService: searchService,
+        vectorSearchService: vectorSearchService,
+        ruleFileRepository: ruleFileRepository,
+        sessionMessageRepository: sessionMessageRepository
+    )
+
+    private(set) lazy var projectScope = ProjectScope(
+        gitService: gitService,
+        viewModel: projectViewModel
+    )
+
+    private(set) lazy var viewStateManager = SessionViewStateManager(
+        commandRouter: commandRouter,
+        sessionStore: sessionStore,
+        tokenCountingService: tokenCountingService,
+        agentStateStore: agentStateStore,
+        contextInjectionService: contextInjectionService,
+        sessionHandoffService: sessionHandoffService
+    )
+
     // MARK: - Factory
 
     /// Opens a project, creating `<projectURL>/.termura/termura.db` if needed.
@@ -150,29 +181,6 @@ final class ProjectContext: ObservableObject {
                 commandRouter: services.router
             )
         )
-    }
-
-    // MARK: - Per-session view state cache
-
-    /// Cached per-session view objects. Lazily created on first access, removed on session close.
-    private(set) var sessionViewStates: [SessionID: SessionViewState] = [:]
-
-    /// Per-session OutputStore references — used by AppDelegate for termination handoff.
-    private(set) var outputStores: [SessionID: OutputStore] = [:]
-
-    // MARK: - View state mutation API (for cross-file extensions)
-
-    func setViewState(_ state: SessionViewState?, for id: SessionID) {
-        sessionViewStates[id] = state
-    }
-
-    func setOutputStore(_ store: OutputStore?, for id: SessionID) {
-        outputStores[id] = store
-    }
-
-    func clearAllCaches() {
-        sessionViewStates.removeAll()
-        outputStores.removeAll()
     }
 
     // MARK: - Factory helpers

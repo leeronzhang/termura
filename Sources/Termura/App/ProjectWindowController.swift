@@ -67,6 +67,10 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
             window.center()
         }
         window.setFrameAutosaveName(autosaveName)
+        // Ensure window is on a visible screen (guard against external monitor disconnect).
+        if !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(window.frame) }) {
+            window.center()
+        }
         return window
     }
 }

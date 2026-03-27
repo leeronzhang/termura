@@ -5,7 +5,6 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "AppDelegate+Helpers")
 
 extension AppDelegate {
-
     // MARK: - Shell Integration Onboarding
 
     func checkShellIntegrationOnboarding() {

@@ -55,3 +55,88 @@ extension EnvironmentValues {
         set { self[NotesViewModelKey.self] = newValue }
     }
 }
+
+// MARK: - SessionScope
+
+@MainActor
+private struct SessionScopeKey: @preconcurrency EnvironmentKey {
+    static let defaultValue = SessionScope(
+        store: SessionStore(
+            engineStore: TerminalEngineStore(factory: MockTerminalEngineFactory()),
+            repository: MockSessionRepository()
+        ),
+        engines: TerminalEngineStore(factory: MockTerminalEngineFactory()),
+        agentStates: AgentStateStore()
+    )
+}
+
+extension EnvironmentValues {
+    var sessionScope: SessionScope {
+        get { self[SessionScopeKey.self] }
+        set { self[SessionScopeKey.self] = newValue }
+    }
+}
+
+// MARK: - DataScope
+
+@MainActor
+private struct DataScopeKey: @preconcurrency EnvironmentKey {
+    static let defaultValue = DataScope(
+        searchService: MockSearchService(),
+        vectorSearchService: MockVectorSearchService(),
+        ruleFileRepository: MockRuleFileRepository(),
+        sessionMessageRepository: MockSessionMessageRepository()
+    )
+}
+
+extension EnvironmentValues {
+    var dataScope: DataScope {
+        get { self[DataScopeKey.self] }
+        set { self[DataScopeKey.self] = newValue }
+    }
+}
+
+// MARK: - ProjectScope
+
+@MainActor
+private struct ProjectScopeKey: @preconcurrency EnvironmentKey {
+    static let defaultValue = ProjectScope(
+        gitService: MockGitService(),
+        viewModel: ProjectViewModel(
+            gitService: MockGitService(),
+            projectRoot: "",
+            commandRouter: CommandRouter()
+        )
+    )
+}
+
+extension EnvironmentValues {
+    var projectScope: ProjectScope {
+        get { self[ProjectScopeKey.self] }
+        set { self[ProjectScopeKey.self] = newValue }
+    }
+}
+
+// MARK: - SessionViewStateManager
+
+@MainActor
+private struct ViewStateManagerKey: @preconcurrency EnvironmentKey {
+    static let defaultValue = SessionViewStateManager(
+        commandRouter: CommandRouter(),
+        sessionStore: SessionStore(
+            engineStore: TerminalEngineStore(factory: MockTerminalEngineFactory()),
+            repository: MockSessionRepository()
+        ),
+        tokenCountingService: MockTokenCountingService(),
+        agentStateStore: AgentStateStore(),
+        contextInjectionService: MockContextInjectionService(),
+        sessionHandoffService: MockSessionHandoffService()
+    )
+}
+
+extension EnvironmentValues {
+    var viewStateManager: SessionViewStateManager {
+        get { self[ViewStateManagerKey.self] }
+        set { self[ViewStateManagerKey.self] = newValue }
+    }
+}

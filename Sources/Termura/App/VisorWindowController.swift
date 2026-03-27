@@ -19,7 +19,10 @@ final class VisorWindowController: NSWindowController {
         super.init(window: panel)
 
         let rootView = MainView()
-            .environmentObject(projectContext)
+            .environment(\.sessionScope, projectContext.sessionScope)
+            .environment(\.dataScope, projectContext.dataScope)
+            .environment(\.projectScope, projectContext.projectScope)
+            .environment(\.viewStateManager, projectContext.viewStateManager)
             .environment(\.commandRouter, projectContext.commandRouter)
             .environment(\.notesViewModel, projectContext.notesViewModel)
             .environment(\.themeManager, themeManager)

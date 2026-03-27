@@ -1,7 +1,6 @@
 import Foundation
 
-/// Central configuration for all app-wide constants.
-/// All magic numbers must live here — never inline in logic layer.
+/// Central configuration for all app-wide constants. No inline magic numbers.
 enum AppConfig {
     enum Paths {
         /// Cached home directory — resolved once at process launch.
@@ -36,6 +35,9 @@ enum AppConfig {
         static let searchDebounceSeconds: Double = 0.3
         /// Notes auto-save debounce
         static let notesAutoSaveSeconds: Double = 1.0
+        /// Maximum concurrent background tasks per terminal session.
+        /// Bounds CPU/memory usage during high-frequency output (e.g. `cat` large file).
+        static let maxConcurrentSessionTasks = 8
         /// Long command notification threshold
         static let longCommandThresholdSeconds: Double = 30.0
         /// Visor animation duration
@@ -108,6 +110,7 @@ enum AppConfig {
         static let metadataPanelWidth: Double = 280
         static let metadataPanelMinWidth: Double = 120
         static let metadataPanelMaxWidth: Double = 300
+        static let dualPaneMinWidth: Double = 300
         static let tokenProgressWarningFraction: Double = 0.8
         static let editorMinHeightPoints: Double = 72
         static let editorMaxHeightPoints: Double = 300
@@ -216,6 +219,8 @@ enum AppConfig {
         static let glowAnimationDuration: Double = 2.0
         /// Suffix character count for agent output analysis.
         static let outputAnalysisSuffixLength = 2000
+        /// Minimum seconds between status transitions (suppresses noisy false positives).
+        static let statusChangeCooldown: TimeInterval = 0.5
     }
 
     enum Harness {
@@ -286,9 +291,7 @@ enum AppConfig {
     enum SemanticSearch {
         /// Embedding vector dimension (MiniLM-L6).
         static let embeddingDimension = 384
-        /// Token overlap between chunks.
         static let chunkOverlapTokens = 50
-        /// Maximum tokens per search chunk.
         static let chunkMaxTokens = 256
         /// Top-K results to return.
         static let topK = 20

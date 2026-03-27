@@ -6,7 +6,7 @@ import SwiftUI
 private let logger = Logger(subsystem: "com.termura.app", category: "WindowChrome")
 
 /// Tag used to find/remove the fullscreen project label.
-private let fullScreenLabelTag = 9901
+private let fullScreenLabelTag = AppConfig.UI.fullScreenLabelTag
 
 // MARK: - Window chrome configuration
 
@@ -94,8 +94,8 @@ extension AppDelegate {
                     logger.warning("Full-screen exit delay failed: \(error.localizedDescription)")
                     return
                 }
-                self.disableTitlebarEffect(in: window)
-                self.adjustTrafficLights(in: window)
+                disableTitlebarEffect(in: window)
+                adjustTrafficLights(in: window)
                 await NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = AppConfig.UI.trafficLightFadeSeconds
                     self.trafficLightContainer(in: window)?.animator().alphaValue = 1
@@ -185,7 +185,7 @@ final class TrafficLightAdjuster: NSView {
     private weak var targetWindow: NSWindow?
 
     init(window: NSWindow) {
-        self.targetWindow = window
+        targetWindow = window
         super.init(frame: .zero)
         autoresizingMask = [.width, .height]
     }

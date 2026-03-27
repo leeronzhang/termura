@@ -50,6 +50,20 @@ extension AppConfig.UI {
     /// File preview maximum zoom.
     static let previewZoomMax: Double = 4.0
 
+    // MARK: - Window Tags
+
+    /// NSView tag for the fullscreen project-name label (find/remove).
+    static let fullScreenLabelTag = 9901
+
+    // MARK: - Animations
+
+    /// Composer toggle spring response.
+    static let composerSpringResponse: Double = 0.35
+    /// Composer toggle spring damping fraction.
+    static let composerSpringDamping: Double = 0.85
+    /// Composer dismiss animation duration.
+    static let composerDismissDuration: Double = 0.2
+
     // MARK: - Miscellaneous
 
     /// Small progress indicator scale.

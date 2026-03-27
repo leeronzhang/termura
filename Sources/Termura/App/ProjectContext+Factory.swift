@@ -42,66 +42,18 @@ func ensureProjectGitignore(at projectURL: URL) {
     }
 }
 
-// MARK: - Per-session view state cache & lifecycle
+// MARK: - Teardown
 
 extension ProjectContext {
-
-    /// Returns (or lazily creates) the per-session view state for the given session.
-    func viewState(
-        for sessionID: SessionID,
-        engine: any TerminalEngine
-    ) -> SessionViewState {
-        if let existing = sessionViewStates[sessionID] { return existing }
-
-        let outputStore = OutputStore(sessionID: sessionID, commandRouter: commandRouter)
-        let modeCtrl = InputModeController()
-        let timeline = SessionTimeline()
-        let vm = TerminalViewModel(
-            sessionID: sessionID,
-            engine: engine,
-            sessionStore: sessionStore,
-            outputStore: outputStore,
-            tokenCountingService: tokenCountingService,
-            modeController: modeCtrl,
-            agentStateStore: agentStateStore,
-            isRestoredSession: sessionStore.isRestoredSession(id: sessionID),
-            contextInjectionService: contextInjectionService,
-            sessionHandoffService: sessionHandoffService
-        )
-        let editorVM = EditorViewModel(engine: engine, modeController: modeCtrl)
-
-        let state = SessionViewState(
-            outputStore: outputStore,
-            viewModel: vm,
-            editorViewModel: editorVM,
-            modeController: modeCtrl,
-            timeline: timeline
-        )
-        setViewState(state, for: sessionID)
-        setOutputStore(outputStore, for: sessionID)
-        return state
+    /// Flushes all pending persistence writes (sessions + notes) to guarantee
+    /// in-memory state is fully written to DB before shutdown or window close.
+    func flushPendingWrites() async {
+        await sessionStore.flushPendingWrites()
+        await notesViewModel.flushPendingWrites()
     }
-
-    /// Remove cached view state when a session is closed.
-    func removeViewState(for sessionID: SessionID) {
-        setViewState(nil, for: sessionID)
-        setOutputStore(nil, for: sessionID)
-    }
-
-    // MARK: - OutputStore registry
-
-    func registerOutputStore(_ store: OutputStore, for sessionID: SessionID) {
-        setOutputStore(store, for: sessionID)
-    }
-
-    func unregisterOutputStore(for sessionID: SessionID) {
-        setOutputStore(nil, for: sessionID)
-    }
-
-    // MARK: - Teardown
 
     func close() {
-        clearAllCaches()
+        viewStateManager.clearAll()
         engineStore.terminateAll()
         let path = projectURL.path
         logger.info("Closed project at \(path)")
