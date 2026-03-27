@@ -33,12 +33,15 @@ extension TerminalViewModel {
         return stripped.isEmpty ? title : stripped
     }
 
-    /// Scan terminal output for agent signatures and rename session on first match.
+    /// Scan terminal output for agent signatures and update session when a new agent is detected.
+    /// Allows re-detection when a different agent starts in the same session.
     func detectAgentFromOutput(_ text: String) {
-        guard !hasDetectedAgentFromOutput else { return }
         let lower = text.lowercased()
         for (pattern, type) in Self.outputSignatures where lower.contains(pattern) {
+            // Skip if already detected the same agent type.
+            if hasDetectedAgentFromOutput, lastDetectedAgentType == type { return }
             hasDetectedAgentFromOutput = true
+            lastDetectedAgentType = type
             sessionStore.renameSession(id: sessionID, title: type.displayName)
             sessionStore.setAgentType(id: sessionID, type: type)
             let detector = agentDetector

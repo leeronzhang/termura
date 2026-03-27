@@ -37,6 +37,8 @@ final class TerminalViewModel: ObservableObject {
     let sessionStartTime: Date = .init()
     /// Prevents repeated renames after the agent is already detected from output.
     var hasDetectedAgentFromOutput = false
+    /// Tracks the last detected agent type so we can re-detect when a different agent starts.
+    var lastDetectedAgentType: AgentType?
     private var streamTask: Task<Void, Never>?
     private var shellTask: Task<Void, Never>?
     /// Debounced re-check for prompt detection after PTY output settles.
