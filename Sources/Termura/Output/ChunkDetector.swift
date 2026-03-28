@@ -13,11 +13,13 @@ actor ChunkDetector {
     private var pendingOutput: String = ""
     private var pendingRawANSI: String = ""
     private let sessionID: SessionID
+    private let clock: any AppClock
 
     // MARK: - Init
 
-    init(sessionID: SessionID) {
+    init(sessionID: SessionID, clock: any AppClock = LiveClock()) {
         self.sessionID = sessionID
+        self.clock = clock
     }
 
     // MARK: - Public API
@@ -33,7 +35,7 @@ actor ChunkDetector {
     /// Returns a finished `OutputChunk` when `executionFinished` is received, nil otherwise.
     func handleShellEvent(_ event: ShellIntegrationEvent) -> OutputChunk? {
         let previousPhase = state.phase
-        state.apply(event)
+        state.apply(event, now: clock.now())
 
         if case let .executionFinished(exitCode) = event {
             return buildChunk(from: previousPhase, exitCode: exitCode)
@@ -74,7 +76,7 @@ actor ChunkDetector {
             startedAt = start
         case let .commandInput(cmd):
             command = cmd
-            startedAt = Date()
+            startedAt = clock.now()
         default:
             // No executing phase tracked — skip building chunk
             let capturedOutput = pendingOutput
@@ -86,7 +88,7 @@ actor ChunkDetector {
                 command: "",
                 output: capturedOutput,
                 raw: capturedRaw,
-                startedAt: Date(),
+                startedAt: clock.now(),
                 exitCode: exitCode
             )
         }
@@ -126,7 +128,7 @@ actor ChunkDetector {
             rawANSI: raw,
             exitCode: exitCode,
             startedAt: startedAt,
-            finishedAt: Date(),
+            finishedAt: clock.now(),
             contentType: classification.type,
             uiContent: uiBlock
         )

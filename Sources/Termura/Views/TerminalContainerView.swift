@@ -9,6 +9,8 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalCon
 
 /// NSViewRepresentable wrapper around SwiftTerm's LocalProcessTerminalView.
 /// Acts as the bridge between SwiftUI layout and the AppKit terminal renderer.
+/// Returns a TerminalDragContainerView so that drag-and-drop is handled by a real
+/// NSDraggingDestination override rather than a disconnected Coordinator.
 struct TerminalContainerView: NSViewRepresentable {
     let viewModel: TerminalViewModel
     let engine: any TerminalEngine
@@ -16,39 +18,29 @@ struct TerminalContainerView: NSViewRepresentable {
     /// Value types so SwiftUI diffs trigger updateNSView on change.
     let fontFamily: String
     let fontSize: CGFloat
+    /// When true, hitTest returns nil so that NSWindow falls back to the NSHostingView
+    /// and SwiftUI gesture targets (backdrop, composer header buttons) receive events.
+    var isComposerActive: Bool = false
 
-    func makeNSView(context: Context) -> NSView {
-        let view = engine.terminalNSView
-        view.autoresizingMask = [.width, .height]
-        if let termView = view as? LocalProcessTerminalView {
-            applyTheme(theme, to: termView)
+    func makeNSView(context: Context) -> TerminalDragContainerView {
+        let termView = engine.terminalNSView
+        termView.autoresizingMask = [.width, .height]
+        if let tv = termView as? LocalProcessTerminalView {
+            applyTheme(theme, to: tv)
         }
-        hideScroller(in: view)
-        // Register for file drops — handled via Coordinator.
-        view.registerForDraggedTypes([.fileURL, .URL])
-        context.coordinator.terminalNSView = view
-        return view
+        hideScroller(in: termView)
+        let container = TerminalDragContainerView(terminalView: termView)
+        container.dragHandler = { [weak viewModel] paths in
+            viewModel?.send(paths)
+        }
+        return container
     }
 
-    /// Hides the legacy NSScroller that SwiftTerm adds directly as a subview.
-    /// The scroller track is always visible with `.legacy` style, even when disabled,
-    /// causing a lighter vertical strip at the terminal view's right edge.
-    private func hideScroller(in view: NSView) {
-        for sub in view.subviews where sub is NSScroller {
-            sub.isHidden = true
-        }
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        if let termView = nsView as? LocalProcessTerminalView {
-            applyTheme(theme, to: termView)
-        }
-        // Re-hide scroller in case SwiftTerm re-adds it after theme/font changes.
-        hideScroller(in: nsView)
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel)
+    func updateNSView(_ container: TerminalDragContainerView, context: Context) {
+        container.isPassthrough = isComposerActive
+        guard let termView = container.terminalView as? LocalProcessTerminalView else { return }
+        applyTheme(theme, to: termView)
+        hideScroller(in: termView)
     }
 
     // MARK: - Theme application
@@ -63,44 +55,106 @@ struct TerminalContainerView: NSViewRepresentable {
         view.font = font
         logger.debug("Terminal font set: \(font.fontName) size=\(fontSize)")
     }
-}
 
-// MARK: - Coordinator
-
-extension TerminalContainerView {
-    /// @MainActor coordinator: handles drag-and-drop on the terminal NSView.
-    @MainActor
-    final class Coordinator: NSObject, NSDraggingDestination {
-        private let viewModel: TerminalViewModel
-        /// Set by makeNSView so the coordinator can forward drag events.
-        weak var terminalNSView: NSView?
-
-        init(viewModel: TerminalViewModel) {
-            self.viewModel = viewModel
-        }
-
-        // MARK: - NSDraggingDestination
-
-        func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-            guard sender.draggingPasteboard.canReadObject(
-                forClasses: [NSURL.self],
-                options: [.urlReadingFileURLsOnly: true]
-            ) else {
-                return []
-            }
-            return .copy
-        }
-
-        func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-            guard let urls = sender.draggingPasteboard.readObjects(
-                forClasses: [NSURL.self],
-                options: [.urlReadingFileURLsOnly: true]
-            ) as? [URL], !urls.isEmpty else {
-                return false
-            }
-            let paths = urls.map(\.path.shellEscaped).joined(separator: " ")
-            viewModel.send(paths)
-            return true
+    /// Hides the legacy NSScroller that SwiftTerm adds directly as a subview.
+    /// The scroller track is always visible with `.legacy` style, even when disabled,
+    /// causing a lighter vertical strip at the terminal view's right edge.
+    private func hideScroller(in view: NSView) {
+        for sub in view.subviews where sub is NSScroller {
+            sub.isHidden = true
         }
     }
+}
+
+// MARK: - TerminalDragContainerView
+
+/// Container NSView wrapping the SwiftTerm terminal view.
+/// Implements NSDraggingDestination directly — this is required because NSView subclasses
+/// must override drag methods themselves; there is no drag delegate protocol.
+///
+/// Supports:
+///   - File URL drops: shell-escapes the path and sends it to the terminal.
+///   - Image drops (PNG/TIFF from screenshots, browsers, Preview): saves a temporary
+///     PNG to ~/.termura/tmp/ and sends the escaped path.
+@MainActor
+final class TerminalDragContainerView: NSView {
+    let terminalView: NSView
+    var dragHandler: ((String) -> Void)?
+    /// Set to true while the composer overlay is visible so that hitTest returns nil,
+    /// letting AppKit fall through to NSHostingView and SwiftUI handle events.
+    var isPassthrough = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        isPassthrough ? nil : super.hitTest(point)
+    }
+
+    init(terminalView: NSView) {
+        self.terminalView = terminalView
+        super.init(frame: .zero)
+        terminalView.autoresizingMask = [.width, .height]
+        addSubview(terminalView)
+        registerForDraggedTypes([.fileURL, .URL, .tiff, .png])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func layout() {
+        super.layout()
+        terminalView.frame = bounds
+    }
+
+    // MARK: - NSDraggingDestination
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let pb = sender.draggingPasteboard
+        let hasFileURL = pb.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        let hasImage = pb.canReadObject(forClasses: [NSImage.self], options: nil)
+        return (hasFileURL || hasImage) ? .copy : []
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let pb = sender.draggingPasteboard
+        if let urls = pb.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL], !urls.isEmpty {
+            let paths = urls.map(\.path.shellEscaped).joined(separator: " ")
+            dragHandler?(paths)
+            return true
+        }
+        if let image = pb.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage {
+            do {
+                let url = try saveTemporaryImage(image)
+                dragHandler?(url.path.shellEscaped)
+                return true
+            } catch {
+                logger.error("Failed to save dropped image: \(error.localizedDescription)")
+                return false
+            }
+        }
+        return false
+    }
+
+    // MARK: - Private
+
+    private func saveTemporaryImage(_ image: NSImage) throws -> URL {
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        let tmpDir = homeURL.appendingPathComponent(AppConfig.DragDrop.tempImageSubdirectory)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        let name = "\(AppConfig.DragDrop.imagePastePrefix)-\(Int(Date().timeIntervalSince1970)).\(AppConfig.DragDrop.imagePasteExtension)"
+        let fileURL = tmpDir.appendingPathComponent(name)
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            throw ImageSaveError.conversionFailed
+        }
+        try png.write(to: fileURL)
+        return fileURL
+    }
+}
+
+private enum ImageSaveError: Error {
+    case conversionFailed
 }

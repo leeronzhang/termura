@@ -14,6 +14,7 @@ actor FallbackChunkDetector {
     private var currentCommand: String = ""
     private var chunkStart: Date = .init()
     private let sessionID: SessionID
+    private let clock: any AppClock
 
     // MARK: - Instance regex
 
@@ -39,9 +40,12 @@ actor FallbackChunkDetector {
     // MARK: - Init
 
     /// Creates a detector using the default AI tool prompt pattern.
-    /// - Parameter sessionID: The owning session.
-    init(sessionID: SessionID) {
+    /// - Parameters:
+    ///   - sessionID: The owning session.
+    ///   - clock: Clock for deterministic timestamps. Defaults to `LiveClock`.
+    init(sessionID: SessionID, clock: any AppClock = LiveClock()) {
         self.sessionID = sessionID
+        self.clock = clock
         promptRegex = Self.defaultPromptRegex
     }
 
@@ -49,9 +53,11 @@ actor FallbackChunkDetector {
     /// - Parameters:
     ///   - sessionID: The owning session.
     ///   - pattern: Regex pattern used to detect prompt boundaries.
+    ///   - clock: Clock for deterministic timestamps. Defaults to `LiveClock`.
     /// - Throws: If the pattern is not a valid regular expression.
-    init(sessionID: SessionID, pattern: String) throws {
+    init(sessionID: SessionID, pattern: String, clock: any AppClock = LiveClock()) throws {
         self.sessionID = sessionID
+        self.clock = clock
         promptRegex = try NSRegularExpression(pattern: pattern)
     }
 
@@ -83,7 +89,7 @@ actor FallbackChunkDetector {
                     emitted.append(buildChunk())
                 }
                 currentCommand = extractCommand(from: trimmed)
-                chunkStart = Date()
+                chunkStart = clock.now()
             } else {
                 appendLine(line)
             }
@@ -124,7 +130,7 @@ actor FallbackChunkDetector {
             rawANSI: raw,
             exitCode: nil,
             startedAt: start,
-            finishedAt: Date(),
+            finishedAt: clock.now(),
             contentType: classification.type,
             uiContent: uiBlock
         )

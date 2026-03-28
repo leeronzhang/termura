@@ -33,6 +33,8 @@ struct SessionMetadata: Sendable {
     var contextWindowLimit: Int
     /// Context usage as a fraction of the context window (0.0-1.0).
     var contextUsageFraction: Double
+    /// File path currently being written/edited by the agent, if detectable from output.
+    var agentActiveFilePath: String?
 
     /// True when the token breakdown has any non-zero category.
     var hasTokenBreakdown: Bool {
@@ -64,7 +66,8 @@ struct SessionMetadata: Sendable {
             currentAgentTask: nil,
             agentElapsedTime: 0,
             contextWindowLimit: 0,
-            contextUsageFraction: 0
+            contextUsageFraction: 0,
+            agentActiveFilePath: nil
         )
     }
 }

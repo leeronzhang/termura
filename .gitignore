@@ -8,28 +8,19 @@ DerivedData/
 
 # Swift Package Manager
 .build/
-*.resolved
 
-# Docs
-docs/
-
-# Claude Code
-CLAUDE.md
-.claude/
-
-# Lint & CI
-.swiftlint.yml
-.swiftformat
-.github/
-
-# Build & Project tools
-Makefile
-scripts/
-project.yml
+# Generated Xcode project (generated via `xcodegen generate`)
 *.xcodeproj/
 
 # Landing page (separate repo)
 landing/
+
+# Internal docs (Chinese planning docs, not for public)
+docs/
+
+# Claude Code (local AI assistant config, not for contributors)
+CLAUDE.md
+.claude/
 
 # macOS
 .DS_Store

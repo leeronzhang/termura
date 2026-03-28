@@ -51,7 +51,7 @@ struct SidebarView: View {
                 selectedTab = (selectedTab == .agents) ? .sessions : .agents
             }
         }
-        .onReceive(commandRouter.composerNotesToggled) { active in
+        .onChange(of: commandRouter.isComposerNotesActive) { _, active in
             if active {
                 if tabBeforeComposer == nil { tabBeforeComposer = selectedTab }
                 withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
@@ -64,13 +64,12 @@ struct SidebarView: View {
                 tabBeforeComposer = nil
             }
         }
-        .onReceive(commandRouter.composerDismissed) { _ in
-            if let previous = tabBeforeComposer {
-                withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
-                    selectedTab = previous
-                }
-                tabBeforeComposer = nil
+        .onChange(of: commandRouter.showComposer) { _, showing in
+            guard !showing, let previous = tabBeforeComposer else { return }
+            withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                selectedTab = previous
             }
+            tabBeforeComposer = nil
         }
     }
 

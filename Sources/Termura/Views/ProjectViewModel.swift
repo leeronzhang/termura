@@ -48,7 +48,7 @@ final class ProjectViewModel: ObservableObject {
     private let clock: any AppClock
     private let fileTreeService = FileTreeService()
     private let projectRoot: String
-    private weak var commandRouter: CommandRouter?
+    private var commandRouter: CommandRouter?
     private var refreshTask: Task<Void, Never>?
     private var appActiveObserver: (any NSObjectProtocol)?
     private var debounceTask: Task<Void, Never>?
@@ -184,7 +184,9 @@ final class ProjectViewModel: ObservableObject {
         persistTask?.cancel()
         persistTask = Task { [weak self] in
             do {
-                try await self?.clock.sleep(for: .nanoseconds(300_000_000))
+                try await self?.clock.sleep(
+                    for: .nanoseconds(AppConfig.UI.expansionPersistDebounceNanoseconds)
+                )
             } catch is CancellationError {
                 return
             } catch {

@@ -12,6 +12,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>Termura</string>
+	<key>CFBundleDisplayName</key>
+	<string>Termura</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -25,7 +27,7 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026 Termura. All rights reserved.</string>
+	<string>Copyright © 2026 Termura. Licensed under the Apache License, Version 2.0.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
@@ -34,5 +36,7 @@
 	<string>.</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>Termura notifies you when a long-running command finishes so you can stay focused on other work.</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
 </dict>
 </plist>

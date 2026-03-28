@@ -54,6 +54,7 @@ final class TerminalViewModel: ObservableObject {
         agentCoordinator: AgentCoordinator,
         outputProcessor: OutputProcessor,
         sessionServices: SessionServices,
+        initialWorkingDirectory: String = AppConfig.Paths.homeDirectory,
         clock: any AppClock = LiveClock()
     ) {
         self.sessionID = sessionID
@@ -66,10 +67,9 @@ final class TerminalViewModel: ObservableObject {
         self.clock = clock
         taskExecutor = BoundedTaskExecutor(maxConcurrent: AppConfig.Runtime.maxConcurrentSessionTasks)
 
-        let workingDir = AppConfig.Paths.homeDirectory
         currentMetadata = SessionMetadata.empty(
             sessionID: sessionID,
-            workingDirectory: workingDir
+            workingDirectory: initialWorkingDirectory
         )
 
         // Forward @Published state from AgentCoordinator to keep view bindings stable.
@@ -275,7 +275,8 @@ final class TerminalViewModel: ObservableObject {
             currentAgentTask: agentState?.currentTask,
             agentElapsedTime: agentElapsed,
             contextWindowLimit: ctxLimit,
-            contextUsageFraction: ctxFraction
+            contextUsageFraction: ctxFraction,
+            agentActiveFilePath: agentState?.activeFilePath
         )
     }
 }

@@ -33,30 +33,38 @@ struct ComposerOverlayView: View {
 
     private var cardHeader: some View {
         HStack {
-            Button { onToggleNotes() } label: {
-                Image(systemName: isNotesActive
-                    ? "text.rectangle.fill" : "text.rectangle")
-                    .font(.system(size: 14))
-                    .foregroundColor(isNotesActive ? .accentColor : .secondary)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            notesToggleButton
 
             Spacer()
 
-            Button { onDismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            dismissButton
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.top, AppUI.Spacing.lgXl)
         .padding(.bottom, AppUI.Spacing.sm)
+    }
+
+    /// Notes toggle — uses onTapGesture instead of Button to avoid the macOS
+    /// first-responder issue where a plain button ignores the first click when
+    /// an NSTextView is the active first responder.
+    private var notesToggleButton: some View {
+        Image(systemName: isNotesActive
+            ? "text.rectangle.fill" : "text.rectangle")
+            .font(.system(size: 14))
+            .foregroundColor(isNotesActive ? .accentColor : .secondary)
+            .frame(width: 32, height: 32)
+            .contentShape(Rectangle())
+            .onTapGesture { onToggleNotes() }
+    }
+
+    /// Dismiss button — same onTapGesture approach for consistency.
+    private var dismissButton: some View {
+        Image(systemName: "xmark")
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(.secondary)
+            .frame(width: 32, height: 32)
+            .contentShape(Rectangle())
+            .onTapGesture { onDismiss() }
     }
 
     // MARK: - Editor

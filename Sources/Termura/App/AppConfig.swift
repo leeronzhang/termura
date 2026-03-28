@@ -274,6 +274,12 @@ enum AppConfig {
         static let refreshDebounceNanoseconds: UInt64 = 500_000_000
     }
 
+    enum DragDrop {
+        static let tempImageSubdirectory = ".termura/tmp"
+        static let imagePastePrefix = "paste"
+        static let imagePasteExtension = "png"
+    }
+
     enum RecentProjects {
         static let maxCount = 20
         static let fileName = "recent-projects.json"

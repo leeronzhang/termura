@@ -77,6 +77,8 @@ struct AgentState: Identifiable, Sendable {
     var estimatedCostUSD: Double
     /// Context window token limit for the detected agent.
     var contextWindowLimit: Int
+    /// File path currently being written/edited by the agent, if detectable.
+    var activeFilePath: String?
     let startedAt: Date
 
     init(
@@ -91,6 +93,7 @@ struct AgentState: Identifiable, Sendable {
         cachedTokens: Int = 0,
         estimatedCostUSD: Double = 0,
         contextWindowLimit: Int? = nil,
+        activeFilePath: String? = nil,
         startedAt: Date = Date()
     ) {
         self.id = id
@@ -104,6 +107,7 @@ struct AgentState: Identifiable, Sendable {
         self.cachedTokens = cachedTokens
         self.estimatedCostUSD = estimatedCostUSD
         self.contextWindowLimit = contextWindowLimit ?? agentType.contextWindowLimit
+        self.activeFilePath = activeFilePath
         self.startedAt = startedAt
     }
 

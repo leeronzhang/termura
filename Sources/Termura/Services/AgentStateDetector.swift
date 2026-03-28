@@ -4,22 +4,25 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "AgentStateDetector")
 
 /// Precompiled regex patterns for parsing token stats from agent output.
-/// Uses non-optional types — the hard-coded patterns are guaranteed well-formed.
-/// A compilation failure here would indicate a system-level issue, so we trap immediately
-/// rather than silently degrading all token parsing for the lifetime of the process.
+/// Hard-coded patterns are guaranteed well-formed; a compilation failure here would
+/// indicate a system-level issue (e.g. ICU library missing). Falls back to a match-nothing
+/// regex so the app degrades gracefully instead of crashing in production.
 private enum TokenStatRegex {
     static let cost = compile("Total cost:\\s*\\$([\\d.]+)")
     static let input = compile("Input:\\s*([\\d,.]+)k?")
     static let output = compile("Output:\\s*([\\d,.]+)k?")
     static let cache = compile("Cache read:\\s*([\\d,.]+)k?")
+    /// Matches "Writing to <path>" lines emitted by Claude Code and similar agents.
+    static let writingTo = compile("Writing to ([^\\n\\r]+)")
 
     private static func compile(_ pattern: String) -> NSRegularExpression {
         do {
             return try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
         } catch {
-            // These are hard-coded, well-formed patterns. If compilation fails,
-            // the process is in a broken state (e.g., ICU library missing).
-            preconditionFailure("Failed to compile static regex '\(pattern)': \(error)")
+            // Hard-coded patterns should never fail. Log at fault level but don't crash.
+            assertionFailure("Failed to compile static regex '\(pattern)': \(error)")
+            logger.fault("Failed to compile static regex '\(pattern)': \(error)")
+            return NSRegularExpression()
         }
     }
 }
@@ -33,6 +36,8 @@ actor AgentStateDetector {
     private var lastStatusChange: Date?
     private var parsedCost: Double = 0
     private let sessionID: SessionID
+    /// Last file path detected from "Writing to <path>" output; cleared on non-toolRunning transitions.
+    private var activeFilePath: String?
 
     /// Valid state transitions — prevents impossible jumps
     /// (e.g. idle -> completed without going through thinking first).
@@ -111,6 +116,12 @@ actor AgentStateDetector {
 
         currentStatus = matched
         lastStatusChange = now
+        // Extract active file path when a tool-write is in progress; clear it otherwise.
+        if matched == .toolRunning {
+            activeFilePath = extractActiveFilePath(from: sample) ?? activeFilePath
+        } else if matched == .idle || matched == .completed || matched == .error {
+            activeFilePath = nil
+        }
         return currentStatus
     }
 
@@ -123,8 +134,21 @@ actor AgentStateDetector {
             status: currentStatus,
             tokenCount: tokenCount,
             estimatedCostUSD: parsedCost,
+            activeFilePath: activeFilePath,
             startedAt: detectedAt ?? Date()
         )
+    }
+
+    // MARK: - Active File Path Extraction
+
+    /// Extracts a file path from "Writing to <path>" agent output, if present.
+    private func extractActiveFilePath(from text: String) -> String? {
+        let pattern = TokenStatRegex.writingTo
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = pattern.firstMatch(in: text, range: range),
+              match.numberOfRanges > 1,
+              let captureRange = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[captureRange]).trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: - Token Stats Parsing
@@ -161,6 +185,7 @@ actor AgentStateDetector {
         currentStatus = .idle
         detectedAt = nil
         lastStatusChange = nil
+        activeFilePath = nil
     }
 
     // MARK: - Token Stat Patterns

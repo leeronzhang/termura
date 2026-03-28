@@ -128,6 +128,9 @@ final class SessionViewStateManager {
             isRestoredSession: sessionStore.isRestoredSession(id: sessionID)
         )
 
+        let initialDir = sessionStore.sessions
+            .first(where: { $0.id == sessionID })?.workingDirectory
+            ?? AppConfig.Paths.homeDirectory
         let vm = TerminalViewModel(
             sessionID: sessionID,
             engine: engine,
@@ -135,7 +138,8 @@ final class SessionViewStateManager {
             modeController: modeCtrl,
             agentCoordinator: coordinator,
             outputProcessor: processor,
-            sessionServices: services
+            sessionServices: services,
+            initialWorkingDirectory: initialDir
         )
         let editorVM = EditorViewModel(engine: engine, modeController: modeCtrl)
 

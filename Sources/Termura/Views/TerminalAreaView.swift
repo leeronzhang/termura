@@ -4,6 +4,10 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "com.termura.app", category: "TerminalAreaView")
 
+/// Opaque token returned by `NSEvent.addLocalMonitorForEvents`.
+/// Apple's API returns `Any?` — this typealias improves intent clarity.
+typealias NSEventMonitorToken = Any
+
 /// Composes the terminal display, chunked output overlay, metadata panel, and editor input.
 /// All @StateObject lifetimes are tied to the session via `.id(sessionID)` in the parent.
 struct TerminalAreaView: View {
@@ -37,17 +41,15 @@ struct TerminalAreaView: View {
     var editorViewModel: EditorViewModel { state.editorViewModel }
     var timeline: SessionTimeline { state.timeline }
 
-    @State var showMetadata = true
-    @State private var showExportSheet = false
-    @State var showContextSheet = false
-    @State var contextFileExists = false
-    @State private var metadataPanelWidth: Double = AppConfig.UI.metadataPanelWidth
+    /// Consolidated view-local UI state to reduce @State count.
+    @State var localUI = LocalUIState()
+    /// Token returned by NSEvent.addLocalMonitorForEvents; retained for removal on disappear.
+    /// Apple's API returns `Any?` — no stronger type available.
+    @State private var keyEventMonitor: NSEventMonitorToken?
+    @State private var mouseEventMonitor: NSEventMonitorToken?
 
     /// Shared handle — lives in SessionViewState so MainView can access it for the Composer.
     var editorHandle: EditorViewHandle { state.editorHandle }
-    /// Token returned by NSEvent.addLocalMonitorForEvents; retained for removal on disappear.
-    @State private var keyEventMonitor: Any?
-    @State private var mouseEventMonitor: Any?
 
     // MARK: - Body
 
@@ -58,8 +60,8 @@ struct TerminalAreaView: View {
             .modifier(TerminalAreaSheets(
                 riskAlert: $state.viewModel.pendingRiskAlert,
                 contextWindowAlert: $state.viewModel.contextWindowAlert,
-                showExportSheet: $showExportSheet,
-                showContextSheet: $showContextSheet,
+                showExportSheet: $localUI.showExportSheet,
+                showContextSheet: $localUI.showContextSheet,
                 engine: engine,
                 sessionID: sessionID,
                 sessionStore: sessionScope.store,
@@ -82,9 +84,9 @@ struct TerminalAreaView: View {
             HStack(spacing: 0) {
                 terminalAndOutputArea
 
-                if !isCompact && showMetadata && !forceHideMetadata {
+                if !isCompact && localUI.showMetadata && !forceHideMetadata {
                     ResizableDivider(
-                        width: $metadataPanelWidth,
+                        width: $localUI.metadataPanelWidth,
                         minWidth: AppConfig.UI.metadataPanelMinWidth,
                         maxWidth: AppConfig.UI.metadataPanelMaxWidth,
                         dragFactor: -1.0
@@ -94,7 +96,7 @@ struct TerminalAreaView: View {
                         timeline: timeline,
                         onSelectChunkID: { _ in }
                     )
-                    .frame(width: metadataPanelWidth)
+                    .frame(width: localUI.metadataPanelWidth)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -117,7 +119,7 @@ struct TerminalAreaView: View {
     private func checkContextFileExists() {
         let dir = viewModel.currentMetadata.workingDirectory
         guard !dir.isEmpty else {
-            contextFileExists = false
+            localUI.contextFileExists = false
             return
         }
         let path = URL(fileURLWithPath: dir)
@@ -126,7 +128,7 @@ struct TerminalAreaView: View {
         // Lifecycle: one-shot file check — result is cosmetic UI state, no cleanup needed.
         Task.detached {
             let exists = FileManager.default.fileExists(atPath: path)
-            await MainActor.run { contextFileExists = exists }
+            await MainActor.run { localUI.contextFileExists = exists }
         }
     }
 
@@ -202,6 +204,17 @@ struct TerminalAreaView: View {
             mouseEventMonitor = nil
         }
     }
+}
+
+// MARK: - Local UI State
+
+/// Groups view-local @State booleans/doubles that only affect TerminalAreaView layout.
+struct LocalUIState {
+    var showMetadata = true
+    var showExportSheet = false
+    var showContextSheet = false
+    var contextFileExists = false
+    var metadataPanelWidth: Double = AppConfig.UI.metadataPanelWidth
 }
 
 // MARK: - Sheet modifiers

@@ -23,30 +23,57 @@ final class EditorTextView: NSTextView {
     // MARK: - Drag and drop
 
     func setupDragTypes() {
-        registerForDraggedTypes([.fileURL, .URL])
+        registerForDraggedTypes([.fileURL, .URL, .tiff, .png])
     }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard sender.draggingPasteboard.canReadObject(
-            forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]
-        ) else {
+        let pb = sender.draggingPasteboard
+        let hasFileURL = pb.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        let hasImage = pb.canReadObject(forClasses: [NSImage.self], options: nil)
+        guard hasFileURL || hasImage else {
             return super.draggingEntered(sender)
         }
         return .copy
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let urls = sender.draggingPasteboard.readObjects(
+        let pb = sender.draggingPasteboard
+        if let urls = pb.readObjects(
             forClasses: [NSURL.self],
             options: [.urlReadingFileURLsOnly: true]
-        ) as? [URL], !urls.isEmpty else {
-            return super.performDragOperation(sender)
+        ) as? [URL], !urls.isEmpty {
+            let paths = urls.map(\.path.shellEscaped).joined(separator: " ")
+            let insertion = string.isEmpty ? paths : " " + paths
+            insertText(insertion, replacementRange: selectedRange())
+            return true
         }
-        let paths = urls.map(\.path.shellEscaped).joined(separator: " ")
-        let insertion = string.isEmpty ? paths : " " + paths
-        insertText(insertion, replacementRange: selectedRange())
-        return true
+        if let image = pb.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage {
+            do {
+                let url = try saveTemporaryImage(image)
+                let path = url.path.shellEscaped
+                let insertion = string.isEmpty ? path : " " + path
+                insertText(insertion, replacementRange: selectedRange())
+                return true
+            } catch {
+                return false
+            }
+        }
+        return super.performDragOperation(sender)
+    }
+
+        private func saveTemporaryImage(_ image: NSImage) throws -> URL {
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        let tmpDir = homeURL.appendingPathComponent(AppConfig.DragDrop.tempImageSubdirectory)
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        let name = "\(AppConfig.DragDrop.imagePastePrefix)-\(Int(Date().timeIntervalSince1970)).\(AppConfig.DragDrop.imagePasteExtension)"
+        let fileURL = tmpDir.appendingPathComponent(name)
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            throw EditorImageSaveError.conversionFailed
+        }
+        try png.write(to: fileURL)
+        return fileURL
     }
 
     // MARK: - Control sequence callback
@@ -142,6 +169,12 @@ final class EditorTextView: NSTextView {
     private var isSingleLine: Bool {
         !string.contains("\n")
     }
+}
+
+// MARK: - Supporting types
+
+private enum EditorImageSaveError: Error {
+    case conversionFailed
 }
 
 // MARK: - Key codes

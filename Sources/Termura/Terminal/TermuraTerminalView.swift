@@ -1,3 +1,4 @@
+import AppKit
 import SwiftTerm
 
 /// Subclass of `LocalProcessTerminalView` that intercepts raw PTY bytes
@@ -20,5 +21,49 @@ final class TermuraTerminalView: LocalProcessTerminalView {
         // reflects the updated screen state before we notify consumers.
         super.dataReceived(slice: slice)
         onDataReceived?(slice)
+    }
+
+    // MARK: - Context menu
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+
+        let copyItem = menu.addItem(
+            withTitle: "Copy",
+            action: #selector(copy(_:)),
+            keyEquivalent: ""
+        )
+        copyItem.target = self
+
+        let pasteItem = menu.addItem(
+            withTitle: "Paste",
+            action: #selector(paste(_:)),
+            keyEquivalent: ""
+        )
+        pasteItem.target = self
+
+        menu.addItem(.separator())
+
+        let selectAllItem = menu.addItem(
+            withTitle: "Select All",
+            action: #selector(selectAll(_:)),
+            keyEquivalent: ""
+        )
+        selectAllItem.target = self
+
+        menu.addItem(.separator())
+
+        let clearItem = menu.addItem(
+            withTitle: "Clear",
+            action: #selector(performClearScreen),
+            keyEquivalent: ""
+        )
+        clearItem.target = self
+
+        return menu
+    }
+
+    @objc private func performClearScreen() {
+        send(txt: "clear\n")
     }
 }

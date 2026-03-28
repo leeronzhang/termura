@@ -4,6 +4,8 @@ import SwiftUI
 
 @MainActor
 private struct ThemeManagerKey: @preconcurrency EnvironmentKey {
+    /// Placeholder default — production code must inject via `.environment(\.themeManager, ...)`.
+    /// If a view reads this without injection, it gets an unconfigured ThemeManager.
     static let defaultValue = ThemeManager()
 }
 
@@ -18,6 +20,7 @@ extension EnvironmentValues {
 
 @MainActor
 private struct CommandRouterKey: @preconcurrency EnvironmentKey {
+    /// Placeholder default — production code must inject via `.environment(\.commandRouter, ...)`.
     static let defaultValue = CommandRouter()
 }
 
@@ -32,6 +35,7 @@ extension EnvironmentValues {
 
 @MainActor
 private struct FontSettingsKey: @preconcurrency EnvironmentKey {
+    /// Placeholder default — production code must inject via `.environment(\.fontSettings, ...)`.
     static let defaultValue = FontSettings()
 }
 

@@ -49,9 +49,11 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         orderIndex = row[Columns.orderIndex]
         archivedAt = row[Columns.archivedAt]
         parentId = row[Columns.parentId]
+        // These columns were added via ALTER TABLE (v5, v7 migrations) without NOT NULL,
+        // so rows from earlier schema versions may contain NULL. Defaults are intentional.
         summary = row[Columns.summary] ?? ""
-        branchType = row[Columns.branchType] ?? "main"
-        agentType = row[Columns.agentType] ?? "unknown"
+        branchType = row[Columns.branchType] ?? BranchType.main.rawValue
+        agentType = row[Columns.agentType] ?? AgentType.unknown.rawValue
     }
 
     init(record: SessionRecord, archivedAt: Date? = nil) {
@@ -184,16 +186,18 @@ actor SessionRepository: SessionRepositoryProtocol {
     }
 
     func reorder(ids: [SessionID]) async throws {
-        let pairs = ids.enumerated().map { index, id in
-            (index, id.rawValue.uuidString)
-        }
+        guard !ids.isEmpty else { return }
+        let pairs = ids.enumerated().map { ($0, $1.rawValue.uuidString) }
+        // Batch UPDATE via CASE WHEN instead of N individual statements.
+        let cases = pairs.map { _ in "WHEN id = ? THEN ?" }.joined(separator: " ")
+        let holders = pairs.map { _ in "?" }.joined(separator: ", ")
+        var vals: [DatabaseValue] = []
+        for (idx, idStr) in pairs { vals.append(idStr.databaseValue); vals.append(idx.databaseValue) }
+        for (_, idStr) in pairs { vals.append(idStr.databaseValue) }
+        let args = StatementArguments(vals)
+        let sql = "UPDATE sessions SET order_index = CASE \(cases) END WHERE id IN (\(holders))"
         try await db.write { database in
-            for (index, idStr) in pairs {
-                try database.execute(
-                    sql: "UPDATE sessions SET order_index = ? WHERE id = ?",
-                    arguments: [index, idStr]
-                )
-            }
+            try database.execute(sql: sql, arguments: args)
         }
     }
 
@@ -290,7 +294,6 @@ actor SessionRepository: SessionRepositoryProtocol {
     }
 
     // MARK: - Private
-
     private func safeFTSQuery(_ raw: String) -> String {
         FTS5.escapeQuery(raw)
     }

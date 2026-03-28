@@ -19,7 +19,10 @@ struct ShellIntegrationState: Sendable {
 
     // MARK: - Transitions
 
-    mutating func apply(_ event: ShellIntegrationEvent) {
+    /// Apply a shell integration event, advancing the FSM.
+    /// - Parameter now: Current timestamp for execution start. Defaults to `Date()` for
+    ///   production use; inject a fixed value in tests for deterministic assertions.
+    mutating func apply(_ event: ShellIntegrationEvent, now: Date = Date()) {
         switch (phase, event) {
         case (.idle, .promptStarted),
              (.executing, .promptStarted):
@@ -29,7 +32,7 @@ struct ShellIntegrationState: Sendable {
             phase = .commandInput("")
 
         case let (.commandInput(cmd), .executionStarted):
-            phase = .executing(command: cmd, startedAt: Date())
+            phase = .executing(command: cmd, startedAt: now)
 
         case (.executing, .executionFinished):
             phase = .idle

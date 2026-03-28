@@ -54,11 +54,18 @@ extension SwiftTermEngine: LocalProcessTerminalViewDelegate {
     }
 
     nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+        // OSC 7 delivers a file:// URL (e.g. "file:///Users/foo/bar"); convert to a plain path.
         guard let directory else { return }
+        let resolvedPath: String
+        if let url = URL(string: directory), url.isFileURL {
+            resolvedPath = url.path
+        } else {
+            resolvedPath = directory
+        }
         // Lifecycle: nonisolated delegate → MainActor bridge; short-lived yield, no cleanup needed.
         Task { @MainActor [weak self] in
             guard let self else { return }
-            continuation.yield(.workingDirectoryChanged(directory))
+            continuation.yield(.workingDirectoryChanged(resolvedPath))
         }
     }
 

@@ -1,0 +1,104 @@
+name: Termura
+options:
+  bundleIdPrefix: com.termura
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "26.0"
+  generateEmptyDirectories: true
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: "1.11.2"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    exactVersion: "7.10.0"
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    exactVersion: "2.4.0"
+  Highlightr:
+    url: https://github.com/raspu/Highlightr
+    exactVersion: "2.2.1"
+  swift-collections:
+    url: https://github.com/apple/swift-collections
+    exactVersion: "1.1.4"
+
+targets:
+  Termura:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/Termura
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+      - path: Resources/shell
+        buildPhase: resources
+      - path: Resources/Fonts
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.termura.app
+        INFOPLIST_FILE: Resources/Info.plist
+        ENTITLEMENTS_FILE_PATH: Resources/Termura.entitlements
+        SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ARCHS: "arm64 x86_64"
+        INFOPLIST_KEY_CFBundleDisplayName: Termura
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+      configs:
+        Release:
+          SKIP_INSTALL: NO
+          INSTALL_PATH: /Applications
+    dependencies:
+      - package: SwiftTerm
+        product: SwiftTerm
+      - package: GRDB
+        product: GRDB
+      - package: KeyboardShortcuts
+        product: KeyboardShortcuts
+      - package: Highlightr
+        product: Highlightr
+      - package: swift-collections
+        product: DequeModule
+
+  TermuraTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/TermuraTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.termura.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Termura
+
+schemes:
+  Termura:
+    build:
+      targets:
+        Termura: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - TermuraTests
+    profile:
+      config: Release
+    archive:
+      config: Release

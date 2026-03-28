@@ -96,7 +96,8 @@ struct EditorInputView: NSViewRepresentable {
             coordinator?.handleControlSequence(seq)
         }
 
-        textView.drawsBackground = false
+        textView.drawsBackground = true
+        textView.backgroundColor = .editorInputBackground
         textView.focusRingType = .none
         textView.textColor = .labelColor
         textView.insertionPointColor = .labelColor

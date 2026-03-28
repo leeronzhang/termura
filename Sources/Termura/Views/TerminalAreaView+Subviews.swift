@@ -11,18 +11,18 @@ extension TerminalAreaView {
 
     var projectPathBar: some View {
         HStack(spacing: 0) {
-            pathLabel
-
-            if contextFileExists {
-                Button { showContextSheet = true } label: {
-                    Image(systemName: "doc.text")
-                        .font(AppUI.Font.caption)
+            if localUI.contextFileExists {
+                Button { localUI.showContextSheet = true } label: {
+                    Image(systemName: "distribute.vertical")
+                        .font(AppUI.Font.toolbarIcon)
                         .foregroundColor(.accentColor)
                 }
                 .buttonStyle(.plain)
-                .padding(.leading, AppUI.Spacing.smMd)
+                .padding(.trailing, AppUI.Spacing.xxl)
                 .help("Session context (context.md)")
             }
+
+            pathLabel
 
             Spacer()
 
@@ -40,11 +40,22 @@ extension TerminalAreaView {
         Button {
             openDirectoryPicker()
         } label: {
-            Text(viewModel.currentMetadata.workingDirectory)
-                .font(AppUI.Font.pathMono)
-                .foregroundColor(.secondary.opacity(AppUI.Opacity.strong))
-                .lineLimit(1)
-                .truncationMode(.middle)
+            HStack(spacing: AppUI.Spacing.sm) {
+                if let filePath = viewModel.currentMetadata.agentActiveFilePath,
+                   viewModel.currentMetadata.currentAgentStatus == .toolRunning {
+                    Text(abbreviatedFilePath(filePath))
+                        .font(AppUI.Font.pathMono)
+                        .foregroundColor(.accentColor.opacity(AppUI.Opacity.strong))
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                } else {
+                    Text(abbreviatedWorkingDirectory)
+                        .font(AppUI.Font.pathMono)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.strong))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
         }
         .buttonStyle(.plain)
         .disabled(isAgentBusy)
@@ -56,6 +67,20 @@ extension TerminalAreaView {
             }
         }
         .help(isAgentBusy ? "Agent is running" : "Switch working directory")
+    }
+
+    /// Returns path relative to working directory if it starts with it, else abbreviates home.
+    func abbreviatedFilePath(_ path: String) -> String {
+        let wd = viewModel.currentMetadata.workingDirectory
+        if !wd.isEmpty, path.hasPrefix(wd) {
+            let relative = path.dropFirst(wd.count)
+            return relative.hasPrefix("/") ? String(relative.dropFirst()) : String(relative)
+        }
+        let home = AppConfig.Paths.homeDirectory
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
     }
 
     @ViewBuilder
@@ -85,14 +110,14 @@ extension TerminalAreaView {
         Spacer().frame(width: AppUI.Spacing.xxl)
 
         Button {
-            withAnimation { showMetadata.toggle() }
+            withAnimation { localUI.showMetadata.toggle() }
         } label: {
             Image(systemName: "info.windshield")
                 .font(AppUI.Font.toolbarIcon)
-                .foregroundColor(showMetadata ? .accentColor : .secondary)
+                .foregroundColor(localUI.showMetadata ? .accentColor : .secondary)
         }
         .buttonStyle(.plain)
-        .help(showMetadata ? "Hide Session Info" : "Show Session Info")
+        .help(localUI.showMetadata ? "Hide Session Info" : "Show Session Info")
     }
 
     func revealInFinder() {
@@ -146,18 +171,27 @@ extension TerminalAreaView {
                     engine: engine,
                     theme: themeManager.current,
                     fontFamily: fontSettings.terminalFontFamily,
-                    fontSize: fontSettings.terminalFontSize
+                    fontSize: fontSettings.terminalFontSize,
+                    isComposerActive: commandRouter.showComposer && isFocusedPane
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, AppUI.Spacing.xxl)
                 .background(themeManager.current.background)
 
                 if commandRouter.showComposer && isFocusedPane {
-                    // Backdrop — tapping dismisses composer (pure SwiftUI, no NSEvent monitor).
-                    Color.black.opacity(AppUI.Opacity.strong)
-                        .contentShape(Rectangle())
-                        .onTapGesture { commandRouter.dismissComposer() }
-                        .transition(.opacity.animation(.easeOut(duration: AppUI.Animation.fadeOut)))
+                    // Backdrop — covers only the region ABOVE the composer so the composer's
+                    // header buttons are never shadowed by the backdrop's tap gesture.
+                    // Using GeometryReader to compute the non-composer height prevents the
+                    // backdrop's contentShape from intercepting clicks on ComposerOverlayView.
+                    GeometryReader { geo in
+                        themeManager.current.background
+                            .opacity(AppUI.Opacity.strong)
+                            .frame(height: max(0, geo.size.height - AppConfig.UI.composerMaxHeight))
+                            .frame(maxHeight: .infinity, alignment: .top)
+                            .contentShape(Rectangle())
+                            .onTapGesture { commandRouter.dismissComposer() }
+                    }
+                    .transition(.opacity.animation(.easeOut(duration: AppUI.Animation.fadeOut)))
 
                     ComposerOverlayView(
                         editorViewModel: editorViewModel,
