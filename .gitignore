@@ -16,11 +16,13 @@ DerivedData/
 # Tests (internal)
 Tests/
 
-# Harness paid implementation (private — stubs in Sources/Termura/Harness/ are public)
+# Harness directory: exclude private implementations, keep public stubs and protocols.
 # Real implementations live in the private termura-harness Swift Package.
-# The following patterns cover files that will exist there but must never be tracked here:
-# HarnessViewModel.swift, RuleFileRepository.swift, RuleFileParser.swift,
-# CorruptionDetector.swift, ExperienceCodifier.swift, RuleSection*.swift (impl only)
+Sources/Termura/Harness/
+!Sources/Termura/Harness/HarnessModels.swift
+!Sources/Termura/Harness/RuleFileRepositoryProtocol.swift
+!Sources/Termura/Harness/HarnessViewModel+Stub.swift
+!Sources/Termura/Harness/ExperienceCodifier+Stub.swift
 
 # CI/CD (internal)
 .github/
