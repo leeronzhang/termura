@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// In-memory snapshot repository for unit tests and previews.
 actor MockSessionSnapshotRepository: SessionSnapshotRepositoryProtocol {
     private var store: [SessionID: [String]] = [:]
@@ -23,3 +25,5 @@ actor MockSessionSnapshotRepository: SessionSnapshotRepositoryProtocol {
         store[sessionID] = nil
     }
 }
+
+#endif

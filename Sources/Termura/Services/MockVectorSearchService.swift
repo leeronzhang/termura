@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test double for `VectorSearchServiceProtocol`.
 /// Supports error simulation via `stubbedError`.
 actor MockVectorSearchService: VectorSearchServiceProtocol {
@@ -35,3 +37,5 @@ actor MockVectorSearchService: VectorSearchServiceProtocol {
         indexSize = 0
     }
 }
+
+#endif

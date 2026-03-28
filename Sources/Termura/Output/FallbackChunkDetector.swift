@@ -10,6 +10,7 @@ actor FallbackChunkDetector {
     // MARK: - State
 
     private var pendingLines: [String] = []
+    private var pendingLineCharCount: Int = 0
     private var pendingRawANSI: String = ""
     private var currentCommand: String = ""
     private var chunkStart: Date = .init()
@@ -101,9 +102,9 @@ actor FallbackChunkDetector {
     // MARK: - Private
 
     private func appendLine(_ line: String) {
-        let currentCount = pendingLines.reduce(0) { $0 + $1.count }
-        guard currentCount < AppConfig.Output.maxChunkOutputChars else { return }
+        guard pendingLineCharCount < AppConfig.Output.maxChunkOutputChars else { return }
         pendingLines.append(line)
+        pendingLineCharCount += line.count
     }
 
     private func buildChunk() -> OutputChunk {
@@ -113,6 +114,7 @@ actor FallbackChunkDetector {
         let start = chunkStart
 
         pendingLines = []
+        pendingLineCharCount = 0
         pendingRawANSI = ""
 
         let joined = lines.joined(separator: "\n")

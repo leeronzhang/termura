@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test double for `SessionExportProtocol`.
 actor MockSessionExportService: SessionExportProtocol {
     var stubbedHTMLURL = URL(fileURLWithPath: "/tmp/mock-export.html")
@@ -23,3 +25,5 @@ actor MockSessionExportService: SessionExportProtocol {
         return stubbedJSONURL
     }
 }
+
+#endif

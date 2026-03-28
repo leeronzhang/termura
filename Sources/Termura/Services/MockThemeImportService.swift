@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test double for `ThemeImportServiceProtocol` with call tracking.
 /// Replaces the minimal inline `MockThemeImportService` struct in ThemeImportService.swift.
 actor MockThemeImportServiceTracking: ThemeImportServiceProtocol {
@@ -22,3 +24,5 @@ actor MockThemeImportServiceTracking: ThemeImportServiceProtocol {
         .dark
     }
 }
+
+#endif

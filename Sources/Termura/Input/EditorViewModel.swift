@@ -18,6 +18,8 @@ final class EditorViewModel: ObservableObject {
     private let engine: any TerminalEngine
     /// Called after a command is submitted, for agent detection / session rename.
     var onCommandSubmit: ((String) -> Void)?
+    /// Called after a command is submitted. Used by the Composer overlay to auto-dismiss.
+    var onSubmit: (() -> Void)?
 
     // MARK: - Init
 
@@ -39,6 +41,7 @@ final class EditorViewModel: ObservableObject {
         modeController.switchToPassthrough()
         logger.debug("Submitting command length=\(text.count)")
         onCommandSubmit?(text)
+        onSubmit?()
         // Lifecycle: single actor call — engine serializes internally; no cancellation needed.
         Task { await engine.send(text + "\r") }
     }

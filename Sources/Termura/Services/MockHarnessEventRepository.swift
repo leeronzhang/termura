@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test double for `HarnessEventRepositoryProtocol`.
 actor MockHarnessEventRepository: HarnessEventRepositoryProtocol {
     var savedEvents: [HarnessEvent] = []
@@ -19,3 +21,5 @@ actor MockHarnessEventRepository: HarnessEventRepositoryProtocol {
         savedEvents.filter { $0.sessionID == sessionID && $0.eventType == type }
     }
 }
+
+#endif

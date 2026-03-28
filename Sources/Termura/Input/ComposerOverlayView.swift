@@ -27,7 +27,10 @@ struct ComposerOverlayView: View {
                 .frame(height: 0.5)
         }
         .frame(height: AppConfig.UI.composerMaxHeight)
-        .onAppear { focusEditor() }
+        .onAppear {
+            editorViewModel.onSubmit = onDismiss
+            focusEditor()
+        }
     }
 
     // MARK: - Header (notes toggle left, close right)
@@ -80,7 +83,6 @@ struct ComposerOverlayView: View {
     private var sendButton: some View {
         Button {
             editorViewModel.submit()
-            onDismiss()
         } label: {
             Image(systemName: "paperplane.fill")
                 .font(.system(size: 14))
@@ -99,7 +101,7 @@ struct ComposerOverlayView: View {
     private func focusEditor() {
         Task { @MainActor in
             do {
-                try await Task.sleep(nanoseconds: AppConfig.UI.editorFocusDelayNanoseconds)
+                try await Task.sleep(for: AppConfig.UI.editorFocusDelay)
             } catch is CancellationError {
                 return
             } catch {

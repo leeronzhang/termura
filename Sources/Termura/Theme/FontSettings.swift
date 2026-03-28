@@ -114,6 +114,8 @@ final class FontSettings {
 
     // MARK: - Available monospaced font families
 
+    // Intentionally computed: queries NSFontManager.shared at runtime (system font list is dynamic).
+    // swiftlint:disable:next static_var_collection_computed
     static var availableMonospacedFamilies: [String] {
         let fm = NSFontManager.shared
         return fm.availableFontFamilies.filter { family in

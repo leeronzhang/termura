@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test mock for MetricsCollectorProtocol. Records all calls for assertion.
 actor MockMetricsCollector: MetricsCollectorProtocol {
     private(set) var incrementCalls: [(MetricName, Int)] = []
@@ -32,3 +34,5 @@ actor MockMetricsCollector: MetricsCollectorProtocol {
         durationCalls.contains { $0.0 == name }
     }
 }
+
+#endif

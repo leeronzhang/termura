@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test double for `AgentStateStoreProtocol`.
 /// Set `shouldRejectUpdates` to simulate state update failures (e.g., store full).
 @MainActor
@@ -53,3 +55,5 @@ final class MockAgentStateStore: AgentStateStoreProtocol {
         agents.removeAll()
     }
 }
+
+#endif

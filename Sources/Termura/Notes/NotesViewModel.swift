@@ -23,7 +23,8 @@ final class NotesViewModel {
     private var saveTask: Task<Void, Never>?
     private var autoSaveTask: Task<Void, Never>?
     /// Tracks in-flight persistence Tasks so they can be awaited during flush.
-    private var pendingWrites: [Task<Void, Never>] = []
+    /// Keyed by UUID so each Task can remove itself upon completion (self-pruning).
+    private var pendingWrites: [UUID: Task<Void, Never>] = [:]
 
     init(repository: any NoteRepositoryProtocol) {
         self.repository = repository
@@ -91,7 +92,7 @@ final class NotesViewModel {
         autoSaveTask?.cancel()
         autoSaveTask = Task { [weak self] in
             do {
-                try await Task.sleep(for: .seconds(AppConfig.Runtime.notesAutoSaveSeconds))
+                try await Task.sleep(for: AppConfig.Runtime.notesAutoSave)
             } catch {
                 // CancellationError is expected — next edit restarts the debounce.
                 return
@@ -136,15 +137,17 @@ final class NotesViewModel {
     private func persistTracked(
         _ operation: @Sendable @escaping () async throws -> Void
     ) {
-        let task = Task {
+        let id = UUID()
+        let task = Task { [weak self] in
+            defer { self?.pendingWrites.removeValue(forKey: id) }
             do {
                 try await operation()
             } catch {
-                errorMessage = "\(error.localizedDescription)"
+                self?.errorMessage = "\(error.localizedDescription)"
                 logger.error("Persistence error: \(error)")
             }
         }
-        pendingWrites.append(task)
+        pendingWrites[id] = task
     }
 
     /// Awaits all in-flight persistence Tasks and force-saves the currently
@@ -157,7 +160,7 @@ final class NotesViewModel {
         saveTask = nil
 
         // 2. Await all tracked writes.
-        let snapshot = pendingWrites
+        let snapshot = Array(pendingWrites.values)
         pendingWrites.removeAll()
         for task in snapshot {
             await task.value

@@ -1,6 +1,8 @@
 import Foundation
 import GRDB
 
+#if DEBUG
+
 /// In-memory database service for unit tests. Applies all real migrations.
 actor MockDatabaseService: DatabaseServiceProtocol {
     private let queue: DatabaseQueue
@@ -20,3 +22,5 @@ actor MockDatabaseService: DatabaseServiceProtocol {
         try await queue.write(block)
     }
 }
+
+#endif
