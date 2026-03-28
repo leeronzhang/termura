@@ -37,11 +37,17 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
     ) {
         self.sessionID = sessionID
 
-        let (outputStream, outputContinuation) = AsyncStream.makeStream(of: TerminalOutputEvent.self)
+        let (outputStream, outputContinuation) = AsyncStream.makeStream(
+            of: TerminalOutputEvent.self,
+            bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
+        )
         self.outputStream = outputStream
         continuation = outputContinuation
 
-        let (shellStream, shellCont) = AsyncStream.makeStream(of: ShellIntegrationEvent.self)
+        let (shellStream, shellCont) = AsyncStream.makeStream(
+            of: ShellIntegrationEvent.self,
+            bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
+        )
         shellEventsStream = shellStream
         shellContinuation = shellCont
 

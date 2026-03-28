@@ -117,8 +117,7 @@ final class TerminalViewModel: ObservableObject {
         agentCoordinator.detectAgentFromCommand(
             command,
             sessionStore: sessionStore,
-            sessionID: sessionID,
-            taskExecutor: taskExecutor
+            sessionID: sessionID
         )
     }
 
@@ -154,9 +153,7 @@ final class TerminalViewModel: ObservableObject {
             sessionServices.generateHandoffIfNeeded(
                 session: session,
                 chunks: chunks,
-                agentState: agentState,
-                handoffService: sessionServices.sessionHandoffService,
-                taskExecutor: taskExecutor
+                agentState: agentState
             )
 
         case let .titleChanged(title):
@@ -175,29 +172,21 @@ final class TerminalViewModel: ObservableObject {
         let processor = outputProcessor
         let coordinator = agentCoordinator
         let tokenService = outputProcessor.tokenCountingService
+
+        detectPromptFromScreenBuffer()
+        schedulePromptRecheck()
+        // detectAgentFromOutput uses @MainActor SessionStoreProtocol — must stay on main actor.
+        await coordinator.detectAgentFromOutput(stripped, sessionStore: sessionStore, sessionID: sid)
+
         spawnDetachedTracked { [weak self] in
             await processor.processDataOutput(text, stripped: stripped, sessionID: sid)
             await coordinator.analyzeOutput(stripped, sessionID: sid, tokenCountingService: tokenService)
-            await MainActor.run { @Sendable [weak self] in
-                guard let self else { return }
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    await agentCoordinator.updateAgentState(
-                        tokenCountingService: outputProcessor.tokenCountingService,
-                        sessionID: sessionID
-                    )
-                    await refreshMetadata()
-                }
-            }
+            await coordinator.updateAgentState(
+                tokenCountingService: processor.tokenCountingService,
+                sessionID: sid
+            )
+            await self?.refreshMetadata()
         }
-        detectPromptFromScreenBuffer()
-        schedulePromptRecheck()
-        await agentCoordinator.detectAgentFromOutput(stripped, sessionStore: sessionStore, sessionID: sid)
-        await agentCoordinator.updateAgentState(
-            tokenCountingService: outputProcessor.tokenCountingService,
-            sessionID: sessionID
-        )
-        await refreshMetadata()
     }
 
     // MARK: - Shell events subscription
@@ -228,6 +217,7 @@ final class TerminalViewModel: ObservableObject {
         case .executionStarted:
             isInteractivePrompt = false
             modeController.switchToPassthrough()
+            detectAgentFromCurrentLine()
         case .commandStarted:
             break
         }
@@ -261,7 +251,7 @@ final class TerminalViewModel: ObservableObject {
         currentMetadata = SessionMetadata(
             sessionID: sessionID,
             estimatedTokenCount: tokens,
-            totalCharacterCount: tokens * Int(AppConfig.AI.tokenEstimateDivisor),
+            totalCharacterCount: tokens * AppConfig.AI.asciiCharsPerToken,
             inputTokenCount: breakdown.inputTokens,
             outputTokenCount: breakdown.outputTokens,
             cachedTokenCount: breakdown.cachedTokens,

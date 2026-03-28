@@ -1,6 +1,8 @@
 import Foundation
 
-/// Mock factory for testing — returns the injected MockTerminalEngine.
+#if DEBUG
+
+/// Mock factory for testing -- returns the injected MockTerminalEngine.
 final class MockTerminalEngineFactory: TerminalEngineFactory {
     private let engine: MockTerminalEngine
 
@@ -12,3 +14,5 @@ final class MockTerminalEngineFactory: TerminalEngineFactory {
         engine
     }
 }
+
+#endif

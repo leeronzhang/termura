@@ -21,9 +21,7 @@ extension SwiftTermEngine {
         )
         isRunning = true
         let elapsed = ContinuousClock.now - start
-        let seconds = Double(elapsed.components.seconds)
-            + Double(elapsed.components.attoseconds) / 1e18
-        logger.info("PTY started in \(seconds, format: .fixed(precision: 4))s session=\(sid)")
+        logger.info("PTY started in \(elapsed.totalSeconds, format: .fixed(precision: 4))s session=\(sid)")
     }
 
     private func resolveShell(_ shell: String?) -> String {
@@ -46,6 +44,11 @@ extension SwiftTermEngine: LocalProcessTerminalViewDelegate {
     }
 
     nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+        #if DEBUG
+        let codepoints = title.unicodeScalars.prefix(8)
+            .map { String(format: "U+%04X", $0.value) }.joined(separator: " ")
+        logger.debug("OSC title codepoints: \(codepoints) | raw: \(title)")
+        #endif
         // Lifecycle: nonisolated delegate → MainActor bridge; short-lived yield, no cleanup needed.
         Task { @MainActor [weak self] in
             guard let self else { return }

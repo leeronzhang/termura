@@ -20,6 +20,11 @@ extension TerminalViewModel {
     /// `>` (U+003E), U+276F, and U+203A are all common.
     static let aiPromptCharacters: Set<Character> = [">", "\u{276F}", "\u{203A}"]
 
+    /// Shell prompt suffixes used in `isShellPromptLine`.
+    /// Format: trailing space + shell sigil, or bare sigil on an otherwise empty line.
+    private static let shellPromptSuffixes: [String] = [" $", " %", " #"]
+    private static let bareShellPrompts: Set<String> = ["$", "%", "#"]
+
     func detectPromptFromScreenBuffer() {
         // Scan cursor line + up to 5 lines above. TUI apps (Claude Code) often
         // position the cursor on hint/status lines below the actual prompt.
@@ -57,9 +62,8 @@ extension TerminalViewModel {
     }
 
     func isShellPromptLine(_ line: String) -> Bool {
-        line.hasSuffix(" $") || line.hasSuffix(" %")
-            || line.hasSuffix(" #") || line == "$"
-            || line == "%" || line == "#"
+        Self.shellPromptSuffixes.contains(where: line.hasSuffix)
+            || Self.bareShellPrompts.contains(line)
     }
 
     /// Returns true if the line is an AI tool prompt: a single prompt character
@@ -81,7 +85,7 @@ extension TerminalViewModel {
         promptRecheckTask?.cancel()
         promptRecheckTask = Task { @MainActor [weak self] in
             do {
-                try await self?.clock.sleep(for: .nanoseconds(AppConfig.UI.promptRecheckDelayNanoseconds))
+                try await self?.clock.sleep(for: AppConfig.UI.promptRecheckDelay)
             } catch is CancellationError {
                 return
             } catch {

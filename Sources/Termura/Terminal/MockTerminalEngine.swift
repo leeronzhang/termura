@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
 
+#if DEBUG
+
 /// Test double for TerminalEngine. Captures all interactions for assertion.
 @MainActor
 final class MockTerminalEngine: TerminalEngine {
@@ -27,11 +29,17 @@ final class MockTerminalEngine: TerminalEngine {
     // MARK: - Init
 
     init() {
-        let (outStream, outCont) = AsyncStream.makeStream(of: TerminalOutputEvent.self)
+        let (outStream, outCont) = AsyncStream.makeStream(
+            of: TerminalOutputEvent.self,
+            bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
+        )
         outputStream = outStream
         continuation = outCont
 
-        let (shellStream, shellCont) = AsyncStream.makeStream(of: ShellIntegrationEvent.self)
+        let (shellStream, shellCont) = AsyncStream.makeStream(
+            of: ShellIntegrationEvent.self,
+            bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
+        )
         shellEventsStream = shellStream
         shellContinuation = shellCont
     }
@@ -73,3 +81,5 @@ final class MockTerminalEngine: TerminalEngine {
         continuation.finish()
     }
 }
+
+#endif
