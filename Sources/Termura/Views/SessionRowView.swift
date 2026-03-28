@@ -55,6 +55,17 @@ struct SessionRowView: View {
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .contextMenu { contextMenuItems }
         .animation(.easeOut(duration: AppUI.Animation.quick), value: isHovered)
+        // Alert must live on the stable body view, not on closeButton.
+        // closeButton is inside `if isHovered { ... }`, so it is removed from
+        // the hierarchy when the mouse leaves or the alert itself triggers an
+        // isHovered=false transition — which causes SwiftUI to instantly dismiss
+        // any alert anchored to that conditionally-rendered view.
+        .alert("Close Active Session?", isPresented: $showCloseConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Stop & Close", role: .destructive) { onClose() }
+        } message: {
+            Text("This session is currently active. The running process will be terminated.")
+        }
         .onChange(of: isWaiting) { _, waiting in
             if waiting {
                 withAnimation(
@@ -186,12 +197,6 @@ struct SessionRowView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .alert("Close Active Session?", isPresented: $showCloseConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Stop & Close", role: .destructive) { onClose() }
-        } message: {
-            Text("This session is currently active. The running process will be terminated.")
-        }
     }
 
     private var rowBackground: some View {
