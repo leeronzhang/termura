@@ -219,16 +219,17 @@ final class ProjectContext {
     }
 
     private static func makeRepositories(db: any DatabaseServiceProtocol) -> Repos {
-        Repos(
+        #if HARNESS_ENABLED
+        let ruleRepo: any RuleFileRepositoryProtocol = RuleFileRepository(db: db)
+        #else
+        let ruleRepo: any RuleFileRepositoryProtocol = MockRuleFileRepository()
+        #endif
+        return Repos(
             session: SessionRepository(db: db),
             note: NoteRepository(db: db),
             message: SessionMessageRepository(db: db),
             harness: HarnessEventRepository(db: db),
-            #if HARNESS_ENABLED
-            rule: RuleFileRepository(db: db),
-            #else
-            rule: MockRuleFileRepository(),
-            #endif
+            rule: ruleRepo,
             snapshot: SessionSnapshotRepository(db: db)
         )
     }

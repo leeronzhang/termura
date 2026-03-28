@@ -7,15 +7,15 @@ import Foundation
 
 @MainActor
 open class HarnessViewModel: ObservableObject {
-    @Published public var ruleFiles: [RuleFileRecord] = []
-    @Published public var selectedSections: [RuleSection] = []
-    @Published public var corruptionResults: [CorruptionResult] = []
-    @Published public var versionHistory: [RuleFileRecord] = []
-    @Published public var selectedFilePath: String?
-    @Published public var isScanning = false
-    @Published public var errorMessage: String?
+    @Published var ruleFiles: [RuleFileRecord] = []
+    @Published var selectedSections: [RuleSection] = []
+    @Published var corruptionResults: [CorruptionResult] = []
+    @Published var versionHistory: [RuleFileRecord] = []
+    @Published var selectedFilePath: String?
+    @Published var isScanning = false
+    @Published var errorMessage: String?
 
-    public init(repository: any RuleFileRepositoryProtocol, projectRoot: String) {}
+    init(repository: any RuleFileRepositoryProtocol, projectRoot: String) {}
 
     open func loadRuleFiles() async {}
     open func selectFile(_ path: String) async {}
