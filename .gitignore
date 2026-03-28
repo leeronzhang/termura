@@ -18,7 +18,7 @@ Tests/
 
 # Harness directory: exclude private implementations, keep public stubs and protocols.
 # Real implementations live in the private termura-harness Swift Package.
-Sources/Termura/Harness/
+Sources/Termura/Harness/*
 !Sources/Termura/Harness/HarnessModels.swift
 !Sources/Termura/Harness/RuleFileRepositoryProtocol.swift
 !Sources/Termura/Harness/HarnessViewModel+Stub.swift
