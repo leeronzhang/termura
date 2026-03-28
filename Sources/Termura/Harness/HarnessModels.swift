@@ -12,6 +12,34 @@ struct RuleFileRecord: Identifiable, Sendable {
     let createdAt: Date
 
     var fileName: String { URL(fileURLWithPath: filePath).lastPathComponent }
+
+    init(
+        id: UUID = UUID(),
+        filePath: String,
+        content: String,
+        contentHash: String = "",
+        sessionID: SessionID? = nil,
+        version: Int = 1,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.filePath = filePath
+        self.content = content
+        self.contentHash = contentHash.isEmpty ? Self.hash(content) : contentHash
+        self.sessionID = sessionID
+        self.version = version
+        self.createdAt = createdAt
+    }
+
+    // FNV-1a hash — no CryptoKit dependency required.
+    private static func hash(_ string: String) -> String {
+        var h: UInt64 = 14_695_981_039_346_656_037
+        for byte in Data(string.utf8) {
+            h ^= UInt64(byte)
+            h &*= 1_099_511_628_211
+        }
+        return String(format: "%016llx", h)
+    }
 }
 
 // MARK: - RuleSection
@@ -22,6 +50,14 @@ struct RuleSection: Identifiable, Sendable {
     let level: Int
     let body: String
     let lineRange: ClosedRange<Int>
+
+    init(id: UUID = UUID(), heading: String, level: Int, body: String, lineRange: ClosedRange<Int>) {
+        self.id = id
+        self.heading = heading
+        self.level = level
+        self.body = body
+        self.lineRange = lineRange
+    }
 }
 
 // MARK: - CorruptionSeverity / Category
