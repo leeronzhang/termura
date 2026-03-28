@@ -5,20 +5,12 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "com.termura.app", category: "AppDelegate")
 
-/// Dependency injection root. Owns global services and per-project contexts.
+/// Dependency injection root. Owns the app-level service container and the project coordinator.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    // MARK: - Global services (shared across all projects)
+    // MARK: - App-level services
 
-    let engineFactory: any TerminalEngineFactory
-    let themeManager: ThemeManager
-    let fontSettings: FontSettings
-    let tokenCountingService: TokenCountingService
-    let notificationService: NotificationService
-    let menuBarService: MenuBarService
-    let themeImportService: ThemeImportService
-    let recentProjects: RecentProjectsService
-    let metricsCollector: any MetricsCollectorProtocol
+    let services: AppServices
 
     // MARK: - Project coordinator
 
@@ -35,16 +27,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Register bundled fonts FIRST, before any UI or FontSettings init.
         Self.registerBundledFonts()
 
-        let factory: any TerminalEngineFactory = LiveTerminalEngineFactory()
-        engineFactory = factory
-        themeManager = ThemeManager()
-        fontSettings = FontSettings()
-        tokenCountingService = TokenCountingService()
-        notificationService = NotificationService()
-        menuBarService = MenuBarService()
-        themeImportService = ThemeImportService()
-        recentProjects = RecentProjectsService()
-        metricsCollector = MetricsCollector()
+        services = AppServices(
+            engineFactory: LiveTerminalEngineFactory(),
+            themeManager: ThemeManager(),
+            fontSettings: FontSettings(),
+            tokenCountingService: TokenCountingService(),
+            notificationService: NotificationService(),
+            menuBarService: MenuBarService(),
+            themeImportService: ThemeImportService(),
+            recentProjects: RecentProjectsService(),
+            metricsCollector: MetricsCollector()
+        )
         projectCoordinator = ProjectCoordinator()
 
         super.init()
@@ -67,14 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkShellIntegrationOnboarding()
         setupMenuBarActivation()
         projectCoordinator.start(with: ProjectCoordinator.Dependencies(
-            engineFactory: engineFactory,
-            tokenCountingService: tokenCountingService,
-            metricsCollector: metricsCollector,
-            themeManager: themeManager,
-            fontSettings: fontSettings,
-            notificationService: notificationService,
-            menuBarService: menuBarService,
-            recentProjects: recentProjects,
+            appServices: services,
             windowChromeConfigurator: { [weak self] window in
                 self?.configureProjectWindow(window)
             }
@@ -82,10 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logger.info("Termura launched")
 
         let launchElapsed = ContinuousClock.now - launchStart
-        let launchSeconds = Double(launchElapsed.components.seconds)
-            + Double(launchElapsed.components.attoseconds) / 1e18
-        let collector = metricsCollector
-        Task { await collector.recordDuration(.launchDuration, seconds: launchSeconds) }
+        let collector = services.metricsCollector
+        Task { await collector.recordDuration(.launchDuration, seconds: launchElapsed.totalSeconds) }
     }
 
     /// Explicitly register bundled fonts via CoreText.

@@ -19,7 +19,7 @@ extension AppDelegate {
     // MARK: - Menu Bar
 
     func setupMenuBarActivation() {
-        menuBarService.configure { [weak self] in
+        services.menuBarService.configure { [weak self] in
             self?.bringMainWindowToFront()
         }
     }

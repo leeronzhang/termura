@@ -34,9 +34,6 @@ final class ProjectContext {
     let sessionHandoffService: any SessionHandoffServiceProtocol
     let contextInjectionService: any ContextInjectionServiceProtocol
     let experienceCodifier: ExperienceCodifier
-    let branchSummarizer: BranchSummarizer
-    let embeddingService: EmbeddingService
-    let vectorSearchService: any VectorSearchServiceProtocol
     let gitService: any GitServiceProtocol
     let commandRouter: CommandRouter
     /// Global service — referenced per-project for environment injection.
@@ -73,9 +70,6 @@ final class ProjectContext {
         sessionHandoffService: any SessionHandoffServiceProtocol,
         contextInjectionService: any ContextInjectionServiceProtocol,
         experienceCodifier: ExperienceCodifier,
-        branchSummarizer: BranchSummarizer,
-        embeddingService: EmbeddingService,
-        vectorSearchService: any VectorSearchServiceProtocol,
         gitService: any GitServiceProtocol,
         commandRouter: CommandRouter,
         tokenCountingService: any TokenCountingServiceProtocol,
@@ -101,9 +95,6 @@ final class ProjectContext {
         self.sessionHandoffService = sessionHandoffService
         self.contextInjectionService = contextInjectionService
         self.experienceCodifier = experienceCodifier
-        self.branchSummarizer = branchSummarizer
-        self.embeddingService = embeddingService
-        self.vectorSearchService = vectorSearchService
         self.gitService = gitService
         self.commandRouter = commandRouter
         self.tokenCountingService = tokenCountingService
@@ -127,7 +118,7 @@ final class ProjectContext {
 
     private(set) lazy var dataScope = DataScope(
         searchService: searchService,
-        vectorSearchService: vectorSearchService,
+        vectorSearchService: nil,
         ruleFileRepository: ruleFileRepository,
         sessionMessageRepository: sessionMessageRepository
     )
@@ -189,9 +180,6 @@ final class ProjectContext {
             sessionHandoffService: services.handoff,
             contextInjectionService: services.injection,
             experienceCodifier: services.codifier,
-            branchSummarizer: services.summarizer,
-            embeddingService: services.embedding,
-            vectorSearchService: services.vector,
             gitService: services.git,
             commandRouter: services.router,
             tokenCountingService: tokenCountingService,
@@ -222,7 +210,7 @@ final class ProjectContext {
         #if HARNESS_ENABLED
         let ruleRepo: any RuleFileRepositoryProtocol = RuleFileRepository(db: db)
         #else
-        let ruleRepo: any RuleFileRepositoryProtocol = MockRuleFileRepository()
+        let ruleRepo: any RuleFileRepositoryProtocol = NullRuleFileRepository()
         #endif
         return Repos(
             session: SessionRepository(db: db),
@@ -240,12 +228,9 @@ final class ProjectContext {
         let agentState: AgentStateStore
         let search: any SearchServiceProtocol
         let archive: SessionArchiveService
-        let summarizer: BranchSummarizer
         let handoff: any SessionHandoffServiceProtocol
         let injection: any ContextInjectionServiceProtocol
         let codifier: ExperienceCodifier
-        let embedding: EmbeddingService
-        let vector: any VectorSearchServiceProtocol
         let git: any GitServiceProtocol
         let router: CommandRouter
     }
@@ -255,11 +240,9 @@ final class ProjectContext {
         metricsCollector: any MetricsCollectorProtocol
     ) -> Svc {
         let eng = TerminalEngineStore(factory: engineFactory)
-        let sum = BranchSummarizer()
         let hoff = SessionHandoffService(
-            messageRepo: repos.message, harnessEventRepo: repos.harness, summarizer: sum
+            messageRepo: repos.message, harnessEventRepo: repos.harness
         )
-        let emb = EmbeddingService()
         return Svc(
             engineStore: eng,
             sessionStore: SessionStore(
@@ -272,10 +255,9 @@ final class ProjectContext {
                 metrics: metricsCollector
             ),
             archive: SessionArchiveService(repository: repos.session),
-            summarizer: sum, handoff: hoff,
+            handoff: hoff,
             injection: ContextInjectionService(handoffService: hoff),
             codifier: ExperienceCodifier(harnessEventRepo: repos.harness),
-            embedding: emb, vector: VectorSearchService(embeddingService: emb),
             git: GitService(), router: CommandRouter()
         )
     }

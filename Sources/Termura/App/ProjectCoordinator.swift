@@ -17,14 +17,7 @@ final class ProjectCoordinator {
 
     /// Groups all dependencies needed by ProjectCoordinator.
     struct Dependencies {
-        let engineFactory: any TerminalEngineFactory
-        let tokenCountingService: any TokenCountingServiceProtocol
-        let metricsCollector: any MetricsCollectorProtocol
-        let themeManager: ThemeManager
-        let fontSettings: FontSettings
-        let notificationService: NotificationService
-        let menuBarService: MenuBarService
-        let recentProjects: RecentProjectsService
+        let appServices: AppServices
         let windowChromeConfigurator: (NSWindow) -> Void
     }
 
@@ -57,18 +50,18 @@ final class ProjectCoordinator {
         do {
             let context = try ProjectContext.open(
                 at: url,
-                engineFactory: deps.engineFactory,
-                tokenCountingService: deps.tokenCountingService,
-                metricsCollector: deps.metricsCollector
+                engineFactory: deps.appServices.engineFactory,
+                tokenCountingService: deps.appServices.tokenCountingService,
+                metricsCollector: deps.appServices.metricsCollector
             )
             let controller = ProjectWindowController(
                 projectContext: context,
-                themeManager: deps.themeManager,
-                fontSettings: deps.fontSettings
+                themeManager: deps.appServices.themeManager,
+                fontSettings: deps.appServices.fontSettings
             )
             projectWindows[url] = controller
             activeContext = context
-            deps.recentProjects.addRecent(url)
+            deps.appServices.recentProjects.addRecent(url)
             setupChunkHandler(for: context)
             persistOpenProjects()
             controller.showWindow(nil)
@@ -126,7 +119,7 @@ final class ProjectCoordinator {
     func restoreLastProjectOrShowPicker() {
         Task { @MainActor [weak self] in
             await ProjectMigrationService.migrateIfNeeded()
-            if let lastURL = self?.deps?.recentProjects.lastOpened() {
+            if let lastURL = self?.deps?.appServices.recentProjects.lastOpened() {
                 self?.openProject(at: lastURL)
             } else {
                 self?.showProjectPicker()
@@ -221,8 +214,8 @@ final class ProjectCoordinator {
     }
 
     private func setupChunkHandler(for context: ProjectContext) {
-        let menuBar = deps?.menuBarService
-        let notification = deps?.notificationService
+        let menuBar = deps?.appServices.menuBarService
+        let notification = deps?.appServices.notificationService
         context.commandRouter.onChunkCompleted { chunk in
             if let code = chunk.exitCode, code != 0 {
                 menuBar?.recordFailure()

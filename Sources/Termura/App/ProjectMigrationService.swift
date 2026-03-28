@@ -93,12 +93,17 @@ enum ProjectMigrationService {
         legacyPool: DatabasePool,
         targetPool: DatabasePool
     ) async throws {
+        let batchSize = AppConfig.Persistence.inClauseBatchSize
         try await targetPool.write { target in
             try copyTable("sessions", where: "working_directory = ?", args: [projectPath], from: legacyPool, into: target)
-            let placeholders = sessionIDs.map { _ in "?" }.joined(separator: ",")
-            let idArgs = sessionIDs.map { $0 as any DatabaseValueConvertible }
+            // Batch IN clauses to stay below SQLite's SQLITE_LIMIT_VARIABLE_NUMBER (999).
             for table in ["session_messages", "harness_events", "session_snapshots"] {
-                try copyTable(table, where: "session_id IN (\(placeholders))", args: idArgs, from: legacyPool, into: target)
+                for batchStart in stride(from: 0, to: sessionIDs.count, by: batchSize) {
+                    let batch = Array(sessionIDs[batchStart ..< min(batchStart + batchSize, sessionIDs.count)])
+                    let placeholders = batch.map { _ in "?" }.joined(separator: ",")
+                    let idArgs = batch.map { $0 as any DatabaseValueConvertible }
+                    try copyTable(table, where: "session_id IN (\(placeholders))", args: idArgs, from: legacyPool, into: target)
+                }
             }
             try copyTable("notes", where: "1=1", args: [], from: legacyPool, into: target)
         }

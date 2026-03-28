@@ -111,17 +111,17 @@ struct AppCommands: Commands {
     private var viewCommands: some Commands {
         CommandGroup(after: .toolbar) {
             Button("Zoom In") {
-                (NSApp.delegate as? AppDelegate)?.fontSettings.zoomIn()
+                (NSApp.delegate as? AppDelegate)?.services.fontSettings.zoomIn()
             }
             .keyboardShortcut("+", modifiers: .command)
 
             Button("Zoom Out") {
-                (NSApp.delegate as? AppDelegate)?.fontSettings.zoomOut()
+                (NSApp.delegate as? AppDelegate)?.services.fontSettings.zoomOut()
             }
             .keyboardShortcut("-", modifiers: .command)
 
             Button("Actual Size") {
-                (NSApp.delegate as? AppDelegate)?.fontSettings.resetZoom()
+                (NSApp.delegate as? AppDelegate)?.services.fontSettings.resetZoom()
             }
             .keyboardShortcut("0", modifiers: .command)
         }

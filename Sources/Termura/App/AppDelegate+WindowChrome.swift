@@ -16,7 +16,7 @@ extension AppDelegate {
     func configureProjectWindow(_ window: NSWindow) {
         Task { @MainActor in
             do {
-                try await Task.sleep(nanoseconds: AppConfig.UI.windowConfigDelayNanoseconds)
+                try await Task.sleep(for: AppConfig.UI.windowConfigDelay)
             } catch is CancellationError {
                 return
             } catch {
@@ -26,7 +26,7 @@ extension AppDelegate {
             }
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
-            window.backgroundColor = NSColor(self.themeManager.current.background)
+            window.backgroundColor = NSColor(self.services.themeManager.current.background)
 
             disableTitlebarEffect(in: window)
             adjustTrafficLights(in: window)
@@ -86,7 +86,7 @@ extension AppDelegate {
             Task { @MainActor [weak self, weak window] in
                 guard let self, let window else { return }
                 do {
-                    try await Task.sleep(nanoseconds: AppConfig.UI.fullScreenExitDelayNanoseconds)
+                    try await Task.sleep(for: AppConfig.UI.fullScreenExitDelay)
                 } catch is CancellationError {
                     return
                 } catch {
@@ -214,8 +214,8 @@ extension AppDelegate {
         if visorController == nil {
             visorController = VisorWindowController(
                 projectContext: context,
-                themeManager: themeManager,
-                fontSettings: fontSettings
+                themeManager: services.themeManager,
+                fontSettings: services.fontSettings
             )
         }
         visorController?.toggle()

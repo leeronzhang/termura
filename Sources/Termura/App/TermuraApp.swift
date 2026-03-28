@@ -7,9 +7,9 @@ struct TermuraApp: App {
     var body: some Scene {
         Settings {
             SettingsView(
-                themeManager: appDelegate.themeManager,
-                fontSettings: appDelegate.fontSettings,
-                themeImportService: appDelegate.themeImportService
+                themeManager: appDelegate.services.themeManager,
+                fontSettings: appDelegate.services.fontSettings,
+                themeImportService: appDelegate.services.themeImportService
             )
         }
         .commands {

@@ -39,6 +39,9 @@ final class CommandRouter {
     var dualPaneToggleTick: UInt = 0
     /// Tracks which pane was last clicked in dual-pane mode (set by NSEvent monitors).
     var focusedDualPaneID: SessionID?
+    /// Whether the session-info metadata panel is visible in dual-pane mode.
+    /// Toggled by the info toolbar button; applies globally (not per-pane).
+    var showDualPaneMetadata = true
 
     // MARK: - Per-terminal toggles
 

@@ -33,13 +33,15 @@ final class SessionScope {
 @MainActor
 final class DataScope {
     let searchService: any SearchServiceProtocol
-    let vectorSearchService: any VectorSearchServiceProtocol
+    /// Semantic vector search service. `nil` until a real Core ML embedding model is bundled;
+    /// when nil the "Semantic" tab is hidden from the search UI.
+    let vectorSearchService: (any VectorSearchServiceProtocol)?
     let ruleFileRepository: any RuleFileRepositoryProtocol
     let sessionMessageRepository: any SessionMessageRepositoryProtocol
 
     init(
         searchService: any SearchServiceProtocol,
-        vectorSearchService: any VectorSearchServiceProtocol,
+        vectorSearchService: (any VectorSearchServiceProtocol)?,
         ruleFileRepository: any RuleFileRepositoryProtocol,
         sessionMessageRepository: any SessionMessageRepositoryProtocol
     ) {
