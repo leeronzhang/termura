@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Mock session store for unit tests and SwiftUI previews.
 @MainActor
 final class MockSessionStore: ObservableObject, SessionStoreProtocol {
@@ -78,7 +80,7 @@ final class MockSessionStore: ObservableObject, SessionStoreProtocol {
     }
 
     func flushPendingWrites() async {
-        // No-op in mock — no persistence layer.
+        // No-op in mock -- no persistence layer.
     }
 
     // MARK: - Session Tree
@@ -105,3 +107,5 @@ final class MockSessionStore: ObservableObject, SessionStoreProtocol {
         activeSessionID = parentID
     }
 }
+
+#endif

@@ -21,9 +21,10 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     let repository: (any SessionRepositoryProtocol)?
     let clock: any AppClock
     private let metricsCollector: (any MetricsCollectorProtocol)?
-    var saveTask: Task<Void, Never>?
+    private var saveTask: Task<Void, Never>?
     /// Tracks in-flight persistence Tasks so they can be awaited during flush.
-    var pendingWrites: [Task<Void, Never>] = []
+    /// Keyed by UUID so each Task can remove itself upon completion (self-pruning).
+    private var pendingWrites: [UUID: Task<Void, Never>] = [:]
 
     init(
         engineStore: TerminalEngineStore,
@@ -128,10 +129,8 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         activeSessionID = id
         ensureEngine(for: id)
         let elapsed = ContinuousClock.now - start
-        let seconds = Double(elapsed.components.seconds)
-            + Double(elapsed.components.attoseconds) / 1e18
         if let collector = metricsCollector {
-            Task { await collector.recordDuration(.sessionSwitchDuration, seconds: seconds) }
+            Task { await collector.recordDuration(.sessionSwitchDuration, seconds: elapsed.totalSeconds) }
         }
     }
 
@@ -194,5 +193,74 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         }
         let ids = sessions.map(\.id)
         persistTracked { try await $0.reorder(ids: ids) }
+    }
+
+    // MARK: - Flush
+
+    /// Awaits all in-flight persistence Tasks and force-saves current in-memory
+    /// state to capture any debounced changes not yet written to DB.
+    /// Call during app termination or project close.
+    func flushPendingWrites() async {
+        guard let repo = repository else { return }
+
+        // 1. Cancel debounce timer — we will persist everything directly.
+        saveTask?.cancel()
+        saveTask = nil
+
+        // 2. Await all tracked writes so prior mutations land in DB.
+        let snapshot = Array(pendingWrites.values)
+        pendingWrites.removeAll()
+        for task in snapshot {
+            await task.value
+        }
+
+        // 3. Force-save every session to capture debounced changes
+        //    (rename, workingDirectory) that may not have been flushed yet.
+        for session in sessions {
+            do {
+                try await repo.save(session)
+            } catch {
+                logger.error("Flush save error for session \(session.id): \(error)")
+            }
+        }
+    }
+
+    // MARK: - Tracked persistence helpers
+
+    /// Persists an operation asynchronously while tracking the Task so it can
+    /// be awaited during `flushPendingWrites()`.
+    func persistTracked(
+        _ operation: @Sendable @escaping (any SessionRepositoryProtocol) async throws -> Void
+    ) {
+        guard let repo = repository else { return }
+        let id = UUID()
+        let task = Task { [weak self] in
+            defer { self?.pendingWrites.removeValue(forKey: id) }
+            do {
+                try await operation(repo)
+            } catch {
+                self?.errorMessage = "Failed to save session: \(error.localizedDescription)"
+                logger.error("Persistence error: \(error)")
+            }
+        }
+        pendingWrites[id] = task
+    }
+
+    func scheduleDebounced(
+        _ operation: @Sendable @escaping (any SessionRepositoryProtocol) async throws -> Void
+    ) {
+        guard let repo = repository else { return }
+        saveTask?.cancel()
+        saveTask = Task {
+            do {
+                try await clock.sleep(for: AppConfig.Runtime.notesAutoSave)
+                guard !Task.isCancelled else { return }
+                try await operation(repo)
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.error("Debounced save error: \(error)")
+            }
+        }
     }
 }

@@ -4,10 +4,11 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "BranchSummarizer")
 
 /// Generates a summary of a completed branch session.
+/// Stateless — all methods are pure functions; no actor isolation needed.
 /// Currently uses a heuristic extractor; can be extended to call local/remote LLM.
-actor BranchSummarizer {
+enum BranchSummarizer {
     /// Generate a summary from the session's output chunks.
-    func summarize(chunks: [OutputChunk], branchType: BranchType) -> String {
+    static func summarize(chunks: [OutputChunk], branchType: BranchType) -> String {
         guard !chunks.isEmpty else { return "Empty branch session." }
 
         let commandCount = chunks.count
@@ -41,7 +42,7 @@ actor BranchSummarizer {
     }
 
     /// Create a metadata message containing the branch summary.
-    func createSummaryMessage(
+    static func createSummaryMessage(
         summary: String,
         branchSessionID: SessionID,
         parentSessionID: SessionID

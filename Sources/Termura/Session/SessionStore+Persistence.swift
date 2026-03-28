@@ -45,8 +45,7 @@ extension SessionStore {
             sessions[idx].summary = summary
 
             if let msgRepo = messageRepo {
-                let summarizer = BranchSummarizer()
-                let msg = await summarizer.createSummaryMessage(
+                let msg = BranchSummarizer.createSummaryMessage(
                     summary: summary,
                     branchSessionID: branchID,
                     parentSessionID: parentID
@@ -72,69 +71,4 @@ extension SessionStore {
         activeSessionID = parentID
     }
 
-    // MARK: - Flush
-
-    /// Awaits all in-flight persistence Tasks and force-saves current in-memory
-    /// state to capture any debounced changes not yet written to DB.
-    /// Call during app termination or project close.
-    func flushPendingWrites() async {
-        guard let repo = repository else { return }
-
-        // 1. Cancel debounce timer — we will persist everything directly.
-        saveTask?.cancel()
-        saveTask = nil
-
-        // 2. Await all tracked writes so prior mutations land in DB.
-        let snapshot = pendingWrites
-        pendingWrites.removeAll()
-        for task in snapshot {
-            await task.value
-        }
-
-        // 3. Force-save every session to capture debounced changes
-        //    (rename, workingDirectory) that may not have been flushed yet.
-        for session in sessions {
-            do {
-                try await repo.save(session)
-            } catch {
-                logger.error("Flush save error for session \(session.id): \(error)")
-            }
-        }
-    }
-
-    // MARK: - Tracked persistence helpers
-
-    /// Persists an operation asynchronously while tracking the Task so it can
-    /// be awaited during `flushPendingWrites()`.
-    func persistTracked(
-        _ operation: @Sendable @escaping (any SessionRepositoryProtocol) async throws -> Void
-    ) {
-        guard let repo = repository else { return }
-        let task = Task {
-            do {
-                try await operation(repo)
-            } catch {
-                logger.error("Persistence error: \(error)")
-            }
-        }
-        pendingWrites.append(task)
-    }
-
-    func scheduleDebounced(
-        _ operation: @Sendable @escaping (any SessionRepositoryProtocol) async throws -> Void
-    ) {
-        guard let repo = repository else { return }
-        saveTask?.cancel()
-        saveTask = Task {
-            do {
-                try await clock.sleep(for: .seconds(AppConfig.Runtime.notesAutoSaveSeconds))
-                guard !Task.isCancelled else { return }
-                try await operation(repo)
-            } catch is CancellationError {
-                return
-            } catch {
-                logger.error("Debounced save error: \(error)")
-            }
-        }
-    }
 }

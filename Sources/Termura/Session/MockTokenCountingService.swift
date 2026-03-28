@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test double for `TokenCountingServiceProtocol`.
 actor MockTokenCountingService: TokenCountingServiceProtocol {
     var stubbedTokens: [SessionID: Int] = [:]
@@ -13,7 +15,7 @@ actor MockTokenCountingService: TokenCountingServiceProtocol {
     func accumulate(for sessionID: SessionID, text: String) {
         accumulateCallCount += 1
         let current = stubbedTokens[sessionID] ?? 0
-        stubbedTokens[sessionID] = current + text.count / 4
+        stubbedTokens[sessionID] = current + estimateTokens(in: text)
     }
 
     func accumulateInput(for sessionID: SessionID, text: String) {
@@ -42,3 +44,5 @@ actor MockTokenCountingService: TokenCountingServiceProtocol {
         stubbedBreakdowns.removeValue(forKey: sessionID)
     }
 }
+
+#endif
