@@ -24,18 +24,13 @@ Sources/Termura/Harness/*
 !Sources/Termura/Harness/HarnessViewModel+Stub.swift
 !Sources/Termura/Harness/ExperienceCodifier+Stub.swift
 
-# CI/CD (internal)
+# CI/CD and internal build tooling
 .github/
-
-# Internal build tooling (not required to use the app)
 Makefile
 scripts/
 project.yml
 .swiftlint.yml
 .swiftformat
-
-# CI/CD (internal)
-.github/
 
 # Internal docs
 docs/
