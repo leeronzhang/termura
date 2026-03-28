@@ -16,6 +16,12 @@ DerivedData/
 # Tests (internal)
 Tests/
 
+# Harness module (paid tier, proprietary)
+Sources/Termura/Harness/
+
+# CI/CD (internal)
+.github/
+
 # Internal build tooling (not required to use the app)
 Makefile
 scripts/
