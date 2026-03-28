@@ -97,10 +97,12 @@ struct CodeEditorView: View {
     private func saveFile() {
         let path = absolutePath
         let text = content
-        Task.detached {
+        // Task { } inherits @MainActor; I/O is offloaded via inner Task.detached so the
+        // main thread is not blocked, and state update after the await is safely on MainActor.
+        Task {
             do {
-                try text.write(toFile: path, atomically: true, encoding: .utf8)
-                await MainActor.run { isModified = false }
+                try await Task.detached { try text.write(toFile: path, atomically: true, encoding: .utf8) }.value
+                isModified = false
                 logger.info("Saved \(path)")
             } catch {
                 logger.warning("Failed to save \(path): \(error.localizedDescription)")

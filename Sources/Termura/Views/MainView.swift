@@ -1,5 +1,12 @@
 import SwiftUI
 
+// MARK: - Pane slot
+
+enum PaneSlot: Equatable {
+    case left
+    case right
+}
+
 /// Root layout: horizontal split between sidebar and terminal area.
 struct MainView: View {
     @Environment(\.sessionScope) var sessionScope
@@ -17,14 +24,32 @@ struct MainView: View {
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
     @State var showCloseSessionConfirm = false
     @State var splitRoot: SplitNode?
-    /// Session ID shown in the right pane of dual-pane mode. Nil = single pane.
-    @State var splitSessionID: SessionID?
-    /// Which pane is focused/active in dual-pane mode (for metadata display + sidebar highlight).
-    @State var focusedPaneID: SessionID?
-    /// Non-terminal tabs (files, notes, diffs). Terminal tabs are derived from sessions.
+    /// Explicitly managed terminal tab list (terminal + split entries).
+    @State var terminalItems: [ContentTab] = []
+    /// Which slot is focused within the current split tab.
+    @State var focusedSlot: PaneSlot = .left
+    /// Non-terminal tabs (files, notes, diffs).
     @State var openTabs: [ContentTab] = []
     @State var selectedContentTab: ContentTab?
     @State var isFullScreen = false
+
+    // MARK: - Derived split-mode helpers (computed from selected tab)
+
+    var leftPaneSessionID: SessionID? {
+        guard case let .split(left, _, _, _) = resolvedSelectedTab else { return nil }
+        return left
+    }
+
+    var rightPaneSessionID: SessionID? {
+        guard case let .split(_, right, _, _) = resolvedSelectedTab else { return nil }
+        return right
+    }
+
+    var isInSplitMode: Bool { resolvedSelectedTab.isSplit }
+
+    var focusedPaneSessionID: SessionID? {
+        focusedSlot == .left ? leftPaneSessionID : rightPaneSessionID
+    }
 
     // MARK: - Convenience accessors
 
@@ -53,22 +78,18 @@ struct MainView: View {
             }
         }
         .onChange(of: commandRouter.dualPaneToggleTick) { _, _ in
-            toggleDualPane()
+            toggleSplitTab()
         }
         .onChange(of: commandRouter.focusedDualPaneID) { _, newID in
-            guard let newID, splitSessionID != nil else { return }
-            focusedPaneID = newID
-        }
-        .onChange(of: sessionStore.sessions.count) { _, _ in
-            // Clear split if the secondary session was closed.
-            if let splitID = splitSessionID,
-               !sessionStore.sessions.contains(where: { $0.id == splitID }) {
-                splitSessionID = nil
-                commandRouter.isDualPaneActive = false
+            guard let newID, isInSplitMode else { return }
+            if newID == leftPaneSessionID {
+                focusedSlot = .left
+            } else if newID == rightPaneSessionID {
+                focusedSlot = .right
             }
         }
-        .onChange(of: commandRouter.exportSessionID) { _, newID in
-            guard newID != nil else { return }
+        .onChange(of: sessionStore.sessions.count) { _, _ in
+            syncTerminalItems()
         }
         .onChange(of: commandRouter.closeTabTick) { _, _ in
             handleCloseTab()
@@ -101,9 +122,8 @@ struct MainView: View {
             SidebarView(
                 isFullScreen: isFullScreen,
                 activeContentTab: resolvedSelectedTab,
-                splitSessionID: splitSessionID,
-                focusedPaneID: focusedPaneID,
-                onSetSplitSession: { setDualPaneSecondary(id: $0) },
+                focusedSessionID: focusedPaneSessionID ?? sessionStore.activeSessionID,
+                onActivateSession: { activateSessionFromSidebar($0) },
                 onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) },
                 onOpenFile: { path, mode in openProjectFile(relativePath: path, mode: mode) }
             )

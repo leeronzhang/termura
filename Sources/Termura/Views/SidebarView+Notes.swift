@@ -143,11 +143,7 @@ private struct SidebarNoteRow: View {
         Button { onToggleFavorite() } label: {
             Image(systemName: note.isFavorite ? "star.fill" : "star")
                 .font(.system(size: 11))
-                .foregroundColor(
-                    note.isFavorite
-                        ? .yellow
-                        : .secondary.opacity(AppUI.Opacity.tertiary)
-                )
+                .foregroundColor(note.isFavorite ? .yellow : .secondary)
         }
         .buttonStyle(.plain)
         .help(note.isFavorite ? "Remove from favorites" : "Add to favorites")

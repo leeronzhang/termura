@@ -102,26 +102,24 @@ struct ContextFileView: View {
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName).path
         let filePath = contextFilePath
         let text = content
-        // Lifecycle: user-initiated save — Task completes quickly (file I/O);
-        // even if sheet dismisses, the write finishes harmlessly.
-        Task.detached {
+        // Lifecycle: user-initiated save — even if sheet dismisses, the write finishes harmlessly.
+        // Task { } inherits @MainActor from the View; I/O is offloaded via inner Task.detached
+        // so the main thread is not blocked, and state updates after the await are safely on MainActor.
+        Task {
             do {
-                if !FileManager.default.fileExists(atPath: dirPath) {
-                    try FileManager.default.createDirectory(
-                        atPath: dirPath, withIntermediateDirectories: true
-                    )
-                }
-                try text.write(toFile: filePath, atomically: true, encoding: .utf8)
-                await MainActor.run {
-                    isSaving = false
-                    isPresented = false
-                }
+                try await Task.detached {
+                    if !FileManager.default.fileExists(atPath: dirPath) {
+                        try FileManager.default.createDirectory(
+                            atPath: dirPath, withIntermediateDirectories: true
+                        )
+                    }
+                    try text.write(toFile: filePath, atomically: true, encoding: .utf8)
+                }.value
+                isSaving = false
+                isPresented = false
             } catch {
-                let msg = "Save failed: \(error.localizedDescription)"
-                await MainActor.run {
-                    isSaving = false
-                    errorMessage = msg
-                }
+                isSaving = false
+                errorMessage = "Save failed: \(error.localizedDescription)"
             }
         }
     }

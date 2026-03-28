@@ -83,6 +83,12 @@ extension TerminalAreaView {
         return path
     }
 
+    /// Reflects whether the session-info panel is currently visible.
+    /// In dual-pane mode the toggle is global; in single-pane it is local to this view.
+    private var infoVisible: Bool {
+        commandRouter.isDualPaneActive ? commandRouter.showDualPaneMetadata : localUI.showMetadata
+    }
+
     @ViewBuilder
     private var toolbarButtons: some View {
         Button {
@@ -110,14 +116,18 @@ extension TerminalAreaView {
         Spacer().frame(width: AppUI.Spacing.xxl)
 
         Button {
-            withAnimation { localUI.showMetadata.toggle() }
+            if commandRouter.isDualPaneActive {
+                commandRouter.showDualPaneMetadata.toggle()
+            } else {
+                withAnimation { localUI.showMetadata.toggle() }
+            }
         } label: {
             Image(systemName: "info.windshield")
                 .font(AppUI.Font.toolbarIcon)
-                .foregroundColor(localUI.showMetadata ? .accentColor : .secondary)
+                .foregroundColor(infoVisible ? .accentColor : .secondary)
         }
         .buttonStyle(.plain)
-        .help(localUI.showMetadata ? "Hide Session Info" : "Show Session Info")
+        .help(infoVisible ? "Hide Session Info" : "Show Session Info")
     }
 
     func revealInFinder() {

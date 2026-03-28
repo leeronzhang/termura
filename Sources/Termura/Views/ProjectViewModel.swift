@@ -184,9 +184,7 @@ final class ProjectViewModel: ObservableObject {
         persistTask?.cancel()
         persistTask = Task { [weak self] in
             do {
-                try await self?.clock.sleep(
-                    for: .nanoseconds(AppConfig.UI.expansionPersistDebounceNanoseconds)
-                )
+                try await self?.clock.sleep(for: AppConfig.UI.expansionPersistDebounce)
             } catch is CancellationError {
                 return
             } catch {
@@ -215,9 +213,7 @@ final class ProjectViewModel: ObservableObject {
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
             do {
-                try await self?.clock.sleep(
-                    for: .nanoseconds(AppConfig.Git.refreshDebounceNanoseconds)
-                )
+                try await self?.clock.sleep(for: AppConfig.Git.refreshDebounce)
             } catch is CancellationError {
                 return
             } catch {

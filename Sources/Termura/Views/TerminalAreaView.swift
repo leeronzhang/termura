@@ -126,9 +126,10 @@ struct TerminalAreaView: View {
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
             .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
         // Lifecycle: one-shot file check — result is cosmetic UI state, no cleanup needed.
-        Task.detached {
-            let exists = FileManager.default.fileExists(atPath: path)
-            await MainActor.run { localUI.contextFileExists = exists }
+        // fileExists is a fast syscall; running on MainActor avoids the @State capture risk
+        // that arises when Task.detached + MainActor.run is used with value-type wrappers.
+        Task { @MainActor in
+            localUI.contextFileExists = FileManager.default.fileExists(atPath: path)
         }
     }
 

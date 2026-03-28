@@ -44,7 +44,7 @@ extension SidebarView {
 
     var sessionList: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: AppUI.Spacing.xs) {
+            LazyVStack(spacing: AppUI.Spacing.sm) {
                 if !pinnedSessions.isEmpty {
                     sectionLabel("Pinned")
                     ForEach(pinnedSessions) { session in
@@ -90,22 +90,10 @@ extension SidebarView {
             guard elapsed > 0 else { return nil }
             return MetadataFormatter.formatDuration(elapsed)
         }()
-        let isPrimary = sessionStore.activeSessionID == session.id
-            && activeContentTab?.sessionID == session.id
-        let isSecondary = splitSessionID == session.id
-        let isDualPaneMode = splitSessionID != nil
-        let isFocused = focusedPaneID == session.id
-        let activeState: Bool
-        let splitState: Bool
-        if isDualPaneMode {
-            // Dual pane: focused pane is "active", other pane is "in split"
-            activeState = (isPrimary || isSecondary) && isFocused
-            splitState = (isPrimary || isSecondary) && !isFocused
-        } else {
-            // Single pane: original behavior
-            activeState = isPrimary
-            splitState = false
-        }
+        let isInCurrentTab = activeContentTab?.containsSession(session.id) ?? false
+        let isFocused = focusedSessionID == session.id
+        let activeState = isInCurrentTab && isFocused
+        let splitState = isInCurrentTab && !isFocused
         return SessionRowView(
             session: session,
             isActive: activeState,
@@ -169,14 +157,9 @@ extension SidebarView {
         }
     }
 
-    /// In dual-pane mode, clicking a non-primary session opens it in the right pane.
-    /// In single-pane mode, activates the session normally.
+    /// Delegates to MainView which handles find-existing-tab-or-open-new logic.
     private func activateOrSplit(session: SessionRecord) {
-        if splitSessionID != nil, session.id != sessionStore.activeSessionID {
-            onSetSplitSession?(session.id)
-        } else {
-            sessionStore.activateSession(id: session.id)
-        }
+        onActivateSession?(session)
     }
 
     var sessionFooter: some View {

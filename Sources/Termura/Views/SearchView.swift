@@ -22,24 +22,31 @@ struct SearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            #if DEBUG
             if vectorService != nil {
                 searchModePicker
             }
-            if searchMode == .keyword {
-                searchField
-                Divider()
-                resultsList
-            } else if let vs = vectorService {
+            if searchMode == .semantic, let vs = vectorService {
                 SemanticSearchView(
                     vectorService: vs,
                     onSelectSession: onSelectSession,
                     isPresented: $isPresented
                 )
+            } else {
+                searchField
+                Divider()
+                resultsList
             }
+            #else
+            searchField
+            Divider()
+            resultsList
+            #endif
         }
         .frame(width: AppConfig.UI.searchDialogWidth, height: AppConfig.UI.searchDialogHeight)
     }
 
+    #if DEBUG
     private var searchModePicker: some View {
         Picker("", selection: $searchMode) {
             Text("Keyword").tag(SearchMode.keyword)
@@ -49,6 +56,7 @@ struct SearchView: View {
         .frame(width: AppConfig.UI.fieldPickerWidth)
         .padding(AppUI.Spacing.md)
     }
+    #endif
 
     // MARK: - Search field
 
@@ -103,5 +111,7 @@ struct SearchView: View {
 
 private enum SearchMode: String, CaseIterable {
     case keyword
+    #if DEBUG
     case semantic
+    #endif
 }

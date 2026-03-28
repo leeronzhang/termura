@@ -5,22 +5,15 @@ import SwiftUI
 extension MainView {
     // MARK: - Tab computation
 
-    /// All tabs: one per session (derived) + non-terminal tabs (user-opened files/notes).
+    /// All tabs: explicit terminal items + non-terminal tabs (user-opened files/notes).
     var allTabs: [ContentTab] {
-        let sessionTabs = sessionStore.sessions.map {
-            ContentTab.terminal(sessionID: $0.id, title: $0.title)
-        }
-        return sessionTabs + openTabs
+        terminalItems + openTabs
     }
 
-    /// Resolved selected tab — falls back to the active session's terminal tab.
+    /// Resolved selected tab — falls back to the first terminal item.
     var resolvedSelectedTab: ContentTab {
         if let tab = selectedContentTab, allTabs.contains(tab) { return tab }
-        if let activeID = sessionStore.activeSessionID {
-            let title = sessionStore.sessions.first { $0.id == activeID }?.title ?? "Terminal"
-            return .terminal(sessionID: activeID, title: title)
-        }
-        return allTabs.first ?? .terminal(sessionID: SessionID(), title: "Terminal")
+        return terminalItems.first ?? openTabs.first ?? .terminal(sessionID: SessionID(), title: "Terminal")
     }
 
     @ViewBuilder
@@ -32,9 +25,16 @@ extension MainView {
                     get: { resolvedSelectedTab },
                     set: { newTab in
                         selectedContentTab = newTab
-                        // Sync sidebar selection when a terminal tab is clicked.
-                        if let sid = newTab.sessionID {
+                        // Sync activeSessionID when switching tabs.
+                        switch newTab {
+                        case let .terminal(sid, _):
                             sessionStore.activateSession(id: sid)
+                        case let .split(left, right, _, _):
+                            let sid = focusedSlot == .left ? left : right
+                            sessionStore.activateSession(id: sid)
+                            commandRouter.isDualPaneActive = true
+                        case .note, .diff, .file, .preview:
+                            break
                         }
                     }
                 ),
@@ -44,11 +44,17 @@ extension MainView {
             }
             selectedContentView
         }
-        .onReceive(sessionStore.$activeSessionID) { newID in
-            // When sidebar selection changes, switch to that session's terminal tab.
-            guard let newID else { return }
-            let title = sessionStore.sessions.first { $0.id == newID }?.title ?? "Terminal"
-            selectedContentTab = .terminal(sessionID: newID, title: title)
+        // Sync isDualPaneActive when selected tab changes.
+        .onChange(of: selectedContentTab) { _, tab in
+            guard let tab else { return }
+            let isSplit = tab.isSplit
+            commandRouter.isDualPaneActive = isSplit
+            if isSplit {
+                focusedSlot = .left
+                commandRouter.focusedDualPaneID = leftPaneSessionID
+            } else {
+                commandRouter.focusedDualPaneID = nil
+            }
         }
     }
 
@@ -58,6 +64,9 @@ extension MainView {
         case let .terminal(sessionID, _):
             terminalView(for: sessionID)
                 .id(sessionID)
+        case .split:
+            dualPaneView()
+                .id(resolvedSelectedTab.id)
         case let .note(noteID, _):
             noteEditorView(noteID: noteID)
                 .id(noteID)
@@ -106,8 +115,6 @@ extension MainView {
                 ),
                 renderLeaf: { id in AnyView(renderLeaf(sessionID: id)) }
             )
-        } else if let secondaryID = splitSessionID {
-            dualPaneView(primaryID: sessionID, secondaryID: secondaryID)
         } else if let engine = engineStore.engine(for: sessionID) {
             let state = viewStateManager.viewState(for: sessionID, engine: engine)
             TerminalAreaView(
@@ -121,32 +128,28 @@ extension MainView {
     }
 
     @ViewBuilder
-    private func dualPaneView(primaryID: SessionID, secondaryID: SessionID) -> some View {
-        let focused = focusedPaneID ?? primaryID
+    func dualPaneView() -> some View {
         HStack(spacing: 0) {
-            dualPaneTerminal(
-                sessionID: primaryID, isFocused: focused == primaryID, hideButtons: true
-            )
+            dualPaneTerminal(sessionID: leftPaneSessionID, slot: .left, hideButtons: true)
 
             Rectangle()
-                .fill(.ultraThinMaterial)
+                .fill(themeManager.current.sidebarText.opacity(AppUI.Opacity.softBorder))
                 .frame(width: 1)
 
-            dualPaneTerminal(
-                sessionID: secondaryID, isFocused: focused == secondaryID, hideButtons: false
-            )
+            dualPaneTerminal(sessionID: rightPaneSessionID, slot: .right, hideButtons: false)
 
-            dualPaneMetadata(focusedID: focused)
+            dualPaneMetadata(focusedID: focusedPaneSessionID)
         }
         .onAppear {
-            focusedPaneID = primaryID
-            commandRouter.focusedDualPaneID = primaryID
+            focusedSlot = .left
+            commandRouter.focusedDualPaneID = leftPaneSessionID
         }
     }
 
     @ViewBuilder
-    private func dualPaneTerminal(sessionID: SessionID, isFocused: Bool, hideButtons: Bool) -> some View {
-        if let engine = engineStore.engine(for: sessionID) {
+    func dualPaneTerminal(sessionID: SessionID?, slot: PaneSlot, hideButtons: Bool) -> some View {
+        if let sessionID, let engine = engineStore.engine(for: sessionID) {
+            let isFocused = focusedSlot == slot
             let state = viewStateManager.viewState(for: sessionID, engine: engine)
             TerminalAreaView(
                 engine: engine,
@@ -168,16 +171,19 @@ extension MainView {
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        focusedPaneID = sessionID
+                        focusedSlot = slot
                         commandRouter.focusedDualPaneID = sessionID
+                        sessionStore.activateSession(id: sessionID)
                     }
             }
         }
     }
 
     @ViewBuilder
-    private func dualPaneMetadata(focusedID: SessionID) -> some View {
-        if let engine = engineStore.engine(for: focusedID) {
+    private func dualPaneMetadata(focusedID: SessionID?) -> some View {
+        if let focusedID,
+           commandRouter.showDualPaneMetadata,
+           let engine = engineStore.engine(for: focusedID) {
             let state = viewStateManager.viewState(for: focusedID, engine: engine)
             ResizableDivider(
                 width: .constant(AppConfig.UI.metadataPanelWidth),

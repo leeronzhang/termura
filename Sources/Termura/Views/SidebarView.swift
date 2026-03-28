@@ -10,15 +10,12 @@ struct SidebarView: View {
     @Environment(\.notesViewModel) var notesViewModel
 
     var isFullScreen: Bool = false
-    /// The currently visible content tab — used to suppress session highlight
-    /// when a non-terminal tab (file, note, diff) is active.
+    /// The currently selected content tab — used for session highlight logic.
     var activeContentTab: ContentTab?
-    /// Session ID displayed in the dual-pane secondary (right) pane, if any.
-    var splitSessionID: SessionID?
-    /// Which pane is currently focused in dual-pane mode.
-    var focusedPaneID: SessionID?
-    /// Called when a session is tapped in dual-pane mode to set as secondary.
-    var onSetSplitSession: ((SessionID) -> Void)?
+    /// The session that currently has keyboard focus (active in focused pane or single pane).
+    var focusedSessionID: SessionID?
+    /// Called when a session row is tapped — MainView handles find-tab-or-open logic.
+    var onActivateSession: ((SessionRecord) -> Void)?
     /// Called when a note title is tapped in the sidebar to open it as a content tab.
     var onOpenNote: ((NoteID, String) -> Void)?
     /// Called when a project file is tapped to open in a content tab.

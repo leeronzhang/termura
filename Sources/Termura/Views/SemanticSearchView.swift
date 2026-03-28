@@ -1,7 +1,12 @@
 import SwiftUI
 
+#if DEBUG
+
 /// Semantic search UI — queries across sessions and rule files using embeddings.
 /// Shown alongside the existing FTS5 search as a "Semantic" tab.
+///
+/// DEBUG-ONLY: Backed by FNV hash vectors with no real semantic content.
+/// Do not enable in production until `EmbeddingService` uses a real Core ML model.
 struct SemanticSearchView: View {
     let vectorService: any VectorSearchServiceProtocol
     let onSelectSession: (SessionID) -> Void
@@ -102,3 +107,5 @@ struct SemanticSearchView: View {
         }
     }
 }
+
+#endif

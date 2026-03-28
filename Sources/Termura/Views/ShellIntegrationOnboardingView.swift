@@ -129,7 +129,7 @@ struct ShellIntegrationOnboardingView: View {
                 try await installer.install(into: shell)
                 UserDefaults.standard.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
                 installState = .done
-                try await Task.sleep(for: .seconds(AppConfig.Runtime.onboardingDismissDelaySeconds))
+                try await Task.sleep(for: AppConfig.Runtime.onboardingDismissDelay)
                 isPresented = false
             } catch {
                 installError = error.localizedDescription

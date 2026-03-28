@@ -55,38 +55,124 @@ extension MainView {
 
     func closeContentTab(_ tab: ContentTab) {
         switch tab {
-        case .terminal:
-            // Terminal tabs are not closable from tab bar (managed via sidebar).
+        case .terminal, .split:
+            // Managed via sidebar / session lifecycle, not closable from tab bar.
             break
         case .note, .diff, .file, .preview:
             openTabs.removeAll { $0 == tab }
             if selectedContentTab == tab {
-                // Fall back to the active session's terminal tab.
                 selectedContentTab = nil
             }
             persistOpenTabs()
         }
     }
 
-    /// Cmd+W handler: close the active non-terminal tab, or close the session if on a terminal tab.
+    /// Cmd+W handler: close focused session if on a terminal/split tab, or close a non-terminal tab.
     func handleCloseTab() {
         let tab = resolvedSelectedTab
         if tab.isClosable {
             closeContentTab(tab)
-        } else if tab.isTerminal {
-            // Terminal tab — close the session (with confirmation).
+        } else if tab.isTerminal || tab.isSplit {
             showCloseSessionConfirm = true
         }
     }
 
     func confirmCloseActiveSession() {
-        if let activeID = sessionStore.activeSessionID {
-            sessionStore.closeSession(id: activeID)
-            // Clear selected tab so it falls back to the next available session.
-            if selectedContentTab?.sessionID == activeID {
-                selectedContentTab = nil
+        let sessionID = focusedPaneSessionID ?? sessionStore.activeSessionID
+        guard let sid = sessionID else { return }
+        // If closing a session that is part of a split tab, dissolve to single.
+        if let idx = terminalItems.firstIndex(where: { $0.containsSession(sid) }) {
+            let item = terminalItems[idx]
+            if case let .split(left, right, leftTitle, rightTitle) = item {
+                // Replace split with the surviving single session tab.
+                let survivingID = left == sid ? right : left
+                let survivingTitle = left == sid ? rightTitle : leftTitle
+                let replacement = ContentTab.terminal(sessionID: survivingID, title: survivingTitle)
+                terminalItems[idx] = replacement
+                selectedContentTab = replacement
+                sessionStore.activateSession(id: survivingID)
+            } else {
+                // .terminal tab — remove it.
+                terminalItems.remove(at: idx)
+                selectedContentTab = terminalItems.last ?? openTabs.first
+                if let next = selectedContentTab?.sessionID {
+                    sessionStore.activateSession(id: next)
+                }
             }
         }
+        sessionStore.closeSession(id: sid)
+    }
+}
+
+// MARK: - Session activation (from sidebar)
+
+extension MainView {
+    /// Called when the user taps a session in the sidebar.
+    /// Jumps to the existing tab containing the session, or opens a new terminal tab.
+    func activateSessionFromSidebar(_ session: SessionRecord) {
+        if let tab = terminalItems.first(where: { $0.containsSession(session.id) }) {
+            selectedContentTab = tab
+            if case let .split(left, _, _, _) = tab {
+                focusedSlot = session.id == left ? .left : .right
+            }
+        } else {
+            let tab = ContentTab.terminal(sessionID: session.id, title: session.title)
+            terminalItems.append(tab)
+            selectedContentTab = tab
+        }
+        sessionStore.activateSession(id: session.id)
+    }
+}
+
+// MARK: - Split tab management
+
+extension MainView {
+    /// Toggles the current terminal tab between single and split (two-pane) mode.
+    func toggleSplitTab() {
+        let current = resolvedSelectedTab
+        if current.isSplit {
+            dissolveSplitTab()
+        } else if case let .terminal(leftID, leftTitle) = current {
+            convertToSplitTab(leftID: leftID, leftTitle: leftTitle)
+        }
+    }
+
+    /// Dissolves the current split tab into two separate terminal tabs.
+    func dissolveSplitTab() {
+        guard let idx = terminalItems.firstIndex(where: { $0 == resolvedSelectedTab }),
+              case let .split(left, right, leftTitle, rightTitle) = terminalItems[idx] else { return }
+        let leftTab = ContentTab.terminal(sessionID: left, title: leftTitle)
+        let rightTab = ContentTab.terminal(sessionID: right, title: rightTitle)
+        terminalItems.remove(at: idx)
+        terminalItems.insert(rightTab, at: idx)
+        terminalItems.insert(leftTab, at: idx)
+        selectedContentTab = leftTab
+        commandRouter.isDualPaneActive = false
+        commandRouter.focusedDualPaneID = nil
+        sessionStore.activateSession(id: left)
+    }
+
+    private func convertToSplitTab(leftID: SessionID, leftTitle: String) {
+        let secondary = sessionStore.sessions.first { sid in
+            sid.id != leftID && !terminalItems.contains { $0.containsSession(sid.id) }
+        } ?? sessionStore.sessions.first { $0.id != leftID }
+           ?? sessionStore.createSession(title: "Terminal")
+        let splitTab = ContentTab.split(
+            left: leftID,
+            right: secondary.id,
+            leftTitle: leftTitle,
+            rightTitle: secondary.title
+        )
+        if let idx = terminalItems.firstIndex(where: { $0.containsSession(leftID) }) {
+            terminalItems[idx] = splitTab
+        } else {
+            terminalItems.append(splitTab)
+        }
+        selectedContentTab = splitTab
+        focusedSlot = .left
+        commandRouter.isDualPaneActive = true
+        commandRouter.focusedDualPaneID = leftID
+        sessionStore.ensureEngine(for: secondary.id)
     }
 }
 
@@ -94,8 +180,6 @@ extension MainView {
 
 extension MainView {
     func ensureInitialSession() async {
-        // Wait for persisted sessions to be loaded before deciding
-        // whether to create a fresh session.
         if !sessionStore.hasLoadedPersistedSessions {
             for await loaded in sessionStore.$hasLoadedPersistedSessions.values where loaded {
                 break
@@ -104,34 +188,51 @@ extension MainView {
         if sessionStore.sessions.isEmpty {
             sessionStore.createSession(title: "Terminal")
         }
+        syncTerminalItems()
     }
 
-    /// Toggle dual-pane mode: side-by-side view of two sessions.
-    func toggleDualPane() {
-        if splitSessionID != nil {
-            splitSessionID = nil
-            focusedPaneID = nil
-            commandRouter.isDualPaneActive = false
-            commandRouter.focusedDualPaneID = nil
-        } else {
-            guard let activeID = sessionStore.activeSessionID else { return }
-            // Pick the first session that is not the active one.
-            let candidate = sessionStore.sessions.first { $0.id != activeID }
-            guard let secondary = candidate else { return }
-            splitSessionID = secondary.id
-            focusedPaneID = activeID
-            commandRouter.isDualPaneActive = true
-            commandRouter.focusedDualPaneID = activeID
-            sessionStore.ensureEngine(for: secondary.id)
+    /// Reconciles `terminalItems` with the current session list.
+    /// Adds tabs for new sessions; dissolves or removes tabs for closed sessions.
+    func syncTerminalItems() {
+        let allSessionIDs = Set(sessionStore.sessions.map(\.id))
+        // Remove tabs for sessions that no longer exist.
+        var updated: [ContentTab] = []
+        for item in terminalItems {
+            switch item {
+            case let .terminal(sid, _):
+                if allSessionIDs.contains(sid) { updated.append(item) }
+                // else: session closed — drop the tab
+            case let .split(left, right, leftTitle, rightTitle):
+                let leftExists = allSessionIDs.contains(left)
+                let rightExists = allSessionIDs.contains(right)
+                if leftExists && rightExists {
+                    updated.append(item)
+                } else if leftExists {
+                    updated.append(.terminal(sessionID: left, title: leftTitle))
+                } else if rightExists {
+                    updated.append(.terminal(sessionID: right, title: rightTitle))
+                }
+                // else: both gone — drop the tab
+            default:
+                updated.append(item)
+            }
         }
-    }
-
-    /// Called from sidebar when a session is tapped while dual-pane is active.
-    func setDualPaneSecondary(id: SessionID) {
-        guard splitSessionID != nil else { return }
-        guard id != sessionStore.activeSessionID else { return }
-        splitSessionID = id
-        sessionStore.ensureEngine(for: id)
+        // Add tabs for sessions not yet represented.
+        let coveredIDs = Set(updated.flatMap { item -> [SessionID] in
+            switch item {
+            case let .terminal(sid, _): return [sid]
+            case let .split(left, right, _, _): return [left, right]
+            default: return []
+            }
+        })
+        for session in sessionStore.sessions where !coveredIDs.contains(session.id) {
+            updated.append(.terminal(sessionID: session.id, title: session.title))
+        }
+        terminalItems = updated
+        // Ensure selected tab is still valid.
+        if let sel = selectedContentTab, !allTabs.contains(sel) {
+            selectedContentTab = terminalItems.last
+        }
     }
 
     func performSplit(axis: SplitAxis) {
@@ -170,60 +271,4 @@ extension MainView {
     }
 }
 
-// MARK: - Tab persistence
-
-extension MainView {
-    /// UserDefaults key for open tabs, scoped to the current project.
-    private var tabsDefaultsKey: String {
-        "openTabs-\(sessionStore.projectRoot ?? "default")"
-    }
-
-    /// Saves persistable tabs (note/file) to UserDefaults.
-    func persistOpenTabs() {
-        // Only persist note and file tabs — terminal tabs are derived from sessions,
-        // diffs are ephemeral.
-        let persistable = openTabs.filter {
-            switch $0 {
-            case .note, .file, .preview: true
-            case .terminal, .diff: false
-            }
-        }
-        let data: Data
-        do {
-            data = try JSONEncoder().encode(persistable)
-        } catch {
-            // Non-critical: tab persistence is cosmetic; tabs will be re-created on next use.
-            logger.warning("Failed to encode open tabs: \(error.localizedDescription)")
-            return
-        }
-        UserDefaults.standard.set(data, forKey: tabsDefaultsKey)
-        // Also save the selected tab id for restoration.
-        if let tab = selectedContentTab {
-            UserDefaults.standard.set(tab.id, forKey: tabsDefaultsKey + ".selected")
-        }
-    }
-
-    /// Restores previously open tabs from UserDefaults.
-    func restoreOpenTabs() {
-        guard let data = UserDefaults.standard.data(forKey: tabsDefaultsKey) else { return }
-        let restored: [ContentTab]
-        do {
-            restored = try JSONDecoder().decode([ContentTab].self, from: data)
-        } catch {
-            // Non-critical: tab restoration is cosmetic; user starts with a clean tab set.
-            logger.warning("Failed to decode open tabs: \(error.localizedDescription)")
-            return
-        }
-        guard !restored.isEmpty else { return }
-
-        for tab in restored where !openTabs.contains(tab) {
-            openTabs.append(tab)
-        }
-
-        // Restore selected tab if it matches an available tab.
-        if let selectedID = UserDefaults.standard.string(forKey: tabsDefaultsKey + ".selected"),
-           let match = allTabs.first(where: { $0.id == selectedID }) {
-            selectedContentTab = match
-        }
-    }
-}
+// Tab persistence is in MainView+TabPersistence.swift

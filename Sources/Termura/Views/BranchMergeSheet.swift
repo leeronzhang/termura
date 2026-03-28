@@ -11,8 +11,6 @@ struct BranchMergeSheet: View {
     @State private var summary: String = ""
     @State private var isGenerating = false
 
-    private let summarizer = BranchSummarizer()
-
     var body: some View {
         VStack(alignment: .leading, spacing: AppUI.Spacing.xl) {
             header
@@ -91,7 +89,7 @@ struct BranchMergeSheet: View {
         isGenerating = true
         let capturedChunks = chunks
         let branchType = branchSession.branchType
-        let result = await summarizer.summarize(chunks: capturedChunks, branchType: branchType)
+        let result = BranchSummarizer.summarize(chunks: capturedChunks, branchType: branchType)
         summary = result
         isGenerating = false
     }
