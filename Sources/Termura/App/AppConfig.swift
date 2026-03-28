@@ -185,4 +185,9 @@ enum AppConfig {
         static let previewLength = 64
     }
 
+    enum URLs {
+        /// Harness product page — shown in the free-build upsell panel.
+        static let harnessProduct = "https://termura.app/harness"
+    }
+
 }
