@@ -224,7 +224,11 @@ final class ProjectContext {
             note: NoteRepository(db: db),
             message: SessionMessageRepository(db: db),
             harness: HarnessEventRepository(db: db),
+            #if HARNESS_ENABLED
             rule: RuleFileRepository(db: db),
+            #else
+            rule: MockRuleFileRepository(),
+            #endif
             snapshot: SessionSnapshotRepository(db: db)
         )
     }
