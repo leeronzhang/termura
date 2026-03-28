@@ -13,6 +13,9 @@ DerivedData/
 # Generated Xcode project
 *.xcodeproj/
 
+# Tests (internal)
+Tests/
+
 # Internal build tooling (not required to use the app)
 Makefile
 scripts/
