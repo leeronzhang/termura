@@ -19,9 +19,7 @@ struct TraceContext: Sendable {
     }
 
     /// Elapsed time in seconds (convenience for metrics recording).
-    var elapsedSeconds: Double {
-        Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-    }
+    var elapsedSeconds: Double { elapsed.totalSeconds }
 }
 
 /// TaskLocal storage for implicit trace propagation through structured concurrency.

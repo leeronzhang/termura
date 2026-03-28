@@ -86,6 +86,48 @@ enum DatabaseMigrations {
         }
     }
 
+    // MARK: - v4: notes + FTS5
+
+    private static func registerV4Notes(into migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v4_notes") { db in
+            try db.create(table: "notes") { table in
+                table.primaryKey("id", .text).notNull()
+                table.column("title", .text).notNull().defaults(to: "")
+                table.column("body", .text).notNull().defaults(to: "")
+                table.column("created_at", .double).notNull()
+                table.column("updated_at", .double).notNull()
+                table.column("archived_at", .double)
+            }
+            try db.create(index: "idx_notes_updated", on: "notes", columns: ["updated_at"])
+            try db.execute(sql: """
+            CREATE VIRTUAL TABLE notes_fts USING fts5(
+                id UNINDEXED, title, body,
+                content="notes", content_rowid="rowid"
+            )
+            """)
+            try db.execute(sql: """
+            CREATE TRIGGER notes_ai AFTER INSERT ON notes BEGIN
+                INSERT INTO notes_fts(rowid,id,title,body)
+                VALUES(new.rowid,new.id,new.title,new.body);
+            END
+            """)
+            try db.execute(sql: """
+            CREATE TRIGGER notes_ad AFTER DELETE ON notes BEGIN
+                INSERT INTO notes_fts(notes_fts,rowid,id,title,body)
+                VALUES('delete',old.rowid,old.id,old.title,old.body);
+            END
+            """)
+            try db.execute(sql: """
+            CREATE TRIGGER notes_au AFTER UPDATE ON notes BEGIN
+                INSERT INTO notes_fts(notes_fts,rowid,id,title,body)
+                VALUES('delete',old.rowid,old.id,old.title,old.body);
+                INSERT INTO notes_fts(rowid,id,title,body)
+                VALUES(new.rowid,new.id,new.title,new.body);
+            END
+            """)
+        }
+    }
+
     // MARK: - v5: session tree + messages + harness events
 
     private static func registerV5SessionTree(into migrator: inout DatabaseMigrator) {
@@ -179,8 +221,6 @@ enum DatabaseMigrations {
         }
     }
 
-    // MARK: - v4: notes + FTS5
-
     // MARK: - v8: notes favorite flag (column named is_snippet for legacy compat)
 
     private static func registerV8Snippets(into migrator: inout DatabaseMigrator) {
@@ -194,45 +234,4 @@ enum DatabaseMigrations {
         }
     }
 
-    // MARK: - v4: notes + FTS5
-
-    private static func registerV4Notes(into migrator: inout DatabaseMigrator) {
-        migrator.registerMigration("v4_notes") { db in
-            try db.create(table: "notes") { table in
-                table.primaryKey("id", .text).notNull()
-                table.column("title", .text).notNull().defaults(to: "")
-                table.column("body", .text).notNull().defaults(to: "")
-                table.column("created_at", .double).notNull()
-                table.column("updated_at", .double).notNull()
-                table.column("archived_at", .double)
-            }
-            try db.create(index: "idx_notes_updated", on: "notes", columns: ["updated_at"])
-            try db.execute(sql: """
-            CREATE VIRTUAL TABLE notes_fts USING fts5(
-                id UNINDEXED, title, body,
-                content="notes", content_rowid="rowid"
-            )
-            """)
-            try db.execute(sql: """
-            CREATE TRIGGER notes_ai AFTER INSERT ON notes BEGIN
-                INSERT INTO notes_fts(rowid,id,title,body)
-                VALUES(new.rowid,new.id,new.title,new.body);
-            END
-            """)
-            try db.execute(sql: """
-            CREATE TRIGGER notes_ad AFTER DELETE ON notes BEGIN
-                INSERT INTO notes_fts(notes_fts,rowid,id,title,body)
-                VALUES('delete',old.rowid,old.id,old.title,old.body);
-            END
-            """)
-            try db.execute(sql: """
-            CREATE TRIGGER notes_au AFTER UPDATE ON notes BEGIN
-                INSERT INTO notes_fts(notes_fts,rowid,id,title,body)
-                VALUES('delete',old.rowid,old.id,old.title,old.body);
-                INSERT INTO notes_fts(rowid,id,title,body)
-                VALUES(new.rowid,new.id,new.title,new.body);
-            END
-            """)
-        }
-    }
 }

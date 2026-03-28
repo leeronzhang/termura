@@ -23,10 +23,7 @@ actor DatabaseService: DatabaseServiceProtocol {
     static func makePool(at projectURL: URL) throws -> DatabasePool {
         let fm = FileManager.default
         guard fm.isWritableFile(atPath: projectURL.path) else {
-            throw RepositoryError.migrationFailed(
-                version: "pool-init",
-                underlying: nil
-            )
+            throw RepositoryError.databaseNotAccessible(path: projectURL.path)
         }
         let dir = projectURL.appendingPathComponent(AppConfig.Persistence.directoryName)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -41,9 +38,7 @@ actor DatabaseService: DatabaseServiceProtocol {
         let start = ContinuousClock.now
         let result = try await pool.read(block)
         let elapsed = ContinuousClock.now - start
-        let seconds = Double(elapsed.components.seconds)
-            + Double(elapsed.components.attoseconds) / 1e18
-        await metrics?.recordDuration(.dbReadDuration, seconds: seconds)
+        await metrics?.recordDuration(.dbReadDuration, seconds: elapsed.totalSeconds)
         return result
     }
 
@@ -52,9 +47,7 @@ actor DatabaseService: DatabaseServiceProtocol {
         let start = ContinuousClock.now
         let result = try await pool.write(block)
         let elapsed = ContinuousClock.now - start
-        let seconds = Double(elapsed.components.seconds)
-            + Double(elapsed.components.attoseconds) / 1e18
-        await metrics?.recordDuration(.dbWriteDuration, seconds: seconds)
+        await metrics?.recordDuration(.dbWriteDuration, seconds: elapsed.totalSeconds)
         return result
     }
 }

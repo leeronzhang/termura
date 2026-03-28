@@ -11,6 +11,8 @@ enum RepositoryError: LocalizedError {
     case notFound(entity: String, id: String)
     /// Data compression or decompression failed.
     case compressionFailed
+    /// The database directory is not writable (permissions or missing parent).
+    case databaseNotAccessible(path: String)
     /// A database migration step failed.
     case migrationFailed(version: String, underlying: Error?)
     /// The session tree exceeds the configured maximum depth.
@@ -28,6 +30,8 @@ enum RepositoryError: LocalizedError {
             "\(entity) not found: \(id)"
         case .compressionFailed:
             "Data compression/decompression failed."
+        case let .databaseNotAccessible(path):
+            "Database directory is not writable: \(path)"
         case let .migrationFailed(version, underlying):
             "Database migration failed at \(version)\(underlying.map { ": \($0.localizedDescription)" } ?? "")"
         case let .branchDepthExceeded(depth):
@@ -40,7 +44,7 @@ enum RepositoryError: LocalizedError {
         switch self {
         case .invalidID, .invalidColorLabel, .invalidBranchType:
             true // Caller can correct the input.
-        case .notFound, .compressionFailed, .migrationFailed, .branchDepthExceeded:
+        case .notFound, .compressionFailed, .databaseNotAccessible, .migrationFailed, .branchDepthExceeded:
             false
         }
     }

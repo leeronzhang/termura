@@ -90,6 +90,8 @@ actor NotificationService: NotificationServiceProtocol {
 
 // MARK: - Mock (Actor for test-safe mutation tracking)
 
+#if DEBUG
+
 actor MockNotificationService: NotificationServiceProtocol {
     private(set) var notifiedChunks: [OutputChunk] = []
     private(set) var notifiedContextAlerts: [ContextWindowAlert] = []
@@ -102,3 +104,5 @@ actor MockNotificationService: NotificationServiceProtocol {
         notifiedContextAlerts.append(alert)
     }
 }
+
+#endif

@@ -1,11 +1,20 @@
 import Foundation
 import OSLog
 
+#if DEBUG
+
 private let logger = Logger(subsystem: "com.termura.app", category: "EmbeddingService")
 
 /// Local embedding service for semantic search.
-/// Uses a lightweight heuristic (TF-IDF-style) as a placeholder;
-/// can be replaced with Core ML + MiniLM-L6 when the model is bundled.
+///
+/// STATUS: NOT PRODUCTION-READY. The current `embed()` implementation uses an
+/// FNV hash-based bag-of-words approximation that carries no semantic information.
+/// Cosine similarity over these vectors is meaningless for semantic queries.
+///
+/// This class (and VectorSearchService) is kept as infrastructure scaffolding.
+/// Before exposing semantic search in the UI, replace `embed()` with a real
+/// Core ML model (e.g. MiniLM-L6 via `MLModel`) and re-enable
+/// `DataScope.vectorSearchService` in ProjectContext.
 actor EmbeddingService {
     private let dimension = AppConfig.SemanticSearch.embeddingDimension
 
@@ -90,3 +99,5 @@ struct TextChunk: Sendable {
     let text: String
     let offset: Int
 }
+
+#endif

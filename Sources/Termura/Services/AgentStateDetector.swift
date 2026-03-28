@@ -117,7 +117,9 @@ actor AgentStateDetector {
         currentStatus = matched
         lastStatusChange = now
         // Extract active file path when a tool-write is in progress; clear it otherwise.
-        if matched == .toolRunning {
+        // Guard with a cheap contains() before running the regex to avoid unnecessary
+        // regex execution when toolRunning was triggered by a different rule (e.g. "Running:").
+        if matched == .toolRunning && sample.contains("Writing to") {
             activeFilePath = extractActiveFilePath(from: sample) ?? activeFilePath
         } else if matched == .idle || matched == .completed || matched == .error {
             activeFilePath = nil
@@ -212,12 +214,14 @@ actor AgentStateDetector {
         from text: String,
         pattern: NSRegularExpression
     ) -> Int? {
-        guard let value = extractDouble(from: text, pattern: pattern) else { return nil }
         let range = NSRange(text.startIndex..., in: text)
         guard let match = pattern.firstMatch(in: text, range: range),
-              let fullRange = Range(match.range, in: text) else { return nil }
-        let matched = String(text[fullRange])
-        if matched.lowercased().hasSuffix("k") {
+              match.numberOfRanges > 1,
+              let captureRange = Range(match.range(at: 1), in: text) else { return nil }
+        let captured = text[captureRange].replacingOccurrences(of: ",", with: "")
+        guard let value = Double(captured) else { return nil }
+        if let fullRange = Range(match.range, in: text),
+           text[fullRange].lowercased().hasSuffix("k") {
             return Int(value * 1000)
         }
         return Int(value)

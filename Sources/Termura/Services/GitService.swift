@@ -96,11 +96,11 @@ actor GitService: GitServiceProtocol {
             }
             group.addTask {
                 // Hard timeout — if git hangs (lock file, network mount), kill after deadline.
-                try await Task.sleep(nanoseconds: AppConfig.Git.commandTimeoutNanoseconds)
+                try await Task.sleep(for: AppConfig.Git.commandTimeout)
                 throw GitServiceError.commandFailed(
                     command: cmdString,
                     exitCode: -1,
-                    stderr: "Timed out after \(AppConfig.Git.commandTimeoutNanoseconds / 1_000_000_000)s"
+                    stderr: "Timed out after \(Int(AppConfig.Git.commandTimeout.totalSeconds))s"
                 )
             }
             // The first task to complete wins; the other is cancelled.
@@ -138,23 +138,36 @@ actor GitService: GitServiceProtocol {
         let stderrTask = Task.detached { stderrHandle.readDataToEndOfFile() }
 
         // Wait for process termination via continuation; pipes are already draining.
-        let exitStatus: Int32 = try await withCheckedThrowingContinuation { continuation in
-            process.terminationHandler = { terminated in
-                continuation.resume(returning: terminated.terminationStatus)
+        // `withTaskCancellationHandler` ensures the OS process is terminated when the
+        // Swift Task is cancelled (e.g. when the timeout task wins the race in `run(_:at:)`).
+        // Without this, cancelling the Task only stops Swift execution; the child git
+        // process would continue running and accumulate as a zombie.
+        let exitStatus: Int32 = try await withTaskCancellationHandler(
+            operation: {
+                try await withCheckedThrowingContinuation { continuation in
+                    process.terminationHandler = { terminated in
+                        continuation.resume(returning: terminated.terminationStatus)
+                    }
+                    do {
+                        try process.run()
+                    } catch {
+                        process.terminationHandler = nil
+                        // Cancel leaked pipe-read tasks since the process never started.
+                        stdoutTask.cancel()
+                        stderrTask.cancel()
+                        continuation.resume(throwing: GitServiceError.launchFailed(
+                            command: cmdString,
+                            underlying: error
+                        ))
+                    }
+                }
+            },
+            onCancel: {
+                // Runs on Task cancellation (e.g. timeout wins the task-group race).
+                // terminate() is safe to call before run() — it is a no-op on unstarted processes.
+                process.terminate()
             }
-            do {
-                try process.run()
-            } catch {
-                process.terminationHandler = nil
-                // Cancel leaked pipe-read tasks since the process never started.
-                stdoutTask.cancel()
-                stderrTask.cancel()
-                continuation.resume(throwing: GitServiceError.launchFailed(
-                    command: cmdString,
-                    underlying: error
-                ))
-            }
-        }
+        )
 
         // Pipe reads complete once the child closes its file descriptors (on exit).
         let stdoutData = await stdoutTask.value

@@ -5,8 +5,10 @@ import Foundation
 /// Owns `ChunkDetector`, `FallbackChunkDetector`, `OutputStore`, and
 /// `TokenCountingServiceProtocol` — responsibilities extracted from
 /// `TerminalViewModel` to reduce its init parameter count.
-@MainActor
-final class OutputProcessor {
+///
+/// Not `@MainActor`: all stored dependencies are actors or `@MainActor`-isolated
+/// types, so Swift enforces correct isolation automatically via `await`.
+final class OutputProcessor: Sendable {
     // MARK: - Dependencies
 
     let outputStore: OutputStore
@@ -31,24 +33,20 @@ final class OutputProcessor {
 
     /// Process raw PTY data: append to chunk detector, run fallback chunk detection,
     /// and accumulate output tokens.
+    ///
+    /// Runs off the main actor. Each `await` hops to the appropriate actor
+    /// (`ChunkDetector`, `FallbackChunkDetector`, `OutputStore`, `TokenCountingService`).
     func processDataOutput(
         _ text: String,
         stripped: String,
         sessionID: SessionID
     ) async {
-        let detector = chunkDetector
-        let fallback = fallbackDetector
-        let store = outputStore
-        let service = tokenCountingService
-
-        await detector.appendRawOutput(text)
-        let chunks = await fallback.processOutput(stripped, raw: text)
-        await MainActor.run {
-            for chunk in chunks {
-                store.append(chunk)
-            }
+        await chunkDetector.appendRawOutput(text)
+        let chunks = await fallbackDetector.processOutput(stripped, raw: text)
+        for chunk in chunks {
+            await outputStore.append(chunk)
         }
-        await service.accumulateOutput(for: sessionID, text: stripped)
+        await tokenCountingService.accumulateOutput(for: sessionID, text: stripped)
     }
 
     // MARK: - Shell event handling
@@ -56,9 +54,8 @@ final class OutputProcessor {
     /// Process a shell integration event through the chunk detector.
     /// Returns the completed chunk (if any) and appends it to the output store.
     func handleShellEvent(_ event: ShellIntegrationEvent) async -> OutputChunk? {
-        let detector = chunkDetector
-        guard let chunk = await detector.handleShellEvent(event) else { return nil }
-        outputStore.append(chunk)
+        guard let chunk = await chunkDetector.handleShellEvent(event) else { return nil }
+        await outputStore.append(chunk)
         return chunk
     }
 

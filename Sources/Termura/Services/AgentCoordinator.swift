@@ -18,7 +18,6 @@ final class AgentCoordinator: ObservableObject {
     // MARK: - Dependencies
 
     let agentDetector: AgentStateDetector
-    private let interventionService: InterventionService
     let contextWindowMonitor: ContextWindowMonitor
     weak var agentStateStore: AgentStateStore?
     private let metricsCollector: (any MetricsCollectorProtocol)?
@@ -37,7 +36,6 @@ final class AgentCoordinator: ObservableObject {
         metricsCollector: (any MetricsCollectorProtocol)? = nil
     ) {
         agentDetector = AgentStateDetector(sessionID: sessionID)
-        interventionService = InterventionService()
         contextWindowMonitor = ContextWindowMonitor()
         self.agentStateStore = agentStateStore
         self.metricsCollector = metricsCollector
@@ -49,12 +47,11 @@ final class AgentCoordinator: ObservableObject {
     func detectAgentFromCommand(
         _ command: String,
         sessionStore: any SessionStoreProtocol,
-        sessionID: SessionID,
-        taskExecutor: BoundedTaskExecutor
+        sessionID: SessionID
     ) {
         let detector = agentDetector
         let stateStore = agentStateStore
-        taskExecutor.spawn {
+        Task { @MainActor in
             guard let agentType = await detector.detectFromCommand(command) else { return }
             let agentState = await detector.buildState()
             sessionStore.renameSession(id: sessionID, title: agentType.displayName)
@@ -68,49 +65,65 @@ final class AgentCoordinator: ObservableObject {
     // MARK: - Agent detection from output
 
     /// Signature patterns in terminal output that identify a running agent.
-    private static var outputSignatures: [(pattern: String, type: AgentType)] {
-        [
-            ("claude code", .claudeCode),
-            ("anthropic", .claudeCode),
-            ("openai codex", .codex),
-            (">_ openai codex", .codex),
-            ("aider v", .aider),
-            ("opencode", .openCode),
-            ("gemini cli", .gemini),
-            ("gemini code", .gemini)
-        ]
-    }
+    private static let outputSignatures: [(pattern: String, type: AgentType)] = [
+        ("claude code", .claudeCode),
+        ("anthropic", .claudeCode),
+        ("openai codex", .codex),
+        (">_ openai codex", .codex),
+        ("aider v", .aider),
+        ("opencode", .openCode),
+        ("gemini cli", .gemini),
+        ("gemini code", .gemini)
+    ]
 
     /// Unicode symbols commonly used as status indicators in terminal titles.
     private static let symbolPrefixSet: CharacterSet = {
         CharacterSet(charactersIn:
             "\u{2733}\u{273B}\u{2731}" + // asterisks
             "\u{2726}\u{2605}\u{2606}" + // stars
-            "\u{00B7}\u{2022}\u{2027}\u{2219}\u{22C5}\u{2024}\u{2981}" + // dots/bullets
+            "\u{00B7}\u{2022}\u{2027}\u{2219}\u{22C5}\u{2024}\u{2981}" + // dots/bullets (standard)
+            "\u{0387}\u{FF65}\u{30FB}\u{16EB}\u{1427}" + // dot look-alikes (Greek, halfwidth, katakana, runic, Canadian)
             "\u{25CF}\u{25CB}\u{25C9}\u{2B24}\u{2B58}\u{26AB}\u{26AA}" + // circles
             "\u{25AA}\u{25AB}\u{25C6}\u{25C7}" + // geometric
             "\u{203A}\u{276F}\u{2192}\u{26A1}" + // arrows/prompt
             "\u{2714}\u{2718}\u{23F3}" + // status
-            "\u{2012}\u{2013}\u{2014}\u{2015}" // dashes
+            "\u{2012}\u{2013}\u{2014}\u{2015}" + // dashes
+            "\u{FEFF}\u{200B}\u{200C}\u{200D}\u{2060}\u{00AD}" // invisible/format chars
         )
     }()
 
+    /// Returns true for non-ASCII Unicode scalars that belong to symbol or format categories
+    /// and are therefore safe to strip as leading title prefixes. ASCII punctuation is excluded
+    /// to avoid stripping legitimate characters like "." or "!" that may start a title.
+    private static func isStrippableSymbolCategory(_ scalar: Unicode.Scalar) -> Bool {
+        guard scalar.value > 0x007F else { return false }
+        switch scalar.properties.generalCategory {
+        case .format, .otherSymbol, .mathSymbol, .modifierSymbol:
+            return true
+        case .otherPunctuation:
+            // Strip non-ASCII "other punctuation" (covers dot look-alikes in any script).
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Strips known agent icon prefixes from OSC terminal titles.
     static func stripAgentPrefixes(_ title: String) -> String {
-        var stripped = title.trimmingCharacters(in: .whitespaces)
+        var stripped = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let multiCharPrefixes = [">_"]
         var didStrip = true
         while didStrip {
             didStrip = false
             for prefix in multiCharPrefixes where stripped.hasPrefix(prefix) {
                 stripped = String(stripped.dropFirst(prefix.count))
-                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 didStrip = true
             }
             if let first = stripped.unicodeScalars.first,
-               symbolPrefixSet.contains(first) {
+               symbolPrefixSet.contains(first) || isStrippableSymbolCategory(first) {
                 stripped = String(stripped.unicodeScalars.dropFirst())
-                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 didStrip = true
             }
         }
@@ -149,14 +162,14 @@ final class AgentCoordinator: ObservableObject {
     // MARK: - Output analysis (background)
 
     /// Analyze output text for agent status changes, token stats, and risk patterns.
-    /// Intended to run off-MainActor via spawnDetachedTracked.
-    func analyzeOutput(
+    /// Runs off the main actor: only accesses `let` actor dependencies and explicitly
+    /// hops to `@MainActor` via `MainActor.run` for the `@Published` risk alert update.
+    nonisolated func analyzeOutput(
         _ stripped: String,
         sessionID: SessionID,
         tokenCountingService: any TokenCountingServiceProtocol
     ) async {
         let detector = agentDetector
-        let intervention = interventionService
 
         _ = await detector.analyzeOutput(stripped)
         if let stats = await detector.parseTokenStats(stripped) {
@@ -167,7 +180,7 @@ final class AgentCoordinator: ObservableObject {
                 await detector.updateCost(cost)
             }
         }
-        if let risk = await intervention.detectRisk(in: stripped) {
+        if let risk = InterventionService.detectRisk(in: stripped) {
             await MainActor.run { @Sendable [weak self] in
                 self?.pendingRiskAlert = risk
             }

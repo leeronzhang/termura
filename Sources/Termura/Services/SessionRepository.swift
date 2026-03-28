@@ -187,17 +187,22 @@ actor SessionRepository: SessionRepositoryProtocol {
 
     func reorder(ids: [SessionID]) async throws {
         guard !ids.isEmpty else { return }
-        let pairs = ids.enumerated().map { ($0, $1.rawValue.uuidString) }
-        // Batch UPDATE via CASE WHEN instead of N individual statements.
-        let cases = pairs.map { _ in "WHEN id = ? THEN ?" }.joined(separator: " ")
-        let holders = pairs.map { _ in "?" }.joined(separator: ", ")
-        var vals: [DatabaseValue] = []
-        for (idx, idStr) in pairs { vals.append(idStr.databaseValue); vals.append(idx.databaseValue) }
-        for (_, idStr) in pairs { vals.append(idStr.databaseValue) }
-        let args = StatementArguments(vals)
-        let sql = "UPDATE sessions SET order_index = CASE \(cases) END WHERE id IN (\(holders))"
+        // Enumerate upfront so each ID carries its final order_index across all batches.
+        let pairs = ids.enumerated().map { (index: $0, idStr: $1.rawValue.uuidString) }
+        let batchSize = AppConfig.Persistence.reorderBatchSize
+        // Single write transaction: all batches commit together or roll back together.
         try await db.write { database in
-            try database.execute(sql: sql, arguments: args)
+            for batchStart in stride(from: 0, to: pairs.count, by: batchSize) {
+                let batch = Array(pairs[batchStart ..< min(batchStart + batchSize, pairs.count)])
+                // 3 bindings per row: 2 in CASE WHEN + 1 in IN clause (total <= 999).
+                let cases = batch.map { _ in "WHEN id = ? THEN ?" }.joined(separator: " ")
+                let holders = batch.map { _ in "?" }.joined(separator: ", ")
+                var vals: [DatabaseValue] = []
+                for pair in batch { vals.append(pair.idStr.databaseValue); vals.append(pair.index.databaseValue) }
+                for pair in batch { vals.append(pair.idStr.databaseValue) }
+                let sql = "UPDATE sessions SET order_index = CASE \(cases) END WHERE id IN (\(holders))"
+                try database.execute(sql: sql, arguments: StatementArguments(vals))
+            }
         }
     }
 

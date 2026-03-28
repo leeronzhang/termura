@@ -54,7 +54,7 @@ final class SessionServices {
         injectionTask = Task { @MainActor [weak self] in
             guard let text = await service.buildInjectionText(projectRoot: workingDirectory) else { return }
             do {
-                try await clock.sleep(for: .nanoseconds(AppConfig.SessionHandoff.injectionDelayNanoseconds))
+                try await clock.sleep(for: AppConfig.SessionHandoff.injectionDelay)
             } catch is CancellationError {
                 return
             } catch {
@@ -74,15 +74,13 @@ final class SessionServices {
     func generateHandoffIfNeeded(
         session: SessionRecord?,
         chunks: [OutputChunk],
-        agentState: AgentState?,
-        handoffService: (any SessionHandoffServiceProtocol)?,
-        taskExecutor: BoundedTaskExecutor
+        agentState: AgentState?
     ) {
         guard let agentState, agentState.agentType != .unknown else { return }
         guard let session, session.workingDirectory != nil else { return }
-        guard let handoffService else { return }
+        guard let handoffService = sessionHandoffService else { return }
 
-        taskExecutor.spawnDetached {
+        Task.detached {
             do {
                 try await handoffService.generateHandoff(
                     session: session,

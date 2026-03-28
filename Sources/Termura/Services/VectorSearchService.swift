@@ -1,10 +1,16 @@
 import Foundation
 import OSLog
 
+#if DEBUG
+
 private let logger = Logger(subsystem: "com.termura.app", category: "VectorSearchService")
 
 /// In-memory vector search service for semantic queries across sessions and rules.
 /// Placeholder for sqlite-vec integration; uses brute-force cosine similarity.
+///
+/// DEBUG-ONLY: The underlying `EmbeddingService` uses FNV hash vectors that carry
+/// no semantic information. Do NOT enable in production until replaced with a real
+/// Core ML model. See `EmbeddingService` for upgrade path.
 actor VectorSearchService: VectorSearchServiceProtocol {
     private var index: [IndexEntry] = []
     private let embeddingService: EmbeddingService
@@ -99,16 +105,4 @@ private struct IndexEntry: Sendable {
     var sectionHeading: String?
 }
 
-/// A search result with relevance score.
-struct SearchHit: Identifiable, Sendable {
-    let id = UUID()
-    let score: Float
-    let text: String
-    let sessionID: SessionID?
-    let chunkID: UUID?
-    let filePath: String?
-    let sectionHeading: String?
-
-    var isSessionResult: Bool { sessionID != nil }
-    var isRuleResult: Bool { filePath != nil }
-}
+#endif

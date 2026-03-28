@@ -24,18 +24,21 @@ struct HandoffContext: Sendable {
 actor SessionHandoffService: SessionHandoffServiceProtocol {
     private let messageRepo: any SessionMessageRepositoryProtocol
     private let harnessEventRepo: any HarnessEventRepositoryProtocol
-    private let summarizer: BranchSummarizer
     private let fileManager: FileManager
+
+    /// Keywords used to identify error lines when summarising output chunks.
+    /// Checked case-insensitively against lowercased line content.
+    private static let errorLineKeywords: [String] = [
+        "error", "fatal", "traceback", "panic", "failed"
+    ]
 
     init(
         messageRepo: any SessionMessageRepositoryProtocol,
         harnessEventRepo: any HarnessEventRepositoryProtocol,
-        summarizer: BranchSummarizer,
         fileManager: FileManager = .default
     ) {
         self.messageRepo = messageRepo
         self.harnessEventRepo = harnessEventRepo
-        self.summarizer = summarizer
         self.fileManager = fileManager
     }
 
@@ -70,7 +73,7 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         chunks: [OutputChunk],
         agentState: AgentState
     ) async -> HandoffContext {
-        let summary = await summarizer.summarize(
+        let summary = BranchSummarizer.summarize(
             chunks: chunks,
             branchType: session.branchType
         )
@@ -227,9 +230,7 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         for chunk in chunks where chunk.contentType == .error || (chunk.exitCode ?? 0) != 0 {
             for line in chunk.outputLines.prefix(5) {
                 let lower = line.lowercased()
-                let isError = lower.contains("error") || lower.contains("fatal")
-                    || lower.contains("traceback") || lower.contains("panic")
-                    || lower.contains("failed")
+                let isError = Self.errorLineKeywords.contains(where: lower.contains)
                 if isError {
                     let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { continue }

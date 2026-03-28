@@ -36,9 +36,7 @@ actor SearchService: SearchServiceProtocol {
         async let notes = noteRepository.search(query: query)
         let (foundSessions, foundNotes) = try await (sessions, notes)
         let elapsed = ContinuousClock.now - start
-        let seconds = Double(elapsed.components.seconds)
-            + Double(elapsed.components.attoseconds) / 1e18
-        await metrics?.recordDuration(.searchDuration, seconds: seconds)
+        await metrics?.recordDuration(.searchDuration, seconds: elapsed.totalSeconds)
         return SearchResults(sessions: foundSessions, notes: foundNotes, query: query)
     }
 }

@@ -4,14 +4,15 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "InterventionService")
 
 /// Detects high-risk operations in agent output and triggers confirmation.
-actor InterventionService {
+/// Stateless — all logic operates on static data; no actor isolation needed.
+enum InterventionService {
     // MARK: - Detection
 
     /// Check if output text contains high-risk patterns.
     /// Returns the matched risk description, or nil if safe.
-    func detectRisk(in text: String) -> RiskAlert? {
+    static func detectRisk(in text: String) -> RiskAlert? {
         let lowered = text.lowercased()
-        for pattern in Self.riskPatterns where lowered.contains(pattern.trigger) {
+        for pattern in riskPatterns where lowered.contains(pattern.trigger) {
             logger.warning("Risk detected: \(pattern.description)")
             return pattern
         }

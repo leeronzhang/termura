@@ -38,7 +38,7 @@ actor DBHealthMonitor {
         db: any DatabaseServiceProtocol,
         metrics: any MetricsCollectorProtocol,
         clock: any AppClock = LiveClock(),
-        probeInterval: Duration = .seconds(AppConfig.Health.probeIntervalSeconds),
+        probeInterval: Duration = AppConfig.Health.probeInterval,
         degradedThreshold: Int = AppConfig.Health.degradedThreshold,
         unhealthyThreshold: Int = AppConfig.Health.unhealthyThreshold
     ) {

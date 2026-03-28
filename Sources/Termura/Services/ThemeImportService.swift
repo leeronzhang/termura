@@ -106,8 +106,12 @@ actor ThemeImportService: ThemeImportServiceProtocol {
 
 // MARK: - Mock (struct for zero-state, protocol-compliant test double)
 
+#if DEBUG
+
 struct MockThemeImportService: ThemeImportServiceProtocol {
     func importJSON(from url: URL) async throws -> ThemeDefinition { .termuraDark }
     func importItermColors(from url: URL) async throws -> ThemeDefinition { .termuraDark }
     nonisolated func toThemeColors(_ definition: ThemeDefinition) -> ThemeColors { .dark }
 }
+
+#endif
