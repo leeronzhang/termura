@@ -17,7 +17,12 @@ struct ComposerOverlayView: View {
         }
         .overlay(alignment: .bottomTrailing) {
             sendButton
-                .padding(.trailing, AppUI.Spacing.xxxxl)
+                .padding(.trailing, AppUI.Spacing.xxl + AppUI.Spacing.xxl)
+                .padding(.bottom, AppUI.Spacing.xxl)
+        }
+        .overlay(alignment: .bottomLeading) {
+            AttachmentBarView(editorViewModel: editorViewModel)
+                .padding(.leading, AppUI.Spacing.xxl + AppUI.Spacing.xxl)
                 .padding(.bottom, AppUI.Spacing.xxl)
         }
         .background(Color(nsColor: .controlBackgroundColor))
@@ -30,6 +35,9 @@ struct ComposerOverlayView: View {
         .onAppear {
             editorViewModel.onSubmit = onDismiss
             focusEditor()
+        }
+        .onDisappear {
+            editorViewModel.onSubmit = nil
         }
     }
 
@@ -81,19 +89,21 @@ struct ComposerOverlayView: View {
     // MARK: - Floating Send
 
     private var sendButton: some View {
-        Button {
-            editorViewModel.submit()
-        } label: {
-            Image(systemName: "paperplane.fill")
-                .font(.system(size: 14))
-                .foregroundColor(.white)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(Color.accentColor))
-                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
-        }
-        .buttonStyle(.plain)
-        .disabled(editorViewModel.currentText
-            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        let hasContent = !editorViewModel.currentText
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !editorViewModel.attachments.isEmpty
+        return Image(systemName: "paperplane.fill")
+            .font(.system(size: 14))
+            .foregroundColor(hasContent ? .white : Color.white.opacity(0.4))
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(hasContent ? Color.accentColor : Color.secondary.opacity(0.4)))
+            .shadow(color: .black.opacity(hasContent ? 0.3 : 0), radius: 4, y: 2)
+            .overlay(AppKitClickableOverlay(action: {
+                let hasText = !editorViewModel.currentText
+                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                guard hasText || !editorViewModel.attachments.isEmpty else { return }
+                editorViewModel.submit()
+            }))
     }
 
     // MARK: - Focus
@@ -103,8 +113,7 @@ struct ComposerOverlayView: View {
             do {
                 try await Task.sleep(for: AppConfig.UI.editorFocusDelay)
             } catch is CancellationError {
-                return
-            } catch {
+                // CancellationError is expected — parent task was cancelled (e.g. view dismissed).
                 return
             }
             guard let textView = editorHandle.textView,
@@ -125,7 +134,11 @@ struct ComposerOverlayView: View {
 /// hitTest finds them by Z-order before NSHostingView can route events to SwiftUI
 /// gestures. By placing this NSView AFTER those views in the subview order (later
 /// declared = higher Z), AppKit routes the click here first.
-private struct AppKitClickableOverlay: NSViewRepresentable {
+///
+/// Used by: ComposerOverlayView (header buttons, send button) and
+/// TerminalAreaView (composer backdrop) — any SwiftUI tap target that overlaps
+/// a SwiftTerm or NSTextView NSView must use this instead of .onTapGesture.
+struct AppKitClickableOverlay: NSViewRepresentable {
     let action: () -> Void
 
     func makeNSView(context: Context) -> AppKitClickableNSView {
@@ -140,7 +153,7 @@ private struct AppKitClickableOverlay: NSViewRepresentable {
 }
 
 @MainActor
-private final class AppKitClickableNSView: NSView {
+final class AppKitClickableNSView: NSView {
     var clickHandler: (() -> Void)?
 
     /// Accept first mouse so the button works even when the window is not yet key.

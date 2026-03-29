@@ -95,6 +95,9 @@ struct EditorInputView: NSViewRepresentable {
         textView.controlSequenceHandler = { [weak coordinator] seq in
             coordinator?.handleControlSequence(seq)
         }
+        textView.attachmentDropHandler = { [weak coordinator] url, kind, isTemporary in
+            coordinator?.handleAttachmentDrop(url: url, kind: kind, isTemporary: isTemporary)
+        }
 
         textView.drawsBackground = true
         textView.backgroundColor = .editorInputBackground
@@ -157,6 +160,11 @@ extension EditorInputView {
         /// Forward raw PTY control sequences (Ctrl+C, Escape, etc.) without appending \n.
         func handleControlSequence(_ seq: String) {
             viewModel.sendRaw(seq)
+        }
+
+        /// Route a dropped file or image to the attachment bar via EditorViewModel.
+        func handleAttachmentDrop(url: URL, kind: ComposerAttachment.Kind, isTemporary: Bool) {
+            viewModel.addAttachment(url, kind: kind, isTemporary: isTemporary)
         }
     }
 }

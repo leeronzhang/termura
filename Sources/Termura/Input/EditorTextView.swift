@@ -1,4 +1,7 @@
 import AppKit
+import OSLog
+
+private let logger = Logger(subsystem: "com.termura.app", category: "EditorTextView")
 
 /// NSTextView subclass providing editor-grade input for the terminal.
 /// Handles submit, newline insertion, and history navigation keys.
@@ -22,6 +25,11 @@ final class EditorTextView: NSTextView {
 
     // MARK: - Drag and drop
 
+    /// Called when a file or image is dropped onto the editor.
+    /// When set, drops are routed to the attachment bar instead of inline text insertion.
+    /// Parameters: url, kind, isTemporary.
+    var attachmentDropHandler: ((URL, ComposerAttachment.Kind, Bool) -> Void)?
+
     func setupDragTypes() {
         registerForDraggedTypes([.fileURL, .URL, .tiff, .png])
     }
@@ -42,12 +50,28 @@ final class EditorTextView: NSTextView {
             forClasses: [NSURL.self],
             options: [.urlReadingFileURLsOnly: true]
         ) as? [URL], !urls.isEmpty {
+            if let handler = attachmentDropHandler {
+                urls.forEach { handler($0, .textFile, false) }
+                return true
+            }
+            // Fallback: inline text insertion (no attachment bar wired).
             let paths = urls.map(\.path.shellEscaped).joined(separator: " ")
             let insertion = string.isEmpty ? paths : " " + paths
             insertText(insertion, replacementRange: selectedRange())
             return true
         }
         if let image = pb.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage {
+            if let handler = attachmentDropHandler {
+                do {
+                    let url = try saveTemporaryAttachmentImage(image)
+                    handler(url, .image, true)
+                    return true
+                } catch {
+                    logger.error("Attachment image save failed: \(error.localizedDescription)")
+                    return false
+                }
+            }
+            // Fallback: inline text insertion (no attachment bar wired).
             do {
                 let url = try saveTemporaryImage(image)
                 let path = url.path.shellEscaped

@@ -4,12 +4,13 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "EditorViewModel")
 
 /// ViewModel for the editor input area.
-/// Manages text state, history navigation, and command submission.
+/// Manages text state, history navigation, command submission, and file attachments.
 @MainActor
 final class EditorViewModel: ObservableObject {
     // MARK: - Published state
 
     @Published private(set) var currentText: String = ""
+    @Published private(set) var attachments: [ComposerAttachment] = []
 
     // MARK: - Dependencies
 
@@ -29,21 +30,76 @@ final class EditorViewModel: ObservableObject {
         history = InputHistory()
     }
 
-    // MARK: - Actions
+    // MARK: - Attachment actions
 
-    /// Submit the current text as a command to the terminal.
+    /// Appends a file attachment to the composer bar if the limit has not been reached.
+    func addAttachment(_ url: URL, kind: ComposerAttachment.Kind, isTemporary: Bool) {
+        guard attachments.count < AppConfig.Attachments.maxCount else { return }
+        attachments.append(ComposerAttachment(id: UUID(), url: url, kind: kind, isTemporary: isTemporary))
+    }
+
+    /// Removes an attachment by ID, deleting its backing file if it was a temporary image.
+    func removeAttachment(id: UUID) {
+        guard let att = attachments.first(where: { $0.id == id }) else { return }
+        attachments.removeAll { $0.id == id }
+        if att.isTemporary {
+            let url = att.url
+            Task.detached {
+                do {
+                    try FileManager.default.removeItem(at: url)
+                } catch {
+                    // Non-critical: temporary attachment file deletion is best-effort;
+                    // the OS will eventually clean the tmp directory.
+                    logger.debug("Temp attachment removal skipped: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    /// Clears all attachments and deletes any temporary image files.
+    /// Called on submit and when the owning session is closed.
+    func clearAttachments() {
+        let tempURLs = attachments.filter(\.isTemporary).map(\.url)
+        attachments.removeAll()
+        guard !tempURLs.isEmpty else { return }
+        Task.detached {
+            for url in tempURLs {
+                do {
+                    try FileManager.default.removeItem(at: url)
+                } catch {
+                    // Non-critical: temporary attachment file deletion is best-effort;
+                    // the OS will eventually clean the tmp directory.
+                    logger.debug("Temp attachment removal skipped: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    // MARK: - Command actions
+
+    /// Submit the current text as a command to the terminal, prefixed with any attachment paths.
     /// Switches to passthrough so EditorInputView hides while the command runs.
     /// The view reappears when OSC 133 signals the next shell prompt.
     func submit() {
         let text = currentText
+        let pathPrefix = attachments.map(\.url.path).joined(separator: " ")
+        let fullCommand: String
+        if pathPrefix.isEmpty {
+            fullCommand = text
+        } else if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            fullCommand = pathPrefix
+        } else {
+            fullCommand = pathPrefix + " " + text
+        }
         history.push(text)
         currentText = ""
+        clearAttachments()
         modeController.switchToPassthrough()
-        logger.debug("Submitting command length=\(text.count)")
-        onCommandSubmit?(text)
+        logger.debug("Submitting command length=\(fullCommand.count)")
+        onCommandSubmit?(text)  // user text only — used for agent detection
         onSubmit?()
         // Lifecycle: single actor call — engine serializes internally; no cancellation needed.
-        Task { await engine.send(text + "\r") }
+        Task { await engine.send(fullCommand + "\r") }
     }
 
     /// Insert a literal newline at the cursor position.
@@ -67,6 +123,14 @@ final class EditorViewModel: ObservableObject {
     func appendText(_ text: String) {
         guard !text.isEmpty else { return }
         currentText += text
+    }
+
+    /// Replaces the current editor content with the given text.
+    /// Used for programmatic pre-fill (e.g. agent resume auto-fill).
+    func setText(_ text: String) {
+        guard text != currentText else { return }
+        currentText = text
+        history.resetCursor()
     }
 
     /// Called by the NSViewRepresentable coordinator to sync text without cycles.
