@@ -17,11 +17,18 @@ enum ShellType: String, CaseIterable, Sendable {
     }
 }
 
+// MARK: - ShellHookInstallerProtocol
+
+protocol ShellHookInstallerProtocol: Actor {
+    func install(into shell: ShellType) async throws
+    func isInstalled(for shell: ShellType) async -> Bool
+}
+
 // MARK: - ShellHookInstaller
 
 /// Installs OSC 133 shell integration hooks into the user's shell RC file.
 /// Runs all file I/O off-MainActor as a Swift actor.
-actor ShellHookInstaller {
+actor ShellHookInstaller: ShellHookInstallerProtocol {
     private let fileManager: any FileManagerProtocol
 
     init(fileManager: any FileManagerProtocol = FileManager.default) {
@@ -173,3 +180,22 @@ private extension Optional {
         return value
     }
 }
+
+// MARK: - Mock
+
+#if DEBUG
+actor MockShellHookInstaller: ShellHookInstallerProtocol {
+    var installCallCount = 0
+    var isInstalledResult = false
+    var shouldThrow = false
+
+    func install(into shell: ShellType) async throws {
+        installCallCount += 1
+        if shouldThrow { throw ShellHookError.fileOpenFailed("mock") }
+    }
+
+    func isInstalled(for shell: ShellType) async -> Bool {
+        isInstalledResult
+    }
+}
+#endif

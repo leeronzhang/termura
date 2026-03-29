@@ -7,8 +7,9 @@ private let logger = Logger(subsystem: "com.termura.app", category: "SessionServ
 /// sessions and handoff generation on process exit.
 ///
 /// Extracted from `TerminalViewModel` to reduce its init parameter count.
-@MainActor
-final class SessionServices {
+///
+/// Actor isolation: no SwiftUI-observed state — uses Swift native actor per CLAUDE.md §6.1 Principle 1.
+actor SessionServices {
     // MARK: - Dependencies
 
     let contextInjectionService: (any ContextInjectionServiceProtocol)?
@@ -18,7 +19,9 @@ final class SessionServices {
     // MARK: - Internal state
 
     private var hasInjectedContext = false
-    private var injectionTask: Task<Void, Never>?
+    // nonisolated(unsafe): accessed only in deinit (last-reference) and from actor-isolated methods.
+    // The deinit guarantee (last-reference, no concurrent mutation possible) makes this safe.
+    nonisolated(unsafe) private var injectionTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -51,6 +54,8 @@ final class SessionServices {
         guard !workingDirectory.isEmpty else { return }
         guard let service = contextInjectionService else { return }
         injectionTask?.cancel()
+        // Task { @MainActor }: engine.send requires @MainActor (TerminalEngine protocol is @MainActor).
+        // The task body does not access any actor-isolated properties of self after the guard check above.
         injectionTask = Task { @MainActor [weak self] in
             guard let text = await service.buildInjectionText(projectRoot: workingDirectory) else { return }
             do {

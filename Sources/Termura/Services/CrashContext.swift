@@ -20,7 +20,8 @@ struct CrashSnapshot: Codable, Sendable {
     let gauges: [String: Double]
 }
 
-/// Captures and persists structured crash context to UserDefaults (crash-safe storage).
+/// Captures and persists structured crash context to UserDefaults (crash-safe primary storage)
+/// and to `~/.termura/diagnostics/crash_context.json` (file-backed fallback).
 /// Maintains a ring buffer of significant events and periodic state snapshots.
 actor CrashContext {
     private let metrics: any MetricsCollectorProtocol
@@ -54,7 +55,7 @@ actor CrashContext {
 
     // MARK: - Snapshot
 
-    /// Capture a full state snapshot and persist to UserDefaults.
+    /// Capture a full state snapshot and persist to UserDefaults + file backup.
     func captureSnapshot(
         activeSessionCount: Int,
         dbHealth: DBHealthStatus
@@ -76,7 +77,15 @@ actor CrashContext {
         )
         do {
             let data = try JSONEncoder().encode(snapshot)
+            // Primary: UserDefaults (crash-safe, survives hard kills)
             UserDefaults.standard.set(data, forKey: Self.snapshotKey)
+            // Secondary: file backup (survives UserDefaults corruption)
+            do {
+                try Self.writeSnapshotToFile(data)
+            } catch {
+                // Non-critical: file backup is best-effort; UserDefaults is the primary store.
+                logger.error("Failed to write crash snapshot to file: \(error)")
+            }
         } catch {
             logger.error("Failed to persist crash snapshot: \(error)")
         }
@@ -84,15 +93,20 @@ actor CrashContext {
 
     // MARK: - Recovery
 
-    /// Retrieve crash context from a prior run. Call at launch before clearing.
+    /// Retrieve crash context from a prior run. Checks UserDefaults first, file as fallback.
+    /// Call at launch before clearing.
     static func loadPriorCrashContext() -> CrashSnapshot? {
-        guard let data = UserDefaults.standard.data(forKey: snapshotKey) else {
-            return nil
+        // Primary: UserDefaults
+        if let data = UserDefaults.standard.data(forKey: snapshotKey) {
+            return decodeCrashSnapshot(data)
         }
+        // Fallback: file backup (UserDefaults may have been cleared by the OS)
         do {
-            return try JSONDecoder().decode(CrashSnapshot.self, from: data)
+            let data = try Data(contentsOf: crashContextFileURL)
+            return decodeCrashSnapshot(data)
         } catch {
-            logger.warning("Failed to decode prior crash context: \(error)")
+            // Non-critical: file may not exist on first launch or after clearPersistedData().
+            logger.debug("No file-backed crash context: \(error.localizedDescription)")
             return nil
         }
     }
@@ -101,6 +115,12 @@ actor CrashContext {
     static func clearPersistedData() {
         UserDefaults.standard.removeObject(forKey: eventsKey)
         UserDefaults.standard.removeObject(forKey: snapshotKey)
+        do {
+            try FileManager.default.removeItem(at: crashContextFileURL)
+        } catch {
+            // Non-critical: stale crash context file; will be overwritten on next capture.
+            logger.debug("Could not remove crash context file: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Private
@@ -112,5 +132,29 @@ actor CrashContext {
         } catch {
             logger.error("Failed to persist crash events: \(error)")
         }
+    }
+
+    private static func decodeCrashSnapshot(_ data: Data) -> CrashSnapshot? {
+        do {
+            return try JSONDecoder().decode(CrashSnapshot.self, from: data)
+        } catch {
+            logger.warning("Failed to decode crash context: \(error)")
+            return nil
+        }
+    }
+
+    private static func writeSnapshotToFile(_ data: Data) throws {
+        let dir = crashContextFileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true, attributes: nil
+        )
+        try data.write(to: crashContextFileURL, options: .atomic)
+    }
+
+    private static var crashContextFileURL: URL {
+        URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+            .appendingPathComponent(AppConfig.Persistence.directoryName)
+            .appendingPathComponent(AppConfig.CrashDiagnostics.diagnosticsDirectoryName)
+            .appendingPathComponent(AppConfig.CrashDiagnostics.crashContextFileName)
     }
 }

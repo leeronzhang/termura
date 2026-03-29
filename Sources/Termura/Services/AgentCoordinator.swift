@@ -9,28 +9,44 @@ private let logger = Logger(subsystem: "com.termura.app", category: "AgentCoordi
 /// Extracted from `TerminalViewModel` to reduce its init parameter count and
 /// isolate agent-related responsibilities behind a single facade.
 ///
+/// Actor isolation: no SwiftUI-observed state — uses Swift native actor per CLAUDE.md §6.1 Principle 1.
+///
 /// Alert state is NOT owned here — callbacks propagate detections to the owning
-/// TerminalViewModel, which holds the @Published properties observed by views.
-@MainActor
-final class AgentCoordinator {
+/// TerminalViewModel, which holds the observable properties observed by views.
+actor AgentCoordinator {
     // MARK: - Alert callbacks (wired by TerminalViewModel in init)
 
     /// Called on MainActor when a risk alert is detected. TerminalViewModel applies
     /// the deduplication guard (skip if alert already pending) and sets its own state.
-    var onRiskAlertDetected: ((RiskAlert) -> Void)?
+    ///
+    /// nonisolated(unsafe): set exactly once from TerminalViewModel.init (@MainActor) before
+    /// any background tasks are spawned. Never mutated again — safe for concurrent reads.
+    nonisolated(unsafe) var onRiskAlertDetected: (@MainActor @Sendable (RiskAlert) -> Void)?
     /// Called on MainActor when a context-window alert is computed.
-    var onContextWindowAlertDetected: ((ContextWindowAlert) -> Void)?
+    ///
+    /// Same nonisolated(unsafe) guarantee as onRiskAlertDetected above.
+    nonisolated(unsafe) var onContextWindowAlertDetected: (@MainActor @Sendable (ContextWindowAlert) -> Void)?
 
     // MARK: - Dependencies
 
-    let agentDetector: AgentStateDetector
-    let contextWindowMonitor: ContextWindowMonitor
-    private let agentStateStore: (any AgentStateStoreProtocol)?
+    /// nonisolated let: AgentStateDetector is an actor (Sendable). Accessible from
+    /// nonisolated methods (analyzeOutput, computeAgentStateUpdate) and @MainActor callers
+    /// without crossing the AgentCoordinator actor boundary.
+    nonisolated let agentDetector: AgentStateDetector
+    /// nonisolated let: ContextWindowMonitor is an actor (Sendable). Same rationale.
+    nonisolated let contextWindowMonitor: ContextWindowMonitor
+    /// nonisolated let: AgentStateStoreProtocol: Sendable (protocol constraint added).
+    /// Allows TerminalViewModel+Metadata.swift to read store properties from @MainActor context
+    /// without an extra actor hop through AgentCoordinator.
+    nonisolated let agentStateStore: (any AgentStateStoreProtocol)?
     private let metricsCollector: (any MetricsCollectorProtocol)?
 
     // MARK: - Agent detection state
 
     var agentDetectionBuffer = ""
+    /// Mirrors `agentDetectionBuffer` but stored lowercased, updated incrementally.
+    /// Avoids re-lowercasing the entire accumulated buffer on every PTY packet.
+    private var agentDetectionBufferLower = ""
     var hasDetectedAgentFromOutput = false
     var lastDetectedAgentType: AgentType?
 
@@ -47,11 +63,6 @@ final class AgentCoordinator {
         self.metricsCollector = metricsCollector
     }
 
-    // MARK: - Store accessors
-
-    /// The number of active agents across all sessions, or 0 if the store is absent.
-    var activeAgentCount: Int { agentStateStore?.activeAgentCount ?? 0 }
-
     // MARK: - Agent detection from commands
 
     /// Detect agent type from a submitted command and update session/agent state.
@@ -63,10 +74,10 @@ final class AgentCoordinator {
     ) async {
         guard let agentType = await agentDetector.detectFromCommand(command) else { return }
         let agentState = await agentDetector.buildState()
-        sessionStore.renameSession(id: sessionID, title: agentType.displayName)
-        sessionStore.setAgentType(id: sessionID, type: agentType)
+        await sessionStore.renameSession(id: sessionID, title: agentType.displayName)
+        await sessionStore.setAgentType(id: sessionID, type: agentType)
         if let state = agentState {
-            agentStateStore?.update(state: state)
+            await agentStateStore?.update(state: state)
         }
     }
 
@@ -153,11 +164,11 @@ final class AgentCoordinator {
         if let collector = metricsCollector {
             Task { await collector.increment(.agentDetected) }
         }
-        sessionStore.renameSession(id: sessionID, title: detectedType.displayName)
-        sessionStore.setAgentType(id: sessionID, type: detectedType)
+        await sessionStore.renameSession(id: sessionID, title: detectedType.displayName)
+        await sessionStore.setAgentType(id: sessionID, type: detectedType)
         await agentDetector.setDetectedType(detectedType)
         if let state = await agentDetector.buildState() {
-            agentStateStore?.update(state: state)
+            await agentStateStore?.update(state: state)
         }
     }
 
@@ -168,15 +179,20 @@ final class AgentCoordinator {
     ///
     /// This is a **synchronous** function with no suspension points. All writes to
     /// `agentDetectionBuffer`, `hasDetectedAgentFromOutput`, and `lastDetectedAgentType`
-    /// happen here, atomically from the perspective of the @MainActor executor.
+    /// happen here, atomically from the perspective of the actor executor.
     private func bufferAndDetect(_ text: String) -> AgentType? {
-        agentDetectionBuffer += text
         let maxLen = AppConfig.Agent.outputAnalysisSuffixLength
+        // Append only the new chunk to both buffers. Lowercase only the incoming text
+        // (O(new_chunk)) rather than re-lowercasing the entire accumulated buffer (O(maxLen))
+        // on every PTY packet — this is a hot path called for every byte of terminal output.
+        agentDetectionBuffer += text
+        agentDetectionBufferLower += text.lowercased()
+        // Trim both buffers in sync when the suffix window is exceeded.
         if agentDetectionBuffer.count > maxLen {
             agentDetectionBuffer = String(agentDetectionBuffer.suffix(maxLen))
+            agentDetectionBufferLower = String(agentDetectionBufferLower.suffix(maxLen))
         }
-        let lower = agentDetectionBuffer.lowercased()
-        for (pattern, type) in Self.outputSignatures where lower.contains(pattern) {
+        for (pattern, type) in Self.outputSignatures where agentDetectionBufferLower.contains(pattern) {
             if hasDetectedAgentFromOutput, lastDetectedAgentType == type { return nil }
             hasDetectedAgentFromOutput = true
             lastDetectedAgentType = type
@@ -188,8 +204,10 @@ final class AgentCoordinator {
     // MARK: - Output analysis (background)
 
     /// Analyze output text for agent status changes, token stats, and risk patterns.
-    /// Runs off the main actor: only accesses `let` actor dependencies and explicitly
-    /// hops to `@MainActor` via `MainActor.run` for the `@Published` risk alert update.
+    /// Runs off the actor executor: only accesses nonisolated let dependencies and fires a
+    /// fire-and-forget Task { @MainActor } for the risk alert callback — avoids a second
+    /// blocking main-actor hop inside the spawnDetachedTracked closure
+    /// (CLAUDE.md §6.1 Principle 3: single hop at closure end).
     nonisolated func analyzeOutput(
         _ stripped: String,
         sessionID: SessionID,
@@ -207,17 +225,17 @@ final class AgentCoordinator {
             }
         }
         if let risk = InterventionService.detectRisk(in: stripped) {
-            await MainActor.run { @Sendable [weak self] in
-                self?.onRiskAlertDetected?(risk)
-            }
+            // Fire-and-forget: does not block the spawnDetachedTracked closure.
+            let callback = onRiskAlertDetected
+            Task { @MainActor in callback?(risk) }
         }
     }
 
     // MARK: - Agent state update
 
-    /// Compute agent state and context alert off the main actor.
+    /// Compute agent state and context alert off the actor executor.
     /// All async work (token breakdown, actor hops) runs on background executors.
-    /// Call `applyAgentStateUpdate(state:alert:)` on main to commit the result.
+    /// Call `applyAgentStateUpdate(state:alert:)` to commit the result.
     nonisolated func computeAgentStateUpdate(
         tokenCountingService: any TokenCountingServiceProtocol,
         sessionID: SessionID
@@ -234,11 +252,14 @@ final class AgentCoordinator {
         return (state, alert)
     }
 
-    /// Apply a previously computed agent state update. Must be called on the main actor.
-    func applyAgentStateUpdate(state: AgentState, alert: ContextWindowAlert?) {
-        agentStateStore?.update(state: state)
+    /// Apply a previously computed agent state update.
+    /// Hops to @MainActor for store.update (AgentStateStoreProtocol is @MainActor),
+    /// then fires the context alert callback as a fire-and-forget Task { @MainActor }.
+    func applyAgentStateUpdate(state: AgentState, alert: ContextWindowAlert?) async {
+        await agentStateStore?.update(state: state)
         if let alert {
-            onContextWindowAlertDetected?(alert)
+            let callback = onContextWindowAlertDetected
+            Task { @MainActor in callback?(alert) }
         }
     }
 
@@ -249,9 +270,10 @@ final class AgentCoordinator {
     /// keeping repeatForever animations running and causing continuous CPU drain when idle.
     func resetOnExecutionFinished(sessionID: SessionID) async {
         await agentDetector.reset()
-        agentStateStore?.remove(sessionID: sessionID)
+        await agentStateStore?.remove(sessionID: sessionID)
         hasDetectedAgentFromOutput = false
         lastDetectedAgentType = nil
         agentDetectionBuffer = ""
+        agentDetectionBufferLower = ""
     }
 }

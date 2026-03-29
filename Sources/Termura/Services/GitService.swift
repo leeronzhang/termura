@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import os
 
 private let logger = Logger(subsystem: "com.termura.app", category: "GitService")
 
@@ -15,8 +16,19 @@ protocol GitServiceProtocol: Sendable {
 // MARK: - Live Implementation
 
 /// Actor that shells out to the `git` CLI to query repository state.
+/// Uses `OSSignposter` intervals so Instruments can show git operation timing correlated
+/// to the calling session. Callers can wrap calls in `withTrace(...)` (from TraceContext.swift)
+/// to inject a span label that propagates through `TraceLocal.current`.
 actor GitService: GitServiceProtocol {
+    private let signposter = OSSignposter(subsystem: "com.termura.app", category: "GitService")
+
     func status(at directory: String) async throws -> GitStatusResult {
+        let traceLabel = TraceLocal.current.map { $0.spanName } ?? "untraced"
+        let signpostID = signposter.makeSignpostID()
+        let state = signposter.beginInterval("GitStatus", id: signpostID)
+        defer { signposter.endInterval("GitStatus", state) }
+        logger.debug("GitService.status dir=\(directory) trace=\(traceLabel)")
+
         guard await isGitRepo(at: directory) else {
             return .notARepo
         }
@@ -56,6 +68,12 @@ actor GitService: GitServiceProtocol {
     }
 
     func diff(file: String, staged: Bool, at directory: String) async throws -> String {
+        let traceLabel = TraceLocal.current.map { $0.spanName } ?? "untraced"
+        let signpostID = signposter.makeSignpostID()
+        let state = signposter.beginInterval("GitDiff", id: signpostID)
+        defer { signposter.endInterval("GitDiff", state) }
+        logger.debug("GitService.diff file=\(file) staged=\(staged) trace=\(traceLabel)")
+
         var args = ["diff", "--no-color"]
         if staged { args.append("--cached") }
         args.append("--")
@@ -76,6 +94,19 @@ actor GitService: GitServiceProtocol {
     }
 
     // MARK: - Helpers
+
+    /// Reads all data from `handle` without blocking a Swift cooperative thread.
+    /// `readDataToEndOfFile()` blocks until the child process closes its write end of
+    /// the pipe, which can take several seconds for long-running git commands. Running
+    /// it on a dedicated OS thread (via Thread.detachNewThread) prevents cooperative
+    /// thread pool starvation when multiple git operations run concurrently.
+    private static func readAllData(from handle: FileHandle) async -> Data {
+        await withCheckedContinuation { continuation in
+            Thread.detachNewThread {
+                continuation.resume(returning: handle.readDataToEndOfFile())
+            }
+        }
+    }
 
     private func isGitRepo(at directory: String) async -> Bool {
         do {
@@ -132,10 +163,13 @@ actor GitService: GitServiceProtocol {
         // If readDataToEndOfFile() were called inside terminationHandler, a child
         // producing >64 KB of output would fill the pipe buffer, block on write,
         // never exit, and the handler would never fire.
+        // Thread.detachNewThread (via readAllData) is used instead of a plain
+        // Task.detached closure so the blocking pipe read does not occupy a
+        // Swift cooperative thread for the lifetime of the git process.
         let stdoutHandle = pipe.fileHandleForReading
         let stderrHandle = errPipe.fileHandleForReading
-        let stdoutTask = Task.detached { stdoutHandle.readDataToEndOfFile() }
-        let stderrTask = Task.detached { stderrHandle.readDataToEndOfFile() }
+        let stdoutTask = Task.detached { await Self.readAllData(from: stdoutHandle) }
+        let stderrTask = Task.detached { await Self.readAllData(from: stderrHandle) }
 
         // Wait for process termination via continuation; pipes are already draining.
         // `withTaskCancellationHandler` ensures the OS process is terminated when the
@@ -152,9 +186,14 @@ actor GitService: GitServiceProtocol {
                         try process.run()
                     } catch {
                         process.terminationHandler = nil
-                        // Cancel leaked pipe-read tasks since the process never started.
-                        stdoutTask.cancel()
-                        stderrTask.cancel()
+                        // Close handles to unblock the pipe-read threads.
+                        // task.cancel() is a no-op for blocking I/O; EOF via close() is required.
+                        do { try stdoutHandle.close() } catch {
+                            logger.debug("Failed to close stdout handle: \(error.localizedDescription)")
+                        }
+                        do { try stderrHandle.close() } catch {
+                            logger.debug("Failed to close stderr handle: \(error.localizedDescription)")
+                        }
                         continuation.resume(throwing: GitServiceError.launchFailed(
                             command: cmdString,
                             underlying: error

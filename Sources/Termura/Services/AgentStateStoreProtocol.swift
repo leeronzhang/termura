@@ -3,7 +3,7 @@ import Foundation
 /// Protocol abstracting the agent state aggregation store.
 /// @MainActor: state is observed by SwiftUI views.
 @MainActor
-protocol AgentStateStoreProtocol: AnyObject {
+protocol AgentStateStoreProtocol: AnyObject, Sendable {
     var agents: [SessionID: AgentState] { get }
     var activeAgentCount: Int { get }
     var sessionsNeedingAttention: [SessionID] { get }

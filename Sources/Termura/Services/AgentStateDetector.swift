@@ -94,8 +94,8 @@ actor AgentStateDetector {
     @discardableResult
     func analyzeOutput(_ text: String) -> AgentStatus {
         guard detectedType != nil else { return .idle }
-
-        let sample = String(text.suffix(AppConfig.Agent.outputAnalysisSuffixLength))
+        let maxLen = AppConfig.Agent.outputAnalysisSuffixLength
+        let sample = text.count > maxLen ? String(text.suffix(maxLen)) : text
         let lowercasedSample = sample.lowercased()
 
         guard let matched = evaluateRules(sample, lowercased: lowercasedSample),

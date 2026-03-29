@@ -3,8 +3,21 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "FileTreeService")
 
+// MARK: - FileTreeServiceProtocol
+
+protocol FileTreeServiceProtocol: Actor {
+    func scan(at projectRoot: String) -> [FileTreeNode]
+    func annotate(
+        tree: [FileTreeNode],
+        with gitResult: GitStatusResult,
+        trackedFiles: Set<String>
+    ) -> [FileTreeNode]
+}
+
+// MARK: - FileTreeService
+
 /// Scans the project directory and builds a file tree, optionally annotated with git status.
-actor FileTreeService {
+actor FileTreeService: FileTreeServiceProtocol {
     private let fileManager: any FileManagerProtocol
 
     init(fileManager: any FileManagerProtocol = FileManager.default) {
