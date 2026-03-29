@@ -42,7 +42,7 @@ struct AppCommands: Commands {
             .keyboardShortcut("f", modifiers: [.command, .shift])
 
             Button("New Note") {
-                appDelegate?.activeContext?.commandRouter.requestNotes()
+                appDelegate?.activeContext?.commandRouter.pendingCommand = .createNote
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
 

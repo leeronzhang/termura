@@ -15,18 +15,37 @@ final class CommandRouter {
     var showNotes = false
     var showHarness = false
     var showBranchMerge = false
-    var showShellOnboarding = false
-
     /// Non-nil triggers export sheet for the specified session.
     var exportSessionID: SessionID?
 
     // MARK: - Sidebar
 
     var showSidebar = true
+    /// The currently selected sidebar tab. Owned here so tab switches triggered by
+    /// toggleComposerNotes() update atomically with isComposerNotesActive in one
+    /// SwiftUI render pass, preventing the one-frame notesEmptyState flash.
+    var selectedSidebarTab: SidebarTab = .sessions
+    /// The sidebar tab to restore when composer notes mode is deactivated.
+    private var tabBeforeComposer: SidebarTab?
 
-    // MARK: - Split pane actions (consumed by MainView)
+    // MARK: - Commands (consumed by MainView via a single reduce step)
 
-    var pendingSplitAction: SplitAction?
+    /// Pending command for MainView to process. Cleared by MainView after handling.
+    /// All command-driven side-effects funnel through here to avoid concurrent .onChange races.
+    var pendingCommand: PendingCommand?
+
+    enum PendingCommand: Equatable {
+        case split(SplitAction)
+        case toggleDualPane
+        case closeTab
+        case createNote
+        /// Pre-fills the Composer with the agent's default launch command and opens it.
+        /// Fired once per restored session when the first shell prompt is detected.
+        case resumeAgent(AgentType)
+        /// Pre-fills the Composer with a quoted selection from the terminal output.
+        /// Opens the Composer if not already visible, or appends if it is.
+        case composerPrefill(text: String)
+    }
 
     enum SplitAction: Equatable {
         case vertical, horizontal, closePane
@@ -36,7 +55,6 @@ final class CommandRouter {
 
     /// Whether dual-pane (side-by-side) mode is active. Toolbar reads this for visual state.
     var isDualPaneActive = false
-    var dualPaneToggleTick: UInt = 0
     /// Tracks which pane was last clicked in dual-pane mode (set by NSEvent monitors).
     var focusedDualPaneID: SessionID?
     /// Whether the session-info metadata panel is visible in dual-pane mode.
@@ -63,22 +81,26 @@ final class CommandRouter {
 
     // MARK: - Chunk completed callbacks
 
-    /// Registered observers for chunk completion events.
+    /// Registered observers for chunk completion events, keyed by UUID token.
     /// OutputStore calls `notifyChunkCompleted(_:)`, which fans out to all handlers.
-    private var chunkHandlers: [(OutputChunk) -> Void] = []
+    private var chunkHandlers: [UUID: (OutputChunk) -> Void] = [:]
 
     /// Register a handler to be called when any OutputStore appends a chunk.
-    /// Returns a token that can be used to unregister.
-    @discardableResult
-    func onChunkCompleted(_ handler: @escaping (OutputChunk) -> Void) -> Int {
-        let token = chunkHandlers.count
-        chunkHandlers.append(handler)
+    /// Returns a token that MUST be stored and passed to `removeChunkHandler(token:)` on teardown.
+    func onChunkCompleted(_ handler: @escaping (OutputChunk) -> Void) -> UUID {
+        let token = UUID()
+        chunkHandlers[token] = handler
         return token
+    }
+
+    /// Unregister a previously registered handler. Safe to call with an unknown token.
+    func removeChunkHandler(token: UUID) {
+        chunkHandlers.removeValue(forKey: token)
     }
 
     /// Called by OutputStore when a chunk is appended.
     func notifyChunkCompleted(_ chunk: OutputChunk) {
-        for handler in chunkHandlers {
+        for handler in chunkHandlers.values {
             handler(chunk)
         }
     }
@@ -94,13 +116,14 @@ final class CommandRouter {
         exportSessionID = sessionID
     }
 
-    /// Incremented when user presses Cmd+W — MainView observes and closes the active tab.
-    var closeTabTick: UInt = 0
+    func prefillComposer(text: String) {
+        pendingCommand = .composerPrefill(text: text)
+    }
 
-    func requestCloseTab() { closeTabTick &+= 1 }
-    func requestSplitHorizontal() { pendingSplitAction = .horizontal }
-    func requestSplitVertical() { pendingSplitAction = .vertical }
-    func requestCloseSplitPane() { pendingSplitAction = .closePane }
+    func requestCloseTab() { pendingCommand = .closeTab }
+    func requestSplitHorizontal() { pendingCommand = .split(.horizontal) }
+    func requestSplitVertical() { pendingCommand = .split(.vertical) }
+    func requestCloseSplitPane() { pendingCommand = .split(.closePane) }
 
     func toggleSidebar() {
         showSidebar.toggle()
@@ -115,7 +138,7 @@ final class CommandRouter {
     }
 
     func toggleDualPane() {
-        dualPaneToggleTick &+= 1
+        pendingCommand = .toggleDualPane
     }
 
     func toggleComposer() {
@@ -129,6 +152,10 @@ final class CommandRouter {
 
     func dismissComposer() {
         composerInsertHandler = nil
+        if let previous = tabBeforeComposer {
+            selectedSidebarTab = previous
+            tabBeforeComposer = nil
+        }
         isComposerNotesActive = false
         withAnimation(.easeOut(duration: AppConfig.UI.composerDismissDuration)) {
             showComposer = false
@@ -136,8 +163,20 @@ final class CommandRouter {
     }
 
     /// Toggles the sidebar Notes tab from the Composer notes button.
-    /// SidebarView reacts via `.onChange(of: commandRouter.isComposerNotesActive)`.
+    /// Both isComposerNotesActive and selectedSidebarTab change in the same call so
+    /// SwiftUI batches them into one render pass — no intermediate notesEmptyState flash.
     func toggleComposerNotes() {
         isComposerNotesActive.toggle()
+        if isComposerNotesActive {
+            tabBeforeComposer = selectedSidebarTab
+            withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                selectedSidebarTab = .notes
+            }
+        } else if let previous = tabBeforeComposer {
+            withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                selectedSidebarTab = previous
+            }
+            tabBeforeComposer = nil
+        }
     }
 }

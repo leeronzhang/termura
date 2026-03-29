@@ -50,13 +50,10 @@ extension EnvironmentValues {
 
 @MainActor
 private struct NotesViewModelKey: @preconcurrency EnvironmentKey {
-    #if DEBUG
+    // Safe fallback — production code must inject via `.environment(\.notesViewModel, ...)`.
+    // SwiftUI accesses defaultValue during attribute-graph propagation before body modifiers
+    // take effect, so preconditionFailure here would crash in Release builds.
     static let defaultValue = NotesViewModel(repository: MockNoteRepository())
-    #else
-    static var defaultValue: NotesViewModel {
-        preconditionFailure("NotesViewModel must be injected via .environment(\\.notesViewModel, ...)")
-    }
-    #endif
 }
 
 extension EnvironmentValues {
@@ -70,7 +67,8 @@ extension EnvironmentValues {
 
 @MainActor
 private struct SessionScopeKey: @preconcurrency EnvironmentKey {
-    #if DEBUG
+    // Safe fallback — production code must inject via `.environment(\.sessionScope, ...)`.
+    // See NotesViewModelKey comment for why preconditionFailure must not be used here.
     static let defaultValue = SessionScope(
         store: SessionStore(
             engineStore: TerminalEngineStore(factory: MockTerminalEngineFactory()),
@@ -79,11 +77,6 @@ private struct SessionScopeKey: @preconcurrency EnvironmentKey {
         engines: TerminalEngineStore(factory: MockTerminalEngineFactory()),
         agentStates: AgentStateStore()
     )
-    #else
-    static var defaultValue: SessionScope {
-        preconditionFailure("SessionScope must be injected via .environment(\\.sessionScope, ...)")
-    }
-    #endif
 }
 
 extension EnvironmentValues {
@@ -97,18 +90,14 @@ extension EnvironmentValues {
 
 @MainActor
 private struct DataScopeKey: @preconcurrency EnvironmentKey {
-    #if DEBUG
+    // Safe fallback — production code must inject via `.environment(\.dataScope, ...)`.
+    // See NotesViewModelKey comment for why preconditionFailure must not be used here.
     static let defaultValue = DataScope(
         searchService: MockSearchService(),
         vectorSearchService: nil,
-        ruleFileRepository: MockRuleFileRepository(),
+        ruleFileRepository: NullRuleFileRepository(),
         sessionMessageRepository: MockSessionMessageRepository()
     )
-    #else
-    static var defaultValue: DataScope {
-        preconditionFailure("DataScope must be injected via .environment(\\.dataScope, ...)")
-    }
-    #endif
 }
 
 extension EnvironmentValues {
@@ -122,7 +111,8 @@ extension EnvironmentValues {
 
 @MainActor
 private struct ProjectScopeKey: @preconcurrency EnvironmentKey {
-    #if DEBUG
+    // Safe fallback — production code must inject via `.environment(\.projectScope, ...)`.
+    // See NotesViewModelKey comment for why preconditionFailure must not be used here.
     static let defaultValue = ProjectScope(
         gitService: MockGitService(),
         viewModel: ProjectViewModel(
@@ -131,11 +121,6 @@ private struct ProjectScopeKey: @preconcurrency EnvironmentKey {
             commandRouter: CommandRouter()
         )
     )
-    #else
-    static var defaultValue: ProjectScope {
-        preconditionFailure("ProjectScope must be injected via .environment(\\.projectScope, ...)")
-    }
-    #endif
 }
 
 extension EnvironmentValues {
@@ -149,7 +134,8 @@ extension EnvironmentValues {
 
 @MainActor
 private struct ViewStateManagerKey: @preconcurrency EnvironmentKey {
-    #if DEBUG
+    // Safe fallback — production code must inject via `.environment(\.viewStateManager, ...)`.
+    // See NotesViewModelKey comment for why preconditionFailure must not be used here.
     static let defaultValue = SessionViewStateManager(
         commandRouter: CommandRouter(),
         sessionStore: SessionStore(
@@ -161,11 +147,6 @@ private struct ViewStateManagerKey: @preconcurrency EnvironmentKey {
         contextInjectionService: MockContextInjectionService(),
         sessionHandoffService: MockSessionHandoffService()
     )
-    #else
-    static var defaultValue: SessionViewStateManager {
-        preconditionFailure("SessionViewStateManager must be injected via .environment(\\.viewStateManager, ...)")
-    }
-    #endif
 }
 
 extension EnvironmentValues {
