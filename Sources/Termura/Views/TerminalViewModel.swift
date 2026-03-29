@@ -213,6 +213,12 @@ final class TerminalViewModel: ObservableObject {
             await coordinator.detectAgentFromOutput(stripped, sessionStore: sessionStore, sessionID: sid)
         }
 
+        // Backpressure: during PTY floods (e.g. thousands of permission-error lines),
+        // the task queue can accumulate faster than tasks complete. When at capacity,
+        // drop this packet's background analysis — the token count and chunk detection
+        // will be approximate, but the terminal rendering is unaffected and the UI stays responsive.
+        guard !taskExecutor.isAtCapacity else { return }
+
         spawnDetachedTracked { [weak self] in
             await processor.processDataOutput(text, stripped: stripped, sessionID: sid)
             await coordinator.analyzeOutput(stripped, sessionID: sid, tokenCountingService: tokenService)

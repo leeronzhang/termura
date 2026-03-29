@@ -30,6 +30,11 @@ final class BoundedTaskExecutor {
     /// Number of tasks currently tracked (pending + executing).
     var activeCount: Int { tracked.count }
 
+    /// True when the queue depth has reached the hard cap.
+    /// Callers can check this before spawning non-critical work to shed load
+    /// during high-throughput output bursts (e.g. large PTY floods).
+    var isAtCapacity: Bool { tracked.count >= maxConcurrent * AppConfig.Runtime.taskQueueDepthMultiplier }
+
     /// Spawns a task on the MainActor context with bounded concurrency.
     /// The task waits for a semaphore permit before executing the operation.
     func spawn(_ operation: @escaping @MainActor () async -> Void) {

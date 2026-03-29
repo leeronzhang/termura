@@ -40,6 +40,10 @@ enum AppConfig {
         /// Maximum concurrent background tasks per terminal session.
         /// Bounds CPU/memory usage during high-frequency output (e.g. `cat` large file).
         static let maxConcurrentSessionTasks = 8
+        /// Queue depth multiplier for BoundedTaskExecutor.isAtCapacity.
+        /// When tracked.count >= maxConcurrent * this value, non-critical output analysis
+        /// is dropped to prevent unbounded task accumulation during PTY floods.
+        static let taskQueueDepthMultiplier = 4
         /// Long command notification threshold
         static let longCommandThresholdSeconds: Double = 30.0
         /// Maximum time (seconds) to wait for DB flush + handoff during app termination.
