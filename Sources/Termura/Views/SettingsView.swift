@@ -8,6 +8,9 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
+            GeneralSettingsView()
+                .tabItem { Label("General", systemImage: "gear") }
+
             ThemePickerView(
                 themeManager: themeManager,
                 themeImportService: themeImportService
@@ -16,9 +19,167 @@ struct SettingsView: View {
 
             FontSettingsView(fontSettings: fontSettings)
                 .tabItem { Label("Fonts", systemImage: "textformat.size") }
+
+            ShellIntegrationSettingsView()
+                .tabItem { Label("Shell", systemImage: "terminal") }
         }
         .frame(minWidth: 520, minHeight: 360)
     }
+}
+
+// MARK: - General Settings Tab
+
+struct GeneralSettingsView: View {
+    @AppStorage(AppConfig.AgentResume.autoFillEnabledKey)
+    private var autoFillEnabled: Bool = AppConfig.AgentResume.autoFillDefault
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Auto-fill launch command on session restore", isOn: $autoFillEnabled)
+            } header: {
+                Text("Agent Resume")
+            } footer: {
+                Text("When enabled, reopening a project pre-fills the Composer with the previous session\u{2019}s agent command (e.g. \u{201C}claude\u{201D}). Press Enter to launch or edit before confirming.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(AppUI.Spacing.xxl)
+    }
+}
+
+// MARK: - Shell Integration Settings Tab
+
+struct ShellIntegrationSettingsView: View {
+    @State private var selectedShell: ShellType = .zsh
+    @State private var installState: InstallState = .idle
+    @State private var installError: String?
+    @State private var isInstalledZsh = false
+    @State private var isInstalledBash = false
+
+    private let installer = ShellHookInstaller()
+
+    var body: some View {
+        Form {
+            statusSection
+            installSection
+        }
+        .formStyle(.grouped)
+        .padding(AppUI.Spacing.xxl)
+        .task { await refreshStatus() }
+    }
+
+    private var statusSection: some View {
+        Section("Status") {
+            statusRow(shell: .zsh, installed: isInstalledZsh)
+            statusRow(shell: .bash, installed: isInstalledBash)
+        }
+    }
+
+    private func statusRow(shell: ShellType, installed: Bool) -> some View {
+        HStack {
+            Text(shell.rawValue)
+                .font(AppUI.Font.body)
+            Spacer()
+            if installed {
+                Label("Installed", systemImage: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.callout)
+            } else {
+                Text("Not installed")
+                    .foregroundColor(.secondary)
+                    .font(.callout)
+            }
+        }
+    }
+
+    private var installSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
+                featureRow(icon: "rectangle.split.3x1", text: "Structured output blocks per command")
+                featureRow(icon: "clock", text: "Execution time and exit code per command")
+                featureRow(icon: "doc.text.magnifyingglass", text: "Accurate token counting")
+            }
+            .padding(.vertical, AppUI.Spacing.sm)
+
+            Picker("Shell", selection: $selectedShell) {
+                ForEach(ShellType.allCases, id: \.self) { shell in
+                    Text(shell.rawValue).tag(shell)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if let errorMsg = installError {
+                Text(errorMsg)
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
+            HStack {
+                Spacer()
+                installButton
+            }
+        } header: {
+            Text("Install Hook")
+        } footer: {
+            Text("Appends a small OSC 133 script to your shell RC file (\(selectedShell.rcFileName)). No data leaves your machine.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var installButton: some View {
+        switch installState {
+        case .idle:
+            Button("Install Hook") { performInstall() }
+                .buttonStyle(.borderedProminent)
+        case .installing:
+            ProgressView().controlSize(.small)
+        case .done:
+            Label("Installed", systemImage: "checkmark.circle.fill")
+                .foregroundColor(.green)
+                .font(.callout.bold())
+        }
+    }
+
+    private func featureRow(icon: String, text: String) -> some View {
+        HStack(spacing: AppUI.Spacing.md) {
+            Image(systemName: icon)
+                .foregroundColor(.accentColor)
+                .frame(width: AppUI.Size.iconFrameLarge)
+            Text(text).font(.callout)
+        }
+    }
+
+    private func performInstall() {
+        installState = .installing
+        installError = nil
+        let shell = selectedShell
+        Task {
+            do {
+                try await installer.install(into: shell)
+                UserDefaults.standard.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
+                await refreshStatus()
+                installState = .done
+                try await Task.sleep(for: AppConfig.Runtime.onboardingDismissDelay)
+                installState = .idle
+            } catch {
+                installError = error.localizedDescription
+                installState = .idle
+            }
+        }
+    }
+
+    private func refreshStatus() async {
+        isInstalledZsh = await installer.isInstalled(for: .zsh)
+        isInstalledBash = await installer.isInstalled(for: .bash)
+    }
+
+    private enum InstallState { case idle, installing, done }
 }
 
 // MARK: - Font Settings Tab

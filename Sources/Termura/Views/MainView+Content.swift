@@ -26,6 +26,9 @@ extension MainView {
                     set: { newTab in
                         selectedContentTab = newTab
                         // Sync activeSessionID when switching tabs.
+                        // Also sync selectedSidebarTab for non-terminal tabs so that
+                        // selectedContentView shows the correct content instead of
+                        // falling into the "Sessions tab + non-terminal = show terminal" branch.
                         switch newTab {
                         case let .terminal(sid, _):
                             sessionStore.activateSession(id: sid)
@@ -33,8 +36,10 @@ extension MainView {
                             let sid = focusedSlot == .left ? left : right
                             sessionStore.activateSession(id: sid)
                             commandRouter.isDualPaneActive = true
-                        case .note, .diff, .file, .preview:
-                            break
+                        case .note:
+                            commandRouter.selectedSidebarTab = .notes
+                        case .diff, .file, .preview:
+                            commandRouter.selectedSidebarTab = .project
                         }
                     }
                 ),
@@ -60,13 +65,37 @@ extension MainView {
 
     @ViewBuilder
     var selectedContentView: some View {
-        switch resolvedSelectedTab {
+        let tab = resolvedSelectedTab
+        // Sessions tab: if resolvedSelectedTab is not a terminal/split (e.g. a note or file tab
+        // was left selected from a previous session), show the active terminal or empty state.
+        if commandRouter.selectedSidebarTab == .sessions, !tab.isTerminal, !tab.isSplit {
+            let best = terminalItems.first(where: {
+                $0.containsSession(sessionStore.activeSessionID ?? SessionID())
+            }) ?? terminalItems.first
+            if let best {
+                tabContent(for: best)
+            } else {
+                emptyState
+            }
+        // Notes tab: show the note editor if a note tab is selected, or an empty state otherwise.
+        } else if commandRouter.selectedSidebarTab == .notes,
+                  !commandRouter.isComposerNotesActive,
+                  !tab.isNote {
+            notesEmptyState
+        } else {
+            tabContent(for: tab)
+        }
+    }
+
+    @ViewBuilder
+    private func tabContent(for tab: ContentTab) -> some View {
+        switch tab {
         case let .terminal(sessionID, _):
             terminalView(for: sessionID)
                 .id(sessionID)
         case .split:
             dualPaneView()
-                .id(resolvedSelectedTab.id)
+                .id(tab.id)
         case let .note(noteID, _):
             noteEditorView(noteID: noteID)
                 .id(noteID)
@@ -78,7 +107,7 @@ extension MainView {
                 gitService: projectScope.gitService,
                 projectRoot: activeProjectRoot
             )
-            .id(resolvedSelectedTab.id)
+            .id(tab.id)
         case let .file(path, _):
             CodeEditorView(
                 filePath: path,
@@ -220,6 +249,18 @@ extension MainView {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { notesViewModel.selectNote(id: noteID) }
+        .onChange(of: notesViewModel.editingTitle) { _, newTitle in
+            syncNoteTabTitle(noteID: noteID, title: newTitle)
+        }
+    }
+
+    private func syncNoteTabTitle(noteID: NoteID, title: String) {
+        guard let idx = openTabs.firstIndex(where: {
+            if case let .note(id, _) = $0 { return id == noteID }
+            return false
+        }) else { return }
+        openTabs[idx] = .note(noteID: noteID, title: title)
+        if case .note = selectedContentTab { selectedContentTab = openTabs[idx] }
     }
 
     private func noteFavoriteButton(noteID: NoteID) -> some View {

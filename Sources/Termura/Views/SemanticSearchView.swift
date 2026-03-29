@@ -100,10 +100,8 @@ struct SemanticSearchView: View {
         let service = vectorService
         Task {
             let hits = await service.search(query: queryText, topK: AppConfig.SemanticSearch.topK)
-            await MainActor.run {
-                results = hits
-                isSearching = false
-            }
+            results = hits
+            isSearching = false
         }
     }
 }

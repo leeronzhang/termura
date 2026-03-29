@@ -112,7 +112,34 @@ struct TerminalAreaView: View {
         checkContextFileExists()
         editorViewModel.onCommandSubmit = { [weak viewModel] cmd in
             viewModel?.detectAgentFromCommand(cmd)
-            commandRouter.dismissComposer()
+        }
+        setupAgentResumeIfNeeded()
+        wireTerminalContextActions()
+    }
+
+    /// Connects the terminal view's right-click context actions to the CommandRouter.
+    /// Only wires when the engine exposes a TermuraTerminalView; no-ops for mocks.
+    private func wireTerminalContextActions() {
+        guard let tv = engine.terminalNSView as? TermuraTerminalView else { return }
+        let router = commandRouter
+        tv.onContextAction = { text in
+            router.prefillComposer(text: text)
+        }
+    }
+
+    /// Registers a one-shot callback on the TerminalViewModel to pre-fill the Composer
+    /// with the previous agent's launch command when the first shell prompt is detected.
+    /// Only fires for restored sessions with a known agent type.
+    private func setupAgentResumeIfNeeded() {
+        let store = sessionScope.store
+        guard store.isRestoredSession(id: sessionID) else { return }
+        guard let session = store.sessions.first(where: { $0.id == sessionID }) else { return }
+        let agentType = session.agentType
+        guard agentType != .unknown, !agentType.defaultLaunchCommand.isEmpty else { return }
+        let router = commandRouter
+        let vm = viewModel
+        vm.onShellPromptReadyForResume = {
+            router.pendingCommand = .resumeAgent(agentType)
         }
     }
 
@@ -237,9 +264,9 @@ private struct TerminalAreaSheets: ViewModifier {
             .sheet(item: $riskAlert) { risk in
                 InterventionAlertView(
                     alert: risk,
-                    onProceed: { riskAlert = nil },
+                    onProceed: { viewModel.dismissRiskAlert() },
                     onCancel: {
-                        riskAlert = nil
+                        viewModel.dismissRiskAlert()
                         Task { await eng.send("\u{03}") }
                     }
                 )

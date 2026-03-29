@@ -78,23 +78,65 @@ extension MainView {
     }
 
     var emptyState: some View {
-        VStack(spacing: AppUI.Spacing.lg) {
+        VStack(spacing: 0) {
             Image(systemName: "terminal")
-                .font(AppUI.Font.hero)
+                .font(.system(size: 40, weight: .light))
                 .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.muted))
-            Text("No Active Session")
-                .font(AppUI.Font.title1)
-                .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.dimmed))
-            Text("Press \u{2318}T to create a new session")
-                .font(AppUI.Font.label)
-                .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.tertiary))
-            Button("New Session") {
-                sessionStore.createSession(title: "Terminal")
+                .padding(.bottom, AppUI.Spacing.lg)
+            VStack(spacing: AppUI.Spacing.xs) {
+                Text("No Active Session")
+                    .font(AppUI.Font.title1)
+                    .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.dimmed))
+                Text("Press \u{2318}T to create a new session")
+                    .font(AppUI.Font.label)
+                    .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.tertiary))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
+            Button {
+                sessionStore.createSession(title: "Terminal")
+            } label: {
+                Text("New Session")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, AppUI.Spacing.xxxl)
+                    .padding(.vertical, AppUI.Spacing.md)
+                    .background(Color.accentColor)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
             .keyboardShortcut("t", modifiers: .command)
-            .padding(.top, AppUI.Spacing.sm)
+            .padding(.top, AppUI.Spacing.xxl)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(themeManager.current.background)
+    }
+
+    var notesEmptyState: some View {
+        VStack(spacing: 0) {
+            Image(systemName: "text.rectangle")
+                .font(.system(size: 40, weight: .light))
+                .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.muted))
+                .padding(.bottom, AppUI.Spacing.lg)
+            VStack(spacing: AppUI.Spacing.xs) {
+                Text("No Note Open")
+                    .font(AppUI.Font.title1)
+                    .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.dimmed))
+                Text("Select a note from the sidebar or create a new one")
+                    .font(AppUI.Font.label)
+                    .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.tertiary))
+            }
+            Button {
+                commandRouter.pendingCommand = .createNote
+            } label: {
+                Text("New Note")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, AppUI.Spacing.xxxl)
+                    .padding(.vertical, AppUI.Spacing.md)
+                    .background(Color.accentColor)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, AppUI.Spacing.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(themeManager.current.background)

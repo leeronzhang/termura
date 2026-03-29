@@ -21,6 +21,7 @@ struct MainView: View {
     var router: Bindable<CommandRouter> { Bindable(commandRouter) }
     var notes: Bindable<NotesViewModel> { Bindable(notesViewModel) }
 
+    @State var lastContentTabBySidebarTab: [SidebarTab: ContentTab] = [:]
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
     @State var showCloseSessionConfirm = false
     @State var splitRoot: SplitNode?
@@ -68,17 +69,12 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
             isFullScreen = false
         }
-        .onChange(of: commandRouter.pendingSplitAction) { _, action in
-            guard let action else { return }
-            commandRouter.pendingSplitAction = nil
-            switch action {
-            case .vertical: performSplit(axis: .vertical)
-            case .horizontal: performSplit(axis: .horizontal)
-            case .closePane: performCloseSplitPane()
-            }
-        }
-        .onChange(of: commandRouter.dualPaneToggleTick) { _, _ in
-            toggleSplitTab()
+        // Single command handler — all menu/toolbar commands funnel through pendingCommand
+        // to avoid concurrent .onChange races between split, dual-pane, and close-tab signals.
+        .onChange(of: commandRouter.pendingCommand) { _, command in
+            guard let command else { return }
+            commandRouter.pendingCommand = nil
+            reduce(command: command)
         }
         .onChange(of: commandRouter.focusedDualPaneID) { _, newID in
             guard let newID, isInSplitMode else { return }
@@ -91,15 +87,15 @@ struct MainView: View {
         .onChange(of: sessionStore.sessions.count) { _, _ in
             syncTerminalItems()
         }
-        .onChange(of: commandRouter.closeTabTick) { _, _ in
-            handleCloseTab()
+        .onChange(of: commandRouter.selectedSidebarTab) { oldTab, newTab in
+            restoreContentTabOnSidebarSwitch(from: oldTab, to: newTab)
+        }
+        .onChange(of: selectedContentTab) { _, newTab in
+            if let newTab { trackContentTabForSidebarTab(newTab) }
         }
         .task {
             await ensureInitialSession()
             restoreOpenTabs()
-        }
-        .sheet(isPresented: router.showShellOnboarding) {
-            ShellIntegrationOnboardingView(isPresented: router.showShellOnboarding)
         }
         .sheet(isPresented: router.showSearch) { searchSheet }
         .sheet(isPresented: router.showNotes) { notesSheet }
@@ -122,6 +118,7 @@ struct MainView: View {
             SidebarView(
                 isFullScreen: isFullScreen,
                 activeContentTab: resolvedSelectedTab,
+                selectedTab: router.selectedSidebarTab,
                 focusedSessionID: focusedPaneSessionID ?? sessionStore.activeSessionID,
                 onActivateSession: { activateSessionFromSidebar($0) },
                 onOpenNote: { noteID, title in openNoteTab(noteID: noteID, title: title) },

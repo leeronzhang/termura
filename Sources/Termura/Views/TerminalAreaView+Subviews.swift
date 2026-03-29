@@ -189,37 +189,41 @@ extension TerminalAreaView {
                 .background(themeManager.current.background)
 
                 if commandRouter.showComposer && isFocusedPane {
-                    // Backdrop — covers only the region ABOVE the composer so the composer's
-                    // header buttons are never shadowed by the backdrop's tap gesture.
-                    // Using GeometryReader to compute the non-composer height prevents the
-                    // backdrop's contentShape from intercepting clicks on ComposerOverlayView.
-                    GeometryReader { geo in
+                    // VStack-based bottom sheet: backdrop fills the space above the composer,
+                    // composer sits at the fixed bottom. This avoids GeometryReader, which
+                    // has a known async sizing issue inside ZStack+NSViewRepresentable hierarchies
+                    // (geo.size can be stale on the first layout pass, causing the backdrop height
+                    // to be wrong and the composer to appear misaligned).
+                    VStack(spacing: 0) {
+                        // Backdrop — covers the terminal above the composer.
+                        // Uses AppKitClickableOverlay (not .onTapGesture) because SwiftTerm's
+                        // TerminalDragContainerView and EditorTextView are real AppKit NSViews
+                        // that AppKit hitTest routes events before SwiftUI gestures can fire.
                         themeManager.current.background
                             .opacity(AppUI.Opacity.strong)
-                            .frame(height: max(0, geo.size.height - AppConfig.UI.composerMaxHeight))
-                            .frame(maxHeight: .infinity, alignment: .top)
-                            .contentShape(Rectangle())
-                            .onTapGesture { commandRouter.dismissComposer() }
-                    }
-                    .transition(.opacity.animation(.easeOut(duration: AppUI.Animation.fadeOut)))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .overlay(AppKitClickableOverlay(action: { commandRouter.dismissComposer() }))
+                            .transition(.opacity.animation(.easeOut(duration: AppUI.Animation.fadeOut)))
 
-                    ComposerOverlayView(
-                        editorViewModel: editorViewModel,
-                        editorHandle: editorHandle,
-                        isNotesActive: commandRouter.isComposerNotesActive,
-                        onToggleNotes: { commandRouter.toggleComposerNotes() },
-                        onDismiss: { commandRouter.dismissComposer() }
-                    )
-                    .onAppear {
-                        let vm = editorViewModel
-                        commandRouter.composerInsertHandler = { text in
-                            vm.appendText("\n" + text)
+                        ComposerOverlayView(
+                            editorViewModel: editorViewModel,
+                            editorHandle: editorHandle,
+                            isNotesActive: commandRouter.isComposerNotesActive,
+                            onToggleNotes: { commandRouter.toggleComposerNotes() },
+                            onDismiss: { commandRouter.dismissComposer() }
+                        )
+                        .onAppear {
+                            let vm = editorViewModel
+                            commandRouter.composerInsertHandler = { text in
+                                vm.appendText("\n" + text)
+                            }
                         }
+                        .transition(
+                            .move(edge: .bottom)
+                                .animation(.spring(response: 0.35, dampingFraction: 0.85))
+                        )
                     }
-                    .transition(
-                        .move(edge: .bottom)
-                            .animation(.spring(response: 0.35, dampingFraction: 0.85))
-                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }

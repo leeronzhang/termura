@@ -12,6 +12,7 @@ struct SidebarView: View {
     var isFullScreen: Bool = false
     /// The currently selected content tab — used for session highlight logic.
     var activeContentTab: ContentTab?
+    @Binding var selectedTab: SidebarTab
     /// The session that currently has keyboard focus (active in focused pane or single pane).
     var focusedSessionID: SessionID?
     /// Called when a session row is tapped — MainView handles find-tab-or-open logic.
@@ -24,13 +25,6 @@ struct SidebarView: View {
     // MARK: - Convenience
 
     var sessionStore: SessionStore { sessionScope.store }
-
-    @State private var selectedTab: SidebarTab = .sessions
-    /// Saved tab before composer auto-switched to .notes; restored on composer close.
-    @State private var tabBeforeComposer: SidebarTab?
-    /// Incremented to force re-render when agent states change (ObservableObject nested
-    /// inside non-observable SessionScope breaks SwiftUI's automatic observation).
-    @State var agentStateVersion: UInt = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,26 +41,6 @@ struct SidebarView: View {
             withAnimation(.easeInOut(duration: AppUI.Animation.panel)) {
                 selectedTab = (selectedTab == .agents) ? .sessions : .agents
             }
-        }
-        .onChange(of: commandRouter.isComposerNotesActive) { _, active in
-            if active {
-                if tabBeforeComposer == nil { tabBeforeComposer = selectedTab }
-                withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
-                    selectedTab = .notes
-                }
-            } else if let previous = tabBeforeComposer {
-                withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
-                    selectedTab = previous
-                }
-                tabBeforeComposer = nil
-            }
-        }
-        .onChange(of: commandRouter.showComposer) { _, showing in
-            guard !showing, let previous = tabBeforeComposer else { return }
-            withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
-                selectedTab = previous
-            }
-            tabBeforeComposer = nil
         }
     }
 

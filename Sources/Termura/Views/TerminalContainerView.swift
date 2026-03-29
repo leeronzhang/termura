@@ -30,6 +30,9 @@ struct TerminalContainerView: NSViewRepresentable {
         }
         hideScroller(in: termView)
         let container = TerminalDragContainerView(terminalView: termView)
+        // Seed the font cache so the first updateNSView call skips the redundant font assignment.
+        container.lastAppliedFontName = fontFamily
+        container.lastAppliedFontSize = fontSize
         container.dragHandler = { [weak viewModel] paths in
             viewModel?.send(paths)
         }
@@ -39,21 +42,39 @@ struct TerminalContainerView: NSViewRepresentable {
     func updateNSView(_ container: TerminalDragContainerView, context: Context) {
         container.isPassthrough = isComposerActive
         guard let termView = container.terminalView as? LocalProcessTerminalView else { return }
-        applyTheme(theme, to: termView)
+        // Colors are cheap to set — always apply so theme switches take effect immediately.
+        applyColors(theme, to: termView)
+        // Font assignment is expensive: SwiftTerm recalculates character dimensions for every cell.
+        // Guard to avoid triggering this on every parent re-render (ViewModel @Published changes
+        // cause frequent re-renders — without this guard, CPU spikes even when idle).
+        let fontChanged = container.lastAppliedFontName != fontFamily
+            || container.lastAppliedFontSize != fontSize
+        if fontChanged {
+            applyFont(to: termView)
+            container.lastAppliedFontName = fontFamily
+            container.lastAppliedFontSize = fontSize
+        }
         hideScroller(in: termView)
     }
 
     // MARK: - Theme application
 
-    private func applyTheme(_ theme: ThemeColors, to view: LocalProcessTerminalView) {
+    private func applyColors(_ theme: ThemeColors, to view: LocalProcessTerminalView) {
         view.nativeBackgroundColor = NSColor(theme.background)
         view.nativeForegroundColor = NSColor(theme.foreground)
         view.installColors(theme.toSwiftTermColors())
+    }
 
+    private func applyFont(to view: LocalProcessTerminalView) {
         let font = NSFont(name: fontFamily, size: fontSize)
             ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         view.font = font
         logger.debug("Terminal font set: \(font.fontName) size=\(fontSize)")
+    }
+
+    private func applyTheme(_ theme: ThemeColors, to view: LocalProcessTerminalView) {
+        applyColors(theme, to: view)
+        applyFont(to: view)
     }
 
     /// Hides the legacy NSScroller that SwiftTerm adds directly as a subview.
@@ -83,6 +104,10 @@ final class TerminalDragContainerView: NSView {
     /// Set to true while the composer overlay is visible so that hitTest returns nil,
     /// letting AppKit fall through to NSHostingView and SwiftUI handle events.
     var isPassthrough = false
+    /// Last font family/size applied via updateNSView. Guards against SwiftTerm
+    /// recalculating character dimensions on every parent view re-render.
+    var lastAppliedFontName: String?
+    var lastAppliedFontSize: CGFloat = 0
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         isPassthrough ? nil : super.hitTest(point)
@@ -97,7 +122,8 @@ final class TerminalDragContainerView: NSView {
     }
 
     required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not supported")
+        logger.fault("TerminalDragContainerView must be instantiated programmatically, not via Interface Builder")
+        return nil
     }
 
     override func layout() {

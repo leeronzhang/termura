@@ -49,6 +49,7 @@ final class ProjectViewModel: ObservableObject {
     private let fileTreeService = FileTreeService()
     private let projectRoot: String
     private var commandRouter: CommandRouter?
+    private var chunkHandlerToken: UUID?
     private var refreshTask: Task<Void, Never>?
     private var appActiveObserver: (any NSObjectProtocol)?
     private var debounceTask: Task<Void, Never>?
@@ -75,6 +76,10 @@ final class ProjectViewModel: ObservableObject {
             NotificationCenter.default.removeObserver(observer)
         }
         appActiveObserver = nil
+        if let token = chunkHandlerToken {
+            commandRouter?.removeChunkHandler(token: token)
+            chunkHandlerToken = nil
+        }
         refreshTask?.cancel()
         debounceTask?.cancel()
         persistTask?.cancel()
@@ -154,7 +159,7 @@ final class ProjectViewModel: ObservableObject {
 
     private func setupObservers() {
         // Refresh git status when a terminal chunk completes (command may have changed files).
-        commandRouter?.onChunkCompleted { [weak self] _ in
+        chunkHandlerToken = commandRouter?.onChunkCompleted { [weak self] _ in
             self?.debouncedRefresh()
         }
 
@@ -173,11 +178,11 @@ final class ProjectViewModel: ObservableObject {
     // MARK: - Expansion Persistence
 
     private var expandedIDsKey: String {
-        "fileTree.expandedIDs-\(projectRoot)"
+        AppConfig.UserDefaultsKeys.fileTreeExpandedIDs(projectRoot: projectRoot)
     }
 
     private var hideIgnoredKey: String {
-        "fileTree.hideIgnored-\(projectRoot)"
+        AppConfig.UserDefaultsKeys.fileTreeHideIgnored(projectRoot: projectRoot)
     }
 
     private func persistExpandedIDs() {
@@ -186,6 +191,7 @@ final class ProjectViewModel: ObservableObject {
             do {
                 try await self?.clock.sleep(for: AppConfig.UI.expansionPersistDebounce)
             } catch is CancellationError {
+                // CancellationError is expected — a newer expansion event supersedes this persist.
                 return
             } catch {
                 // Non-critical: expansion state is cosmetic; lost state is auto-restored on next scan.
@@ -215,8 +221,10 @@ final class ProjectViewModel: ObservableObject {
             do {
                 try await self?.clock.sleep(for: AppConfig.Git.refreshDebounce)
             } catch is CancellationError {
+                // CancellationError is expected — a newer refresh event supersedes this one.
                 return
             } catch {
+                // Non-critical: git refresh is a background heuristic; the tree remains usable.
                 logger.warning("Git refresh debounce sleep failed: \(error.localizedDescription)")
                 return
             }

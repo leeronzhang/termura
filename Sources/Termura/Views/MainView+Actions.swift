@@ -3,6 +3,68 @@ import SwiftUI
 
 private let logger = Logger(subsystem: "com.termura.app", category: "MainView+Actions")
 
+// MARK: - Command reducer
+
+extension MainView {
+    /// Single entry point for all command-driven UI mutations.
+    /// Called from the unified `.onChange(of: commandRouter.pendingCommand)` in MainView.body.
+    func reduce(command: CommandRouter.PendingCommand) {
+        switch command {
+        case .split(let action):
+            switch action {
+            case .vertical: performSplit(axis: .vertical)
+            case .horizontal: performSplit(axis: .horizontal)
+            case .closePane: performCloseSplitPane()
+            }
+        case .toggleDualPane:
+            toggleSplitTab()
+        case .closeTab:
+            handleCloseTab()
+        case .createNote:
+            handleCreateNote()
+        case .resumeAgent(let agentType):
+            handleAgentResume(agentType)
+        case .composerPrefill(let text):
+            handleComposerPrefill(text)
+        }
+    }
+
+    /// Returns the EditorViewModel for the currently focused session, if available.
+    private var activeEditorViewModel: EditorViewModel? {
+        let sid = focusedPaneSessionID ?? sessionStore.activeSessionID
+        guard let sid else { return nil }
+        return viewStateManager.sessionViewStates[sid]?.editorViewModel
+    }
+
+    /// Pre-fills the Composer with quoted terminal output and opens it (or appends if already open).
+    private func handleComposerPrefill(_ text: String) {
+        guard let editorVM = activeEditorViewModel else { return }
+        if commandRouter.showComposer {
+            editorVM.appendText(text)
+        } else {
+            editorVM.setText(text)
+            commandRouter.toggleComposer()
+        }
+    }
+
+    /// Pre-fills the Composer with the agent's default launch command and opens it.
+    /// No-ops if the feature is disabled, the Composer is already open, or the editor
+    /// already contains text (user may have typed something before the prompt fired).
+    private func handleAgentResume(_ agentType: AgentType) {
+        let key = AppConfig.AgentResume.autoFillEnabledKey
+        let enabled = UserDefaults.standard.object(forKey: key) as? Bool
+                      ?? AppConfig.AgentResume.autoFillDefault
+        guard enabled else { return }
+        guard !commandRouter.showComposer else { return }
+        guard let editorVM = activeEditorViewModel else { return }
+        guard editorVM.currentText.isEmpty else { return }
+        let command = agentType.defaultLaunchCommand
+        guard !command.isEmpty else { return }
+        editorVM.setText(command)
+        commandRouter.toggleComposer()
+    }
+}
+
 // MARK: - Tab management
 
 extension MainView {
@@ -74,6 +136,15 @@ extension MainView {
             closeContentTab(tab)
         } else if tab.isTerminal || tab.isSplit {
             showCloseSessionConfirm = true
+        }
+    }
+
+    func handleCreateNote() {
+        commandRouter.selectedSidebarTab = .notes
+        notesViewModel.createNote()
+        if let noteID = notesViewModel.selectedNoteID,
+           let note = notesViewModel.selectedNote {
+            openNoteTab(noteID: noteID, title: note.title)
         }
     }
 
@@ -176,99 +247,5 @@ extension MainView {
     }
 }
 
-// MARK: - Helpers
-
-extension MainView {
-    func ensureInitialSession() async {
-        if !sessionStore.hasLoadedPersistedSessions {
-            for await loaded in sessionStore.$hasLoadedPersistedSessions.values where loaded {
-                break
-            }
-        }
-        if sessionStore.sessions.isEmpty {
-            sessionStore.createSession(title: "Terminal")
-        }
-        syncTerminalItems()
-    }
-
-    /// Reconciles `terminalItems` with the current session list.
-    /// Adds tabs for new sessions; dissolves or removes tabs for closed sessions.
-    func syncTerminalItems() {
-        let allSessionIDs = Set(sessionStore.sessions.map(\.id))
-        // Remove tabs for sessions that no longer exist.
-        var updated: [ContentTab] = []
-        for item in terminalItems {
-            switch item {
-            case let .terminal(sid, _):
-                if allSessionIDs.contains(sid) { updated.append(item) }
-                // else: session closed — drop the tab
-            case let .split(left, right, leftTitle, rightTitle):
-                let leftExists = allSessionIDs.contains(left)
-                let rightExists = allSessionIDs.contains(right)
-                if leftExists && rightExists {
-                    updated.append(item)
-                } else if leftExists {
-                    updated.append(.terminal(sessionID: left, title: leftTitle))
-                } else if rightExists {
-                    updated.append(.terminal(sessionID: right, title: rightTitle))
-                }
-                // else: both gone — drop the tab
-            default:
-                updated.append(item)
-            }
-        }
-        // Add tabs for sessions not yet represented.
-        let coveredIDs = Set(updated.flatMap { item -> [SessionID] in
-            switch item {
-            case let .terminal(sid, _): return [sid]
-            case let .split(left, right, _, _): return [left, right]
-            default: return []
-            }
-        })
-        for session in sessionStore.sessions where !coveredIDs.contains(session.id) {
-            updated.append(.terminal(sessionID: session.id, title: session.title))
-        }
-        terminalItems = updated
-        // Ensure selected tab is still valid.
-        if let sel = selectedContentTab, !allTabs.contains(sel) {
-            selectedContentTab = terminalItems.last
-        }
-    }
-
-    func performSplit(axis: SplitAxis) {
-        guard let activeID = sessionStore.activeSessionID else { return }
-        let newSession = sessionStore.createSession(title: "Terminal")
-        if splitRoot == nil {
-            splitRoot = SplitNodeMutations.splitLeaf(
-                root: .leaf(activeID),
-                targetID: activeID,
-                newID: newSession.id,
-                axis: axis
-            )
-        } else if let root = splitRoot {
-            splitRoot = SplitNodeMutations.splitLeaf(
-                root: root,
-                targetID: activeID,
-                newID: newSession.id,
-                axis: axis
-            )
-        }
-    }
-
-    func performCloseSplitPane() {
-        guard let activeID = sessionStore.activeSessionID,
-              let root = splitRoot else { return }
-        if let remaining = SplitNodeMutations.removeLeaf(root: root, targetID: activeID) {
-            if case .leaf = remaining {
-                splitRoot = nil
-            } else {
-                splitRoot = remaining
-            }
-        } else {
-            splitRoot = nil
-        }
-        sessionStore.closeSession(id: activeID)
-    }
-}
-
 // Tab persistence is in MainView+TabPersistence.swift
+// Session lifecycle helpers are in MainView+SessionSync.swift

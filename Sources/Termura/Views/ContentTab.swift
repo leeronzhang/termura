@@ -44,6 +44,18 @@ enum ContentTab: Identifiable, Hashable, Codable {
         }
     }
 
+    /// Filename to resolve via FileTypeIcon for asset-based icons.
+    /// Returns nil for terminal/split tabs which use SF Symbols.
+    var fileTypeIconName: String? {
+        switch self {
+        case .terminal, .split: return nil
+        case .note: return "readme.md"
+        case let .diff(path, _, _): return URL(fileURLWithPath: path).lastPathComponent
+        case let .file(_, name): return name
+        case let .preview(_, name): return name
+        }
+    }
+
     /// Split and terminal tabs are managed via the sidebar — not closable from the tab bar.
     var isClosable: Bool {
         switch self {
@@ -61,6 +73,12 @@ enum ContentTab: Identifiable, Hashable, Codable {
     /// Whether this tab is a split pair of two terminal sessions.
     var isSplit: Bool {
         if case .split = self { return true }
+        return false
+    }
+
+    /// Whether this tab is a Markdown note editor.
+    var isNote: Bool {
+        if case .note = self { return true }
         return false
     }
 
@@ -119,11 +137,23 @@ struct ContentTabBar: View {
         .background(Color.black.opacity(AppUI.Opacity.tabBar))
     }
 
+    @ViewBuilder
+    private func tabIcon(for tab: ContentTab) -> some View {
+        if let name = tab.fileTypeIconName {
+            FileTypeIcon.image(for: name)
+                .resizable()
+                .scaledToFit()
+                .frame(width: AppUI.Size.fileTypeIcon, height: AppUI.Size.fileTypeIcon)
+        } else {
+            Image(systemName: tab.icon)
+                .font(AppUI.Font.caption)
+        }
+    }
+
     private func tabButton(_ tab: ContentTab) -> some View {
         let isSelected = selectedTab == tab
         return HStack(spacing: AppUI.Spacing.sm) {
-            Image(systemName: tab.icon)
-                .font(AppUI.Font.caption)
+            tabIcon(for: tab)
             Text(tab.title)
                 .font(AppUI.Font.label)
                 .lineLimit(1)

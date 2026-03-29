@@ -9,13 +9,6 @@ extension SidebarView {
             sessionsHeader
             sessionList
         }
-        // AgentStateStore is ObservableObject but nested inside non-observable SessionScope.
-        // Explicitly subscribe and bump @State version to force re-renders when agent status changes.
-        // NOTE: Do NOT use .id(agentStateVersion) here — it destroys/recreates the view,
-        // which re-subscribes to the publisher, which fires immediately, creating an infinite loop.
-        .onReceive(sessionScope.agentStates.$agents) { _ in
-            agentStateVersion &+= 1
-        }
     }
 
     private var sessionsHeader: some View {
