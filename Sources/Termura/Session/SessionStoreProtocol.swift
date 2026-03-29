@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// Observable session store — owns the list of active sessions and selection state.
@@ -5,6 +6,9 @@ import Foundation
 protocol SessionStoreProtocol: AnyObject {
     var sessions: [SessionRecord] { get }
     var activeSessionID: SessionID? { get }
+    /// Fires once when persisted sessions have finished loading. Use to gate
+    /// startup logic that requires the session list to be populated.
+    var sessionsLoaded: AnyPublisher<Void, Never> { get }
 
     @discardableResult
     func createSession(title: String?, shell: String?) -> SessionRecord

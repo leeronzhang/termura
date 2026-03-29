@@ -1,7 +1,5 @@
 import Foundation
 
-#if DEBUG
-
 /// Test double for `GitServiceProtocol`.
 actor MockGitService: GitServiceProtocol {
     var stubbedResult: GitStatusResult = .notARepo
@@ -26,5 +24,3 @@ actor MockGitService: GitServiceProtocol {
         stubbedTrackedFiles
     }
 }
-
-#endif

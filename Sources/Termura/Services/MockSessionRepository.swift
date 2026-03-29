@@ -1,7 +1,5 @@
 import Foundation
 
-#if DEBUG
-
 /// In-memory session repository for unit tests and previews. No GRDB dependency.
 actor MockSessionRepository: SessionRepositoryProtocol {
     private var store: [SessionID: SessionRecord] = [:]
@@ -73,5 +71,3 @@ actor MockSessionRepository: SessionRepositoryProtocol {
         store[sessionID]?.summary = summary
     }
 }
-
-#endif

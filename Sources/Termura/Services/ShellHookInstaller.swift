@@ -22,6 +22,12 @@ enum ShellType: String, CaseIterable, Sendable {
 /// Installs OSC 133 shell integration hooks into the user's shell RC file.
 /// Runs all file I/O off-MainActor as a Swift actor.
 actor ShellHookInstaller {
+    private let fileManager: any FileManagerProtocol
+
+    init(fileManager: any FileManagerProtocol = FileManager.default) {
+        self.fileManager = fileManager
+    }
+
     // MARK: - Public API
 
     /// Append the Termura shell hook to the given shell's RC file if not already present.
@@ -95,7 +101,7 @@ actor ShellHookInstaller {
     }
 
     private func fileExists(at path: String) -> Bool {
-        FileManager.default.fileExists(atPath: path)
+        fileManager.fileExists(atPath: path)
     }
 
     private func hookScript(for shell: ShellType) -> String {

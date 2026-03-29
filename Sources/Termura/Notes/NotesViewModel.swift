@@ -9,7 +9,11 @@ final class NotesViewModel {
     private(set) var notes: [NoteRecord] = []
     var selectedNoteID: NoteID?
     var editingTitle: String = "" {
-        didSet { scheduleAutoSave() }
+        didSet {
+            guard !isLoadingNote else { return }
+            syncInMemoryTitle(editingTitle)
+            scheduleAutoSave()
+        }
     }
 
     var editingBody: String = "" {
@@ -20,11 +24,16 @@ final class NotesViewModel {
     var errorMessage: String?
 
     private let repository: any NoteRepositoryProtocol
-    private var saveTask: Task<Void, Never>?
     private var autoSaveTask: Task<Void, Never>?
+    /// True while `selectNote` is loading content into `editingTitle`/`editingBody`
+    /// to suppress the spurious auto-save triggered by those assignments.
+    private var isLoadingNote = false
     /// Tracks in-flight persistence Tasks so they can be awaited during flush.
     /// Keyed by UUID so each Task can remove itself upon completion (self-pruning).
     private var pendingWrites: [UUID: Task<Void, Never>] = [:]
+    /// Tracks the pendingWrites key for the current in-flight note save so that
+    /// a new save can cancel the prior one instead of stacking up duplicate writes.
+    private var noteSavePendingID: UUID?
 
     init(repository: any NoteRepositoryProtocol) {
         self.repository = repository
@@ -58,10 +67,21 @@ final class NotesViewModel {
     }
 
     func selectNote(id: NoteID) {
+        // Flush pending edits for the departing note before switching so that
+        // a rename-then-select within 1 second does not lose the rename.
+        if selectedNoteID != nil, selectedNoteID != id, autoSaveTask != nil {
+            autoSaveTask?.cancel()
+            autoSaveTask = nil
+            persistCurrentNote(title: editingTitle, body: editingBody)
+        }
         guard let note = notes.first(where: { $0.id == id }) else { return }
+        // Load content without triggering auto-save — these assignments are
+        // restoring stored state, not user edits.
+        isLoadingNote = true
         selectedNoteID = id
         editingTitle = note.title
         editingBody = note.body
+        isLoadingNote = false
     }
 
     func toggleFavorite(id: NoteID) {
@@ -87,8 +107,18 @@ final class NotesViewModel {
 
     // MARK: - Private
 
+    /// Immediately reflects the new title into the in-memory notes array so that
+    /// the sidebar list updates while the user is typing, without waiting for the
+    /// debounced persistence to fire.
+    private func syncInMemoryTitle(_ title: String) {
+        guard let id = selectedNoteID,
+              let idx = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[idx].title = title
+    }
+
     /// Debounces title/body edits before persisting to the repository.
     private func scheduleAutoSave() {
+        guard !isLoadingNote else { return }
         autoSaveTask?.cancel()
         autoSaveTask = Task { [weak self] in
             do {
@@ -117,26 +147,26 @@ final class NotesViewModel {
         notes[idx].body = body
         notes[idx].updatedAt = Date()
         let updated = notes[idx]
-        saveTask?.cancel()
-        saveTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await repository.save(updated)
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = "Auto-save failed: \(error.localizedDescription)"
-                    logger.error("Note auto-save failed: \(error)")
-                }
-            }
+        // Cancel any prior in-flight note save before registering a fresh one so
+        // rapid edits do not stack up duplicate writes in pendingWrites.
+        if let oldID = noteSavePendingID {
+            pendingWrites[oldID]?.cancel()
+            pendingWrites.removeValue(forKey: oldID)
+        }
+        noteSavePendingID = persistTracked { [repository] in
+            try await repository.save(updated)
         }
     }
 
     // MARK: - Tracked persistence
 
     /// Persists an operation asynchronously while tracking the Task for flush.
+    /// Returns the UUID key under which the task is registered in `pendingWrites`,
+    /// so callers can cancel a prior task before registering a replacement.
+    @discardableResult
     private func persistTracked(
         _ operation: @Sendable @escaping () async throws -> Void
-    ) {
+    ) -> UUID {
         let id = UUID()
         let task = Task { [weak self] in
             defer { self?.pendingWrites.removeValue(forKey: id) }
@@ -148,25 +178,27 @@ final class NotesViewModel {
             }
         }
         pendingWrites[id] = task
+        return id
     }
 
     /// Awaits all in-flight persistence Tasks and force-saves the currently
     /// edited note to capture any debounced changes not yet written to DB.
     func flushPendingWrites() async {
-        // 1. Cancel debounce timers.
+        // 1. Cancel the debounce timer. Any in-flight note save is already
+        //    registered in pendingWrites and will be awaited in step 2.
         autoSaveTask?.cancel()
         autoSaveTask = nil
-        saveTask?.cancel()
-        saveTask = nil
 
-        // 2. Await all tracked writes.
+        // 2. Await all tracked writes (includes any in-flight note save).
         let snapshot = Array(pendingWrites.values)
         pendingWrites.removeAll()
+        noteSavePendingID = nil
         for task in snapshot {
             await task.value
         }
 
-        // 3. Force-save the currently edited note to capture debounced edits.
+        // 3. Force-save the currently edited note to capture changes that were
+        //    still in the debounce window (autoSaveTask cancelled before firing).
         if let id = selectedNoteID,
            let idx = notes.firstIndex(where: { $0.id == id }) {
             notes[idx].title = editingTitle
@@ -175,6 +207,7 @@ final class NotesViewModel {
             do {
                 try await repository.save(notes[idx])
             } catch {
+                errorMessage = "Failed to save note: \(error.localizedDescription)"
                 logger.error("Flush note save error: \(error)")
             }
         }

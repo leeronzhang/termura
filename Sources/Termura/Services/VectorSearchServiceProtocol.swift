@@ -29,10 +29,3 @@ protocol VectorSearchServiceProtocol: Actor {
     func clearIndex()
     var indexSize: Int { get }
 }
-
-extension VectorSearchServiceProtocol {
-    /// Convenience: search with default topK from AppConfig.
-    func search(query: String) async -> [SearchHit] {
-        await search(query: query, topK: AppConfig.SemanticSearch.topK)
-    }
-}

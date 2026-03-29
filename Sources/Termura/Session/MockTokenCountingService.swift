@@ -1,22 +1,13 @@
 import Foundation
 
-#if DEBUG
-
 /// Test double for `TokenCountingServiceProtocol`.
 actor MockTokenCountingService: TokenCountingServiceProtocol {
     var stubbedTokens: [SessionID: Int] = [:]
     var stubbedBreakdowns: [SessionID: TokenEstimateBreakdown] = [:]
-    var accumulateCallCount = 0
     var accumulateInputCallCount = 0
     var accumulateOutputCallCount = 0
     var accumulateCachedCallCount = 0
     var resetCallCount = 0
-
-    func accumulate(for sessionID: SessionID, text: String) {
-        accumulateCallCount += 1
-        let current = stubbedTokens[sessionID] ?? 0
-        stubbedTokens[sessionID] = current + estimateTokens(in: text)
-    }
 
     func accumulateInput(for sessionID: SessionID, text: String) {
         accumulateInputCallCount += 1
@@ -43,6 +34,10 @@ actor MockTokenCountingService: TokenCountingServiceProtocol {
         stubbedTokens.removeValue(forKey: sessionID)
         stubbedBreakdowns.removeValue(forKey: sessionID)
     }
-}
 
-#endif
+    /// Seed a stubbed token count for a session — used in lifecycle tests that
+    /// need to verify reset() clears state without going through accumulate().
+    func setStubbed(tokens: Int, for sessionID: SessionID) {
+        stubbedTokens[sessionID] = tokens
+    }
+}

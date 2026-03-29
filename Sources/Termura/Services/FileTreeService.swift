@@ -5,6 +5,12 @@ private let logger = Logger(subsystem: "com.termura.app", category: "FileTreeSer
 
 /// Scans the project directory and builds a file tree, optionally annotated with git status.
 actor FileTreeService {
+    private let fileManager: any FileManagerProtocol
+
+    init(fileManager: any FileManagerProtocol = FileManager.default) {
+        self.fileManager = fileManager
+    }
+
     /// macOS TCC-protected directories under home that trigger permission popups.
     /// Skipped when scanning the home directory to avoid repeated system dialogs.
     private static let tccProtectedDirectories: Set<String> = [
@@ -48,7 +54,7 @@ actor FileTreeService {
 
         let contents: [URL]
         do {
-            contents = try FileManager.default.contentsOfDirectory(
+            contents = try fileManager.contentsOfDirectory(
                 at: directoryURL,
                 includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
                 options: [.skipsPackageDescendants]

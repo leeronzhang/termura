@@ -1,18 +1,20 @@
+import Combine
 import Foundation
 import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "SessionStore")
 
+@Observable
 @MainActor
-final class SessionStore: ObservableObject, SessionStoreProtocol {
-    @Published var sessions: [SessionRecord] = []
-    @Published var activeSessionID: SessionID?
+final class SessionStore: SessionStoreProtocol {
+    var sessions: [SessionRecord] = []
+    var activeSessionID: SessionID?
     /// Set to `true` once persisted sessions have been loaded (or skipped).
-    @Published private(set) var hasLoadedPersistedSessions = false
+    private(set) var hasLoadedPersistedSessions = false
     /// User-visible error message from the last failed operation; cleared on next success.
-    @Published var errorMessage: String?
+    var errorMessage: String?
     /// IDs of sessions that were loaded from persistence (restored on launch).
-    private(set) var restoredSessionIDs: Set<SessionID> = []
+    @ObservationIgnored private(set) var restoredSessionIDs: Set<SessionID> = []
 
     let engineStore: TerminalEngineStore
     let defaultShell: String?
@@ -21,10 +23,22 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     let repository: (any SessionRepositoryProtocol)?
     let clock: any AppClock
     private let metricsCollector: (any MetricsCollectorProtocol)?
-    private var saveTask: Task<Void, Never>?
+    /// Per-operation debounce slots — keyed by "<operation>-<sessionID>" so that
+    /// concurrent rename and workingDirectory updates for the same session never
+    /// cancel each other.
+    @ObservationIgnored var debounceTasks: [String: Task<Void, Never>] = [:]
     /// Tracks in-flight persistence Tasks so they can be awaited during flush.
     /// Keyed by UUID so each Task can remove itself upon completion (self-pruning).
-    private var pendingWrites: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored var pendingWrites: [UUID: Task<Void, Never>] = [:]
+    /// Fires when a session is fully closed. Subscribers (e.g. SessionViewStateManager)
+    /// use this to release per-session resources without a back-reference into SessionStore.
+    var sessionDidClose: AnyPublisher<SessionID, Never> { _sessionDidClose.eraseToAnyPublisher() }
+    @ObservationIgnored private let _sessionDidClose = PassthroughSubject<SessionID, Never>()
+    /// Fires once when persisted sessions have finished loading (or been skipped).
+    /// Consumers that need to wait for initial load use this instead of polling
+    /// `hasLoadedPersistedSessions` via a Combine publisher.
+    var sessionsLoaded: AnyPublisher<Void, Never> { _sessionsLoaded.eraseToAnyPublisher() }
+    @ObservationIgnored private let _sessionsLoaded = PassthroughSubject<Void, Never>()
 
     init(
         engineStore: TerminalEngineStore,
@@ -45,7 +59,10 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     // MARK: - Persistence
 
     func loadPersistedSessions() async {
-        defer { hasLoadedPersistedSessions = true }
+        defer {
+            hasLoadedPersistedSessions = true
+            _sessionsLoaded.send()
+        }
         guard let repo = repository else { return }
         do {
             var loaded = try await repo.fetchAll()
@@ -115,7 +132,9 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         sessions.remove(at: idx)
         engineStore.terminateEngine(for: id)
         if activeSessionID == id { activeSessionID = sessions.last?.id }
+        restoredSessionIDs.remove(id)
         persistTracked { try await $0.delete(id: id) }
+        _sessionDidClose.send(id)
         logger.info("Closed session \(id)")
         if let collector = metricsCollector {
             Task { await collector.increment(.sessionClosed) }
@@ -146,7 +165,7 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].title = AgentCoordinator.stripAgentPrefixes(title)
         let updated = sessions[idx]
-        scheduleDebounced { try await $0.save(updated) }
+        scheduleDebounced(key: "rename-\(id)") { try await $0.save(updated) }
     }
 
     func updateWorkingDirectory(id: SessionID, path: String) {
@@ -154,7 +173,7 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         sessions[idx].workingDirectory = path
         sessions[idx].lastActiveAt = Date()
         let updated = sessions[idx]
-        scheduleDebounced { try await $0.save(updated) }
+        scheduleDebounced(key: "workdir-\(id)") { try await $0.save(updated) }
     }
 
     func pinSession(id: SessionID) {
@@ -203,9 +222,9 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
     func flushPendingWrites() async {
         guard let repo = repository else { return }
 
-        // 1. Cancel debounce timer — we will persist everything directly.
-        saveTask?.cancel()
-        saveTask = nil
+        // 1. Cancel all per-operation debounce timers — force-save below covers them.
+        for task in debounceTasks.values { task.cancel() }
+        debounceTasks.removeAll()
 
         // 2. Await all tracked writes so prior mutations land in DB.
         let snapshot = Array(pendingWrites.values)
@@ -220,6 +239,7 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
             do {
                 try await repo.save(session)
             } catch {
+                errorMessage = "Failed to save session: \(error.localizedDescription)"
                 logger.error("Flush save error for session \(session.id): \(error)")
             }
         }
@@ -246,19 +266,27 @@ final class SessionStore: ObservableObject, SessionStoreProtocol {
         pendingWrites[id] = task
     }
 
+    /// Debounces a persistence operation under a named `key`.
+    /// Each unique key has its own cancellation slot, so concurrent operations
+    /// (e.g. rename and workingDirectory update for the same session) do not
+    /// cancel each other. Use the pattern `"<operation>-\(id)"` for keys.
     func scheduleDebounced(
+        key: String,
         _ operation: @Sendable @escaping (any SessionRepositoryProtocol) async throws -> Void
     ) {
         guard let repo = repository else { return }
-        saveTask?.cancel()
-        saveTask = Task {
+        debounceTasks[key]?.cancel()
+        debounceTasks[key] = Task { [weak self] in
             do {
-                try await clock.sleep(for: AppConfig.Runtime.notesAutoSave)
+                guard let self else { return }
+                try await self.clock.sleep(for: AppConfig.Runtime.notesAutoSave)
                 guard !Task.isCancelled else { return }
                 try await operation(repo)
             } catch is CancellationError {
+                // CancellationError is expected — a newer save supersedes this one.
                 return
             } catch {
+                self?.errorMessage = "Failed to save session: \(error.localizedDescription)"
                 logger.error("Debounced save error: \(error)")
             }
         }

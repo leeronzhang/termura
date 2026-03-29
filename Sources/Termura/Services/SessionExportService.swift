@@ -20,7 +20,11 @@ enum ExportFormat: String, Sendable, CaseIterable {
 // MARK: - Implementation
 
 actor SessionExportService: SessionExportProtocol {
-    private let fileManager = FileManager.default
+    private let fileManager: any FileManagerProtocol
+
+    init(fileManager: any FileManagerProtocol = FileManager.default) {
+        self.fileManager = fileManager
+    }
 
     private var exportDirectory: URL {
         let temp = fileManager.temporaryDirectory

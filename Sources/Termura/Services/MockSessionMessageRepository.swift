@@ -1,7 +1,5 @@
 import Foundation
 
-#if DEBUG
-
 /// Test double for `SessionMessageRepositoryProtocol`.
 actor MockSessionMessageRepository: SessionMessageRepositoryProtocol {
     var savedMessages: [SessionMessage] = []
@@ -32,5 +30,3 @@ actor MockSessionMessageRepository: SessionMessageRepositoryProtocol {
         0
     }
 }
-
-#endif

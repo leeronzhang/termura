@@ -1,8 +1,6 @@
 import AppKit
 import Foundation
 
-#if DEBUG
-
 /// Test double for TerminalEngine. Captures all interactions for assertion.
 @MainActor
 final class MockTerminalEngine: TerminalEngine {
@@ -81,5 +79,3 @@ final class MockTerminalEngine: TerminalEngine {
         continuation.finish()
     }
 }
-
-#endif

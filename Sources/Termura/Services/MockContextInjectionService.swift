@@ -1,7 +1,5 @@
 import Foundation
 
-#if DEBUG
-
 /// Test double for `ContextInjectionServiceProtocol`.
 /// Supports error simulation via `stubbedError`.
 actor MockContextInjectionService: ContextInjectionServiceProtocol {
@@ -18,5 +16,3 @@ actor MockContextInjectionService: ContextInjectionServiceProtocol {
         return stubbedInjectionText
     }
 }
-
-#endif

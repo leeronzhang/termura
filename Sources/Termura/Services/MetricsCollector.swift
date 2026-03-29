@@ -7,6 +7,15 @@ private let logger = Logger(subsystem: "com.termura.app", category: "MetricsColl
 /// Central metrics collection actor. Records counters, duration histograms, and gauges
 /// using Apple-native `OSSignposter` for Instruments compatibility and `OSLog` for
 /// structured logging.
+///
+/// Logging discipline:
+/// - Per-event calls (`increment`, `recordDuration`, `gauge`) emit `.debug` only.
+///   At `.debug` level, OSLog defers string evaluation — cost is ~100ns, acceptable on hot paths.
+/// - A `.info`-level summary is written inside `snapshot()`, which is invoked intentionally
+///   (crash context, diagnostics) rather than on every metric event.
+/// - Signpost events in `recordDuration` use a single `emitEvent` call (not a zero-width
+///   `beginInterval`/`endInterval` pair) because the duration is measured by the caller before
+///   `recordDuration` is invoked.
 actor MetricsCollector: MetricsCollectorProtocol {
     // MARK: - Signpost log
 
@@ -39,7 +48,7 @@ actor MetricsCollector: MetricsCollectorProtocol {
 
     func increment(_ name: MetricName, by value: Int = 1) {
         counters[name, default: 0] += value
-        logger.info("metric.counter \(name.rawValue)=\(self.counters[name, default: 0])")
+        logger.debug("metric.counter \(name.rawValue)=\(self.counters[name, default: 0])")
     }
 
     func recordDuration(_ name: MetricName, seconds: Double) {
@@ -58,28 +67,32 @@ actor MetricsCollector: MetricsCollectorProtocol {
             histogramMaxes[name] = seconds
         }
 
-        // Emit signpost event for Instruments timeline
-        let sid = signposter.makeSignpostID()
-        let state = signposter.beginInterval("MetricDuration", id: sid, "\(name.rawValue)")
-        signposter.endInterval("MetricDuration", state, "\(name.rawValue) \(seconds)s")
+        // Single emitEvent — correct for post-hoc duration recording where the measured
+        // interval has already elapsed. A begin/end pair would create a zero-width span
+        // with no timeline value.
+        signposter.emitEvent("MetricDuration", "\(name.rawValue) \(seconds)s")
 
-        let count = histogramCounts[name, default: 0]
-        let avg = histogramSums[name, default: 0] / Double(count)
-        let secFmt = String(format: "%.4f", seconds)
-        let avgFmt = String(format: "%.4f", avg)
-        logger.info("metric.histogram \(name.rawValue) duration=\(secFmt)s count=\(count) avg=\(avgFmt)s")
+        logger.debug(
+            "metric.histogram \(name.rawValue) duration=\(seconds, format: .fixed(precision: 4))s"
+        )
     }
 
     func gauge(_ name: MetricName, value: Double) {
         gauges[name] = value
-        logger.info("metric.gauge \(name.rawValue)=\(value, format: .fixed(precision: 2))")
+        logger.debug("metric.gauge \(name.rawValue)=\(value, format: .fixed(precision: 2))")
     }
 
     func snapshot() -> MetricsSnapshot {
-        MetricsSnapshot(
+        let snap = MetricsSnapshot(
             counters: counters,
             gauges: gauges,
             histogramCounts: histogramCounts
         )
+        // Summary log at .info — called intentionally (crash context, diagnostics),
+        // not on every metric event.
+        logger.info(
+            "metrics.snapshot counters=\(snap.counters.count) gauges=\(snap.gauges.count) histograms=\(snap.histogramCounts.count)"
+        )
+        return snap
     }
 }

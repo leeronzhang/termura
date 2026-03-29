@@ -43,11 +43,12 @@ actor ChunkDetector {
         return nil
     }
 
-    /// Clear all pending buffers and reset FSM to idle.
+    /// Discard any buffered output and reset integration state.
+    /// Use when a session restarts and stale pending content must not bleed into the next chunk.
     func reset() {
-        state = ShellIntegrationState()
         pendingOutput = ""
         pendingRawANSI = ""
+        state = .init()
     }
 
     // MARK: - Private

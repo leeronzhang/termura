@@ -1,15 +1,20 @@
+import Combine
 import Foundation
 
 #if DEBUG
 
 /// Mock session store for unit tests and SwiftUI previews.
+@Observable
 @MainActor
-final class MockSessionStore: ObservableObject, SessionStoreProtocol {
-    @Published private(set) var sessions: [SessionRecord]
-    @Published private(set) var activeSessionID: SessionID?
+final class MockSessionStore: SessionStoreProtocol {
+    private(set) var sessions: [SessionRecord]
+    private(set) var activeSessionID: SessionID?
 
-    private(set) var createCallCount = 0
-    private(set) var closeCallCount = 0
+    @ObservationIgnored private(set) var createCallCount = 0
+    @ObservationIgnored private(set) var closeCallCount = 0
+
+    @ObservationIgnored private let _sessionsLoaded = PassthroughSubject<Void, Never>()
+    var sessionsLoaded: AnyPublisher<Void, Never> { _sessionsLoaded.eraseToAnyPublisher() }
 
     init(sessions: [SessionRecord] = [], activeID: SessionID? = nil) {
         self.sessions = sessions

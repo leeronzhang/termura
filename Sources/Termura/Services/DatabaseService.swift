@@ -9,7 +9,8 @@ actor DatabaseService: DatabaseServiceProtocol {
     private let metrics: (any MetricsCollectorProtocol)?
 
     /// Designated init — inject a pre-configured pool (enables testing with in-memory pools).
-    init(pool: DatabasePool, metrics: (any MetricsCollectorProtocol)? = nil) throws {
+    /// Runs DB migrations on the actor's executor (background thread) to avoid blocking the main thread.
+    init(pool: DatabasePool, metrics: (any MetricsCollectorProtocol)? = nil) async throws {
         self.pool = pool
         self.metrics = metrics
         var migrator = DatabaseMigrator()

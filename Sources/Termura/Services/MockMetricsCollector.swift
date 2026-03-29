@@ -21,7 +21,23 @@ actor MockMetricsCollector: MetricsCollectorProtocol {
     }
 
     func snapshot() -> MetricsSnapshot {
-        MetricsSnapshot(counters: [:], gauges: [:], histogramCounts: [:])
+        // Derive accumulated state from recorded calls so snapshot mirrors the real implementation.
+        // Counters: cumulative sum of all increments per metric.
+        var counters: [MetricName: Int] = [:]
+        for (name, value) in incrementCalls {
+            counters[name, default: 0] += value
+        }
+        // Gauges: last-write-wins, matching MetricsCollector semantics.
+        var gauges: [MetricName: Double] = [:]
+        for (name, value) in gaugeCalls {
+            gauges[name] = value
+        }
+        // Histogram counts: one entry per recordDuration call.
+        var histogramCounts: [MetricName: Int] = [:]
+        for (name, _) in durationCalls {
+            histogramCounts[name, default: 0] += 1
+        }
+        return MetricsSnapshot(counters: counters, gauges: gauges, histogramCounts: histogramCounts)
     }
 
     // MARK: - Test helpers

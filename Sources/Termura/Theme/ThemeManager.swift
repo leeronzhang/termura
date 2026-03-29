@@ -15,7 +15,7 @@ final class ThemeManager {
 
     /// Current terminal font size — persisted via UserDefaults.
     var terminalFontSize: CGFloat {
-        didSet { UserDefaults.standard.set(Double(terminalFontSize), forKey: "terminalFontSize") }
+        didSet { UserDefaults.standard.set(Double(terminalFontSize), forKey: AppConfig.UserDefaultsKeys.terminalFontSize) }
     }
 
     private var extendedColors: [ThemeToken: SwiftUI.Color] = [:]
@@ -37,13 +37,13 @@ final class ThemeManager {
 
     init() {
         // Restore user-customized font size. Migrate stale old default (15) to new default (16).
-        let saved = UserDefaults.standard.double(forKey: "terminalFontSize")
-        let didMigrateFontSize = UserDefaults.standard.bool(forKey: "terminalFontSize.migrated_v1")
+        let saved = UserDefaults.standard.double(forKey: AppConfig.UserDefaultsKeys.terminalFontSize)
+        let didMigrateFontSize = UserDefaults.standard.bool(forKey: AppConfig.UserDefaultsKeys.terminalFontSizeMigratedV1)
         if !didMigrateFontSize && saved == 15.0 {
             // User had the old default (15) — upgrade to new default.
             terminalFontSize = AppConfig.Fonts.terminalSize
-            UserDefaults.standard.removeObject(forKey: "terminalFontSize")
-            UserDefaults.standard.set(true, forKey: "terminalFontSize.migrated_v1")
+            UserDefaults.standard.removeObject(forKey: AppConfig.UserDefaultsKeys.terminalFontSize)
+            UserDefaults.standard.set(true, forKey: AppConfig.UserDefaultsKeys.terminalFontSizeMigratedV1)
         } else if saved > 0 {
             terminalFontSize = CGFloat(saved)
         } else {

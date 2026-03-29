@@ -1,7 +1,5 @@
 import Foundation
 
-#if DEBUG
-
 /// In-memory note repository for unit tests and previews. No GRDB dependency.
 actor MockNoteRepository: NoteRepositoryProtocol {
     private var store: [NoteID: NoteRecord] = [:]
@@ -29,5 +27,3 @@ actor MockNoteRepository: NoteRepositoryProtocol {
         }
     }
 }
-
-#endif

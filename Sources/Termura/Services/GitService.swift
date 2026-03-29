@@ -164,8 +164,11 @@ actor GitService: GitServiceProtocol {
             },
             onCancel: {
                 // Runs on Task cancellation (e.g. timeout wins the task-group race).
-                // terminate() is safe to call before run() — it is a no-op on unstarted processes.
-                process.terminate()
+                // Guard with isRunning: terminate() on an unlaunched Process throws
+                // NSInvalidArgumentException instead of being a no-op.
+                if process.isRunning {
+                    process.terminate()
+                }
             }
         )
 

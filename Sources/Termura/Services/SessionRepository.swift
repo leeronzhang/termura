@@ -168,7 +168,7 @@ actor SessionRepository: SessionRepositoryProtocol {
 
     func search(query: String) async throws -> [SessionRecord] {
         guard query.count >= AppConfig.Search.minQueryLength else { return [] }
-        let ftsQuery = safeFTSQuery(query)
+        let ftsQuery = FTS5.escapeQuery(query)
         return try await db.read { database in
             let rows = try SessionRow.fetchAll(
                 database,
@@ -296,10 +296,5 @@ actor SessionRepository: SessionRepositoryProtocol {
                 arguments: [trimmed, idStr]
             )
         }
-    }
-
-    // MARK: - Private
-    private func safeFTSQuery(_ raw: String) -> String {
-        FTS5.escapeQuery(raw)
     }
 }

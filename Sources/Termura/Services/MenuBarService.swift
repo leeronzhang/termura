@@ -37,6 +37,8 @@ final class MenuBarService: NSObject {
         guard let button = statusItem?.button else { return }
         let icon = NSImage(named: "MenuBarIcon") ?? NSImage(systemSymbolName: "terminal", accessibilityDescription: "Termura")
         icon?.isTemplate = true
+        // Scale down to 14pt height while preserving the original 27:16 aspect ratio.
+        icon?.size = NSSize(width: 20.25, height: 12)
         button.image = icon
         button.target = self
         button.action = #selector(handleClick)
@@ -48,6 +50,7 @@ final class MenuBarService: NSObject {
     }
 
     @objc private func handleClick() {
+        clearBadge()
         NSApp.activate(ignoringOtherApps: true)
         onActivateHandler?()
     }

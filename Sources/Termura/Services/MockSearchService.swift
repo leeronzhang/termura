@@ -1,7 +1,5 @@
 import Foundation
 
-#if DEBUG
-
 /// Test double for `SearchServiceProtocol`.
 actor MockSearchService: SearchServiceProtocol {
     var stubbedResult: SearchResults = .empty
@@ -14,5 +12,3 @@ actor MockSearchService: SearchServiceProtocol {
         return stubbedResult
     }
 }
-
-#endif

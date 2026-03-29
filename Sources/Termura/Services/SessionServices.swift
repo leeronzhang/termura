@@ -56,6 +56,7 @@ final class SessionServices {
             do {
                 try await clock.sleep(for: AppConfig.SessionHandoff.injectionDelay)
             } catch is CancellationError {
+                // CancellationError is expected — session closed before the injection delay elapsed.
                 return
             } catch {
                 logger.warning("Context injection delay failed: \(error.localizedDescription)")

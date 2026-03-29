@@ -1,7 +1,5 @@
 import Foundation
 
-#if DEBUG
-
 /// Test double for `SessionHandoffServiceProtocol`.
 actor MockSessionHandoffService: SessionHandoffServiceProtocol {
     var stubbedContext: HandoffContext?
@@ -23,5 +21,3 @@ actor MockSessionHandoffService: SessionHandoffServiceProtocol {
         return stubbedContext
     }
 }
-
-#endif

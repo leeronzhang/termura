@@ -73,9 +73,15 @@ struct NotesSplitView: View {
                 )
             }
         } else {
-            Text("Select or create a note")
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: AppUI.Spacing.smMd) {
+                Image(systemName: "text.rectangle")
+                    .font(AppUI.Font.hero)
+                    .foregroundColor(.secondary.opacity(AppUI.Opacity.muted))
+                Text("Select or create a note")
+                    .font(AppUI.Font.label)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

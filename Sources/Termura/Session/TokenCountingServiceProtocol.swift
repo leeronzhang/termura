@@ -2,8 +2,6 @@ import Foundation
 
 /// Protocol abstracting heuristic token counting per session.
 protocol TokenCountingServiceProtocol: Actor {
-    /// Accumulate characters from terminal output (alias for `accumulateOutput`).
-    func accumulate(for sessionID: SessionID, text: String)
     /// Accumulate characters from user input (commands).
     func accumulateInput(for sessionID: SessionID, text: String)
     /// Accumulate characters from terminal output.

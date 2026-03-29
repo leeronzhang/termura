@@ -24,7 +24,7 @@ struct HandoffContext: Sendable {
 actor SessionHandoffService: SessionHandoffServiceProtocol {
     private let messageRepo: any SessionMessageRepositoryProtocol
     private let harnessEventRepo: any HarnessEventRepositoryProtocol
-    private let fileManager: FileManager
+    private let fileManager: any FileManagerProtocol
 
     /// Keywords used to identify error lines when summarising output chunks.
     /// Checked case-insensitively against lowercased line content.
@@ -35,7 +35,7 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
     init(
         messageRepo: any SessionMessageRepositoryProtocol,
         harnessEventRepo: any HarnessEventRepositoryProtocol,
-        fileManager: FileManager = .default
+        fileManager: any FileManagerProtocol = FileManager.default
     ) {
         self.messageRepo = messageRepo
         self.harnessEventRepo = harnessEventRepo
@@ -162,7 +162,9 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
             .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
         let markdown = renderContextMarkdown(context)
-        let fm = FileManager.default
+        // Capture the injected instance before crossing into the detached task so
+        // that tests can substitute a mock without the task falling back to the real FS.
+        let fm = fileManager
 
         try await Task.detached {
             // Ensure directory exists

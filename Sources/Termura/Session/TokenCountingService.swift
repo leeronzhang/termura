@@ -64,11 +64,6 @@ actor TokenCountingService: TokenCountingServiceProtocol {
 
     // MARK: - Public API
 
-    /// Accumulate token estimate from terminal output (backward-compatible alias).
-    func accumulate(for sessionID: SessionID, text: String) {
-        accumulateOutput(for: sessionID, text: text)
-    }
-
     /// Accumulate token estimate from user input (commands).
     func accumulateInput(for sessionID: SessionID, text: String) {
         breakdowns[sessionID, default: TokenBreakdown()].inputTokens += estimateTokens(in: text)
