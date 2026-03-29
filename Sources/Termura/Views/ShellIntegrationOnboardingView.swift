@@ -4,14 +4,13 @@ import SwiftUI
 /// Writes `UserDefaults` key `AppConfig.ShellIntegration.installedDefaultsKey` on success.
 struct ShellIntegrationOnboardingView: View {
     @Binding var isPresented: Bool
+    let installer: any ShellHookInstallerProtocol
 
     // MARK: - State
 
     @State private var selectedShell: ShellType = .zsh
     @State private var installState: InstallState = .idle
     @State private var installError: String?
-
-    private let installer = ShellHookInstaller()
 
     // MARK: - Body
 

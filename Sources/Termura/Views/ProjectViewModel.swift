@@ -5,20 +5,21 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "ProjectViewModel")
 
 /// Drives the Project sidebar tab: file tree + git status + badge.
+@Observable
 @MainActor
-final class ProjectViewModel: ObservableObject {
-    @Published private(set) var tree: [FileTreeNode] = []
-    @Published private(set) var gitResult: GitStatusResult = .notARepo
-    @Published private(set) var isLoading = false
+final class ProjectViewModel {
+    private(set) var tree: [FileTreeNode] = []
+    private(set) var gitResult: GitStatusResult = .notARepo
+    private(set) var isLoading = false
     /// User-visible error from the last refresh; nil when healthy.
-    @Published var errorMessage: String?
+    var errorMessage: String?
     /// IDs of expanded folder nodes. Persisted per project via UserDefaults.
-    @Published var expandedNodeIDs: Set<String> = [] {
+    var expandedNodeIDs: Set<String> = [] {
         didSet { persistExpandedIDs() }
     }
 
     /// When true, files/directories marked as gitignored are hidden from the tree.
-    @Published var hideIgnoredFiles: Bool = true {
+    var hideIgnoredFiles: Bool = true {
         didSet { UserDefaults.standard.set(hideIgnoredFiles, forKey: hideIgnoredKey) }
     }
 
@@ -46,14 +47,14 @@ final class ProjectViewModel: ObservableObject {
 
     private let gitService: any GitServiceProtocol
     private let clock: any AppClock
-    private let fileTreeService = FileTreeService()
+    private let fileTreeService: any FileTreeServiceProtocol
     private let projectRoot: String
     private var commandRouter: CommandRouter?
     private var chunkHandlerToken: UUID?
-    private var refreshTask: Task<Void, Never>?
-    private var appActiveObserver: (any NSObjectProtocol)?
-    private var debounceTask: Task<Void, Never>?
-    private var persistTask: Task<Void, Never>?
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var appActiveObserver: (any NSObjectProtocol)?
+    @ObservationIgnored private var debounceTask: Task<Void, Never>?
+    @ObservationIgnored private var persistTask: Task<Void, Never>?
     /// Tracks whether we've already handled initial expansion (persisted or auto).
     private var hasRestoredExpandState = false
 
@@ -61,11 +62,13 @@ final class ProjectViewModel: ObservableObject {
         gitService: any GitServiceProtocol,
         projectRoot: String,
         commandRouter: CommandRouter? = nil,
+        fileTreeService: any FileTreeServiceProtocol = FileTreeService(),
         clock: any AppClock = LiveClock()
     ) {
         self.gitService = gitService
         self.projectRoot = projectRoot
         self.commandRouter = commandRouter
+        self.fileTreeService = fileTreeService
         self.clock = clock
         restoreExpandedIDs()
         setupObservers()
@@ -105,54 +108,63 @@ final class ProjectViewModel: ObservableObject {
         isLoading = true
         refreshTask = Task { [weak self] in
             guard let self else { return }
-
-            // Scan file tree, git status, and tracked files in parallel
-            async let scannedTree = fileTreeService.scan(at: projectRoot)
-            async let gitStatus = {
-                do {
-                    return try await self.gitService.status(at: self.projectRoot)
-                } catch {
-                    // Non-critical: git status is optional — project tree still works without it.
-                    logger.warning("Git status failed: \(error.localizedDescription)")
-                    return GitStatusResult.notARepo
-                }
-            }()
-            async let tracked = {
-                do {
-                    return try await self.gitService.trackedFiles(at: self.projectRoot)
-                } catch {
-                    // Non-critical: tracked files are optional — tree shows all files as fallback.
-                    logger.warning("Tracked files fetch failed: \(error.localizedDescription)")
-                    return Set<String>()
-                }
-            }()
-
-            let rawTree = await scannedTree
-            let status = await gitStatus
-            let trackedFiles = await tracked
-            guard !Task.isCancelled else { return }
-
-            // Annotate tree with git status and ignored file detection
-            let annotated = await fileTreeService.annotate(
-                tree: rawTree, with: status, trackedFiles: trackedFiles
-            )
-            guard !Task.isCancelled else { return }
-
-            tree = annotated
-            gitResult = status
-            isLoading = false
-            errorMessage = nil
-
-            // Auto-expand root directories only on very first scan (no persisted state)
-            if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
-                hasRestoredExpandState = true
-                for node in annotated where node.isDirectory {
-                    expandedNodeIDs.insert(node.id)
-                }
+            // Establish a trace context so GitService OSSignposter intervals in Instruments
+            // are labelled with the project root, enabling per-project latency correlation.
+            // TaskLocal.withValue inherits @MainActor isolation via #isolation.
+            let trace = TraceContext(spanName: "project.refresh[\(self.projectRoot)]")
+            await TraceLocal.$current.withValue(trace) {
+                await self.performRefresh()
             }
-
-            commandRouter?.hasUncommittedChanges = !status.files.isEmpty
         }
+    }
+
+    private func performRefresh() async {
+        // Scan file tree, git status, and tracked files in parallel
+        async let scannedTree = fileTreeService.scan(at: projectRoot)
+        async let gitStatus = {
+            do {
+                return try await self.gitService.status(at: self.projectRoot)
+            } catch {
+                // Non-critical: git status is optional — project tree still works without it.
+                logger.warning("Git status failed: \(error.localizedDescription)")
+                return GitStatusResult.notARepo
+            }
+        }()
+        async let tracked = {
+            do {
+                return try await self.gitService.trackedFiles(at: self.projectRoot)
+            } catch {
+                // Non-critical: tracked files are optional — tree shows all files as fallback.
+                logger.warning("Tracked files fetch failed: \(error.localizedDescription)")
+                return Set<String>()
+            }
+        }()
+
+        let rawTree = await scannedTree
+        let status = await gitStatus
+        let trackedFiles = await tracked
+        guard !Task.isCancelled else { return }
+
+        // Annotate tree with git status and ignored file detection
+        let annotated = await fileTreeService.annotate(
+            tree: rawTree, with: status, trackedFiles: trackedFiles
+        )
+        guard !Task.isCancelled else { return }
+
+        tree = annotated
+        gitResult = status
+        isLoading = false
+        errorMessage = nil
+
+        // Auto-expand root directories only on very first scan (no persisted state)
+        if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
+            hasRestoredExpandState = true
+            for node in annotated where node.isDirectory {
+                expandedNodeIDs.insert(node.id)
+            }
+        }
+
+        commandRouter?.hasUncommittedChanges = !status.files.isEmpty
     }
 
     // MARK: - Private
@@ -167,7 +179,7 @@ final class ProjectViewModel: ObservableObject {
         appActiveObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
-            queue: .main
+            queue: nil
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()

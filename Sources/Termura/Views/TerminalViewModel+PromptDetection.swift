@@ -45,11 +45,11 @@ extension TerminalViewModel {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if isAIPromptLine(trimmed) {
                 isInteractivePrompt = true
-                sessionServices.injectContextIfNeeded(
-                    workingDirectory: currentMetadata.workingDirectory,
-                    engine: engine,
-                    clock: clock
-                )
+                let services = sessionServices
+                let dir = currentMetadata.workingDirectory
+                let eng = engine
+                let clk = clock
+                Task { await services.injectContextIfNeeded(workingDirectory: dir, engine: eng, clock: clk) }
                 return
             }
         }

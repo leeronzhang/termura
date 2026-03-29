@@ -25,11 +25,17 @@ final class LibghosttyEngine: TerminalEngine {
     // MARK: - Init
 
     init(sessionID: SessionID) {
-        let (outStream, outCont) = AsyncStream.makeStream(of: TerminalOutputEvent.self)
+        let (outStream, outCont) = AsyncStream.makeStream(
+            of: TerminalOutputEvent.self,
+            bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
+        )
         outputStream = outStream
         outputContinuation = outCont
 
-        let (shellStream, shellCont) = AsyncStream.makeStream(of: ShellIntegrationEvent.self)
+        let (shellStream, shellCont) = AsyncStream.makeStream(
+            of: ShellIntegrationEvent.self,
+            bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
+        )
         shellEventsStream = shellStream
         shellContinuation = shellCont
 

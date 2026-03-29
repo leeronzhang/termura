@@ -23,7 +23,7 @@ struct NotesSplitView: View {
                     .tag(note.id)
                     .contextMenu {
                         Button("Delete", role: .destructive) {
-                            viewModel.deleteNote(id: note.id)
+                            Task { await viewModel.deleteNote(id: note.id) }
                         }
                     }
             }

@@ -48,7 +48,7 @@ extension SidebarView {
                             Text(note.isFavorite ? "Unfavorite" : "Favorite")
                         }
                         Button("Delete", role: .destructive) {
-                            vm.deleteNote(id: note.id)
+                            Task { await vm.deleteNote(id: note.id) }
                         }
                     }
                 }

@@ -5,7 +5,7 @@ import Foundation
 /// @MainActor: implementations interact with the AppKit render layer.
 /// Implementations: SwiftTermEngine (live), MockTerminalEngine (tests).
 @MainActor
-protocol TerminalEngine: AnyObject {
+protocol TerminalEngine: AnyObject, Sendable {
     /// Async stream of output events from the PTY.
     var outputStream: AsyncStream<TerminalOutputEvent> { get }
 

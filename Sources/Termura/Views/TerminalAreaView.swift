@@ -9,7 +9,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalAre
 typealias NSEventMonitorToken = Any
 
 /// Composes the terminal display, chunked output overlay, metadata panel, and editor input.
-/// All @StateObject lifetimes are tied to the session via `.id(sessionID)` in the parent.
+/// Session lifetime is tied to the session via `.id(sessionID)` in the parent.
 struct TerminalAreaView: View {
     let engine: any TerminalEngine
     let sessionID: SessionID
@@ -27,9 +27,10 @@ struct TerminalAreaView: View {
     @Environment(\.themeManager) var themeManager
     @Environment(\.fontSettings) var fontSettings
     @Environment(\.notesViewModel) var notesViewModel
-    /// Per-session state container — owned by `SessionViewStateManager`,
-    /// received here as `@ObservedObject` to avoid the fragile `@StateObject`-in-init pattern.
-    @ObservedObject var state: SessionViewState
+    /// Per-session state container — owned by `SessionViewStateManager`.
+    /// `@Bindable` enables `$state.viewModel.pendingRiskAlert` binding syntax
+    /// while `@Observable` on SessionViewState handles automatic re-renders.
+    @Bindable var state: SessionViewState
 
     // MARK: - Convenience accessors
 
@@ -84,7 +85,7 @@ struct TerminalAreaView: View {
             HStack(spacing: 0) {
                 terminalAndOutputArea
 
-                if !isCompact && localUI.showMetadata && !forceHideMetadata {
+                if !isCompact && state.showMetadata && !forceHideMetadata {
                     ResizableDivider(
                         width: $localUI.metadataPanelWidth,
                         minWidth: AppConfig.UI.metadataPanelMinWidth,
@@ -113,6 +114,9 @@ struct TerminalAreaView: View {
         editorViewModel.onCommandSubmit = { [weak viewModel] cmd in
             viewModel?.detectAgentFromCommand(cmd)
         }
+        // Wire at session-view level: stable across Composer onAppear/onDisappear cycles.
+        let router = commandRouter
+        editorViewModel.onSubmit = { [weak router] in router?.dismissComposer() }
         setupAgentResumeIfNeeded()
         wireTerminalContextActions()
     }
@@ -152,9 +156,8 @@ struct TerminalAreaView: View {
         let path = URL(fileURLWithPath: dir)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
             .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
-        // Lifecycle: one-shot file check — result is cosmetic UI state, no cleanup needed.
-        // fileExists is a fast syscall; running on MainActor avoids the @State capture risk
-        // that arises when Task.detached + MainActor.run is used with value-type wrappers.
+        // Lifecycle: one-shot cosmetic check. fileExists is fast; @MainActor avoids
+        // the @State capture risk from Task.detached + MainActor.run with value-type wrappers.
         Task { @MainActor in
             localUI.contextFileExists = FileManager.default.fileExists(atPath: path)
         }
@@ -223,6 +226,7 @@ struct TerminalAreaView: View {
     }
 
     private func removeKeyRouter() {
+        editorViewModel.onSubmit = nil
         if let monitor = keyEventMonitor {
             NSEvent.removeMonitor(monitor)
             keyEventMonitor = nil
@@ -236,9 +240,8 @@ struct TerminalAreaView: View {
 
 // MARK: - Local UI State
 
-/// Groups view-local @State booleans/doubles that only affect TerminalAreaView layout.
+/// Groups view-local state that only affects TerminalAreaView layout.
 struct LocalUIState {
-    var showMetadata = true
     var showExportSheet = false
     var showContextSheet = false
     var contextFileExists = false

@@ -3,7 +3,7 @@ import SwiftUI
 /// Narrow vertical panel showing the session's command history as a scrollable timeline.
 /// Tapping a turn scrolls the output view to the corresponding chunk.
 struct TimelineView: View {
-    @ObservedObject var timeline: SessionTimeline
+    var timeline: SessionTimeline
     let onSelectChunkID: (UUID) -> Void
 
     var body: some View {

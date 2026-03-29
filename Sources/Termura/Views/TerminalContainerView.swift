@@ -45,8 +45,8 @@ struct TerminalContainerView: NSViewRepresentable {
         // Colors are cheap to set — always apply so theme switches take effect immediately.
         applyColors(theme, to: termView)
         // Font assignment is expensive: SwiftTerm recalculates character dimensions for every cell.
-        // Guard to avoid triggering this on every parent re-render (ViewModel @Published changes
-        // cause frequent re-renders — without this guard, CPU spikes even when idle).
+        // Guard to avoid triggering this on every parent re-render (ViewModel observable
+        // property changes cause frequent re-renders — without this guard, CPU spikes when idle).
         let fontChanged = container.lastAppliedFontName != fontFamily
             || container.lastAppliedFontSize != fontSize
         if fontChanged {

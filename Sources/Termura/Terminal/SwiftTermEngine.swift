@@ -22,8 +22,9 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
 
     // MARK: - Internal state (accessible to +PTY extension)
 
-    let continuation: AsyncStream<TerminalOutputEvent>.Continuation
-    let shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
+    // nonisolated: immutable + Sendable — safe to finish() from deinit's nonisolated context.
+    nonisolated let continuation: AsyncStream<TerminalOutputEvent>.Continuation
+    nonisolated let shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
     let sessionID: SessionID
 
     // MARK: - Init

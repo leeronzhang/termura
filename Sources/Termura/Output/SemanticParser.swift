@@ -73,7 +73,9 @@ enum SemanticParser {
     ]
 
     private static func isError(_ text: String) -> Bool {
-        let lowered = String(text.lowercased().prefix(AppConfig.Output.errorDetectionPrefixLength))
+        // Take the prefix first, then lowercase only the bounded slice —
+        // avoids lowercasing the full (potentially large) text before truncation.
+        let lowered = String(text.prefix(AppConfig.Output.errorDetectionPrefixLength)).lowercased()
         return errorIndicators.contains { lowered.contains($0) }
     }
 

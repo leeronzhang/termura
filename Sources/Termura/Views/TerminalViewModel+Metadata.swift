@@ -67,7 +67,7 @@ extension TerminalViewModel {
             sessionDuration: elapsed,
             commandCount: cmdCount,
             workingDirectory: dir,
-            activeAgentCount: agentCoordinator.activeAgentCount,
+            activeAgentCount: agentCoordinator.agentStateStore?.activeAgentCount ?? 0,
             currentAgentType: agentState?.agentType,
             currentAgentStatus: agentState?.status,
             currentAgentTask: agentState?.currentTask,

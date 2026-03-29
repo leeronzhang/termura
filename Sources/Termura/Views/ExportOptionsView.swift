@@ -6,10 +6,24 @@ struct ExportOptionsView: View {
     let session: SessionRecord
     let chunks: [OutputChunk]
     @Binding var isPresented: Bool
+    /// Injected for testability; defaults to the live implementation.
+    let exportService: any SessionExportProtocol
 
     @State private var selectedFormat: ExportFormat = .html
     @State private var isExporting = false
     @State private var errorMessage: String?
+
+    init(
+        session: SessionRecord,
+        chunks: [OutputChunk],
+        isPresented: Binding<Bool>,
+        exportService: any SessionExportProtocol = SessionExportService()
+    ) {
+        self.session = session
+        self.chunks = chunks
+        self._isPresented = isPresented
+        self.exportService = exportService
+    }
 
     var body: some View {
         VStack(spacing: AppUI.Spacing.xl) {
@@ -54,8 +68,6 @@ struct ExportOptionsView: View {
     private func performExport() {
         isExporting = true
         errorMessage = nil
-        let exportService = SessionExportService()
-
         Task { @MainActor in
             defer { isExporting = false }
             do {

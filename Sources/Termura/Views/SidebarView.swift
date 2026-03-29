@@ -37,11 +37,6 @@ struct SidebarView: View {
         }
         .frame(minWidth: AppConfig.UI.sidebarMinWidth, maxWidth: AppConfig.UI.sidebarMaxWidth)
         .background(.ultraThinMaterial)
-        .onChange(of: commandRouter.toggleAgentDashboardTick) { _, _ in
-            withAnimation(.easeInOut(duration: AppUI.Animation.panel)) {
-                selectedTab = (selectedTab == .agents) ? .sessions : .agents
-            }
-        }
     }
 
     // MARK: - Tab content

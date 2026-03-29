@@ -84,9 +84,9 @@ extension TerminalAreaView {
     }
 
     /// Reflects whether the session-info panel is currently visible.
-    /// In dual-pane mode the toggle is global; in single-pane it is local to this view.
+    /// In dual-pane mode the toggle is global; in single-pane it is per-session.
     private var infoVisible: Bool {
-        commandRouter.isDualPaneActive ? commandRouter.showDualPaneMetadata : localUI.showMetadata
+        commandRouter.isDualPaneActive ? commandRouter.showDualPaneMetadata : state.showMetadata
     }
 
     @ViewBuilder
@@ -119,7 +119,7 @@ extension TerminalAreaView {
             if commandRouter.isDualPaneActive {
                 commandRouter.showDualPaneMetadata.toggle()
             } else {
-                withAnimation { localUI.showMetadata.toggle() }
+                withAnimation { state.showMetadata.toggle() }
             }
         } label: {
             Image(systemName: "info.windshield")

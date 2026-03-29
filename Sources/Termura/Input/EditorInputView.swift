@@ -10,7 +10,7 @@ final class EditorViewHandle {
 /// NSViewRepresentable wrapper around EditorTextView.
 /// Bridges SwiftUI layout with the AppKit NSTextView editor.
 struct EditorInputView: NSViewRepresentable {
-    @ObservedObject var viewModel: EditorViewModel
+    var viewModel: EditorViewModel
     /// Shared handle so callers can obtain the underlying NSTextView for focus management.
     let viewHandle: EditorViewHandle
 

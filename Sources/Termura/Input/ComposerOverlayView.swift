@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Bottom sheet composer within the terminal area.
 struct ComposerOverlayView: View {
-    @ObservedObject var editorViewModel: EditorViewModel
+    var editorViewModel: EditorViewModel
     let editorHandle: EditorViewHandle
     let isNotesActive: Bool
     let onToggleNotes: () -> Void
@@ -35,12 +35,10 @@ struct ComposerOverlayView: View {
         .frame(height: AppConfig.UI.composerMaxHeight)
         .onAppear {
             isMounted = true
-            editorViewModel.onSubmit = onDismiss
             focusEditor()
         }
         .onDisappear {
             isMounted = false
-            editorViewModel.onSubmit = nil
         }
     }
 

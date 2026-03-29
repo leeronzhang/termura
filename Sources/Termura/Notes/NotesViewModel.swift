@@ -94,14 +94,20 @@ final class NotesViewModel {
         }
     }
 
-    func deleteNote(id: NoteID) {
+    func deleteNote(id: NoteID) async {
+        // DB delete first — prevents deleted notes from resurfacing on next launch
+        // if the note was removed from memory before the DB operation completed.
+        do {
+            try await repository.delete(id: id)
+        } catch {
+            errorMessage = "Failed to delete note: \(error.localizedDescription)"
+            logger.error("DB delete failed for note \(id): \(error)")
+            return
+        }
         notes.removeAll { $0.id == id }
         if selectedNoteID == id {
             selectedNoteID = notes.first?.id
             if let next = selectedNoteID { selectNote(id: next) }
-        }
-        persistTracked { [repository] in
-            try await repository.delete(id: id)
         }
     }
 

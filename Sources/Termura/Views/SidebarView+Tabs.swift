@@ -99,7 +99,7 @@ extension SidebarView {
             currentTaskSnippet: agentState?.currentTask,
             onActivate: { activateOrSplit(session: session) },
             onRename: { sessionStore.renameSession(id: session.id, title: $0) },
-            onClose: { sessionStore.closeSession(id: session.id) },
+            onClose: { Task { await sessionStore.closeSession(id: session.id) } },
             onToggleExpand: toggleExpand,
             isExpanded: isExpanded
         )
@@ -119,7 +119,7 @@ extension SidebarView {
             }
             Divider()
             Button("Close Session", role: .destructive) {
-                sessionStore.closeSession(id: session.id)
+                Task { await sessionStore.closeSession(id: session.id) }
             }
         }
     }

@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Bindable var themeManager: ThemeManager
     @Bindable var fontSettings: FontSettings
     let themeImportService: any ThemeImportServiceProtocol
+    let shellHookInstaller: any ShellHookInstallerProtocol
 
     var body: some View {
         TabView {
@@ -20,7 +21,7 @@ struct SettingsView: View {
             FontSettingsView(fontSettings: fontSettings)
                 .tabItem { Label("Fonts", systemImage: "textformat.size") }
 
-            ShellIntegrationSettingsView()
+            ShellIntegrationSettingsView(installer: shellHookInstaller)
                 .tabItem { Label("Shell", systemImage: "terminal") }
         }
         .frame(minWidth: 520, minHeight: 360)
@@ -63,7 +64,7 @@ struct ShellIntegrationSettingsView: View {
     @State private var isInstalledZsh = false
     @State private var isInstalledBash = false
 
-    private let installer = ShellHookInstaller()
+    let installer: any ShellHookInstallerProtocol
 
     var body: some View {
         Form {

@@ -9,7 +9,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "AttachmentB
 
 /// Bottom toolbar within the Composer showing the attachment + button and queued attachment pills.
 struct AttachmentBarView: View {
-    @ObservedObject var editorViewModel: EditorViewModel
+    var editorViewModel: EditorViewModel
 
     var body: some View {
         HStack(spacing: AppUI.Spacing.sm) {

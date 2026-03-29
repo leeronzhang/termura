@@ -5,12 +5,13 @@ private let logger = Logger(subsystem: "com.termura.app", category: "EditorViewM
 
 /// ViewModel for the editor input area.
 /// Manages text state, history navigation, command submission, and file attachments.
+@Observable
 @MainActor
-final class EditorViewModel: ObservableObject {
-    // MARK: - Published state
+final class EditorViewModel {
+    // MARK: - Observable state
 
-    @Published private(set) var currentText: String = ""
-    @Published private(set) var attachments: [ComposerAttachment] = []
+    private(set) var currentText: String = ""
+    private(set) var attachments: [ComposerAttachment] = []
 
     // MARK: - Dependencies
 
@@ -18,9 +19,9 @@ final class EditorViewModel: ObservableObject {
     private let modeController: InputModeController
     private let engine: any TerminalEngine
     /// Called after a command is submitted, for agent detection / session rename.
-    var onCommandSubmit: ((String) -> Void)?
+    @ObservationIgnored var onCommandSubmit: ((String) -> Void)?
     /// Called after a command is submitted. Used by the Composer overlay to auto-dismiss.
-    var onSubmit: (() -> Void)?
+    @ObservationIgnored var onSubmit: (() -> Void)?
 
     // MARK: - Init
 

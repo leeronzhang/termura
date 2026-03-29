@@ -21,7 +21,7 @@ extension SidebarView {
 
 /// Project file tree with integrated git status.
 struct SidebarProjectContent: View {
-    @ObservedObject var viewModel: ProjectViewModel
+    var viewModel: ProjectViewModel
     var activeFilePath: String?
     var onOpenFile: ((String, FileOpenMode) -> Void)?
     @State private var selectedItemID: String?

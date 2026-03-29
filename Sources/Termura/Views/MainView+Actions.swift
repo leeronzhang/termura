@@ -22,6 +22,10 @@ extension MainView {
             handleCloseTab()
         case .createNote:
             handleCreateNote()
+        case .toggleTimeline:
+            handleToggleTimeline()
+        case .toggleAgentDashboard:
+            handleToggleAgentDashboard()
         case .resumeAgent(let agentType):
             handleAgentResume(agentType)
         case .composerPrefill(let text):
@@ -44,6 +48,27 @@ extension MainView {
         } else {
             editorVM.setText(text)
             commandRouter.toggleComposer()
+        }
+    }
+
+    /// Toggles the session-info metadata panel for the focused session.
+    /// In dual-pane mode the toggle is global (CommandRouter.showDualPaneMetadata);
+    /// in single-pane mode it is per-session (SessionViewState.showMetadata).
+    private func handleToggleTimeline() {
+        if commandRouter.isDualPaneActive {
+            withAnimation { commandRouter.showDualPaneMetadata.toggle() }
+        } else {
+            let sid = focusedPaneSessionID ?? sessionStore.activeSessionID
+            guard let sid else { return }
+            guard let viewState = viewStateManager.sessionViewStates[sid] else { return }
+            withAnimation { viewState.showMetadata.toggle() }
+        }
+    }
+
+    /// Toggles the sidebar between the Agents tab and the previously selected tab.
+    private func handleToggleAgentDashboard() {
+        withAnimation(.easeInOut(duration: AppUI.Animation.panel)) {
+            commandRouter.selectedSidebarTab = (commandRouter.selectedSidebarTab == .agents) ? .sessions : .agents
         }
     }
 
@@ -151,27 +176,30 @@ extension MainView {
     func confirmCloseActiveSession() {
         let sessionID = focusedPaneSessionID ?? sessionStore.activeSessionID
         guard let sid = sessionID else { return }
-        // If closing a session that is part of a split tab, dissolve to single.
-        if let idx = terminalItems.firstIndex(where: { $0.containsSession(sid) }) {
-            let item = terminalItems[idx]
-            if case let .split(left, right, leftTitle, rightTitle) = item {
-                // Replace split with the surviving single session tab.
-                let survivingID = left == sid ? right : left
-                let survivingTitle = left == sid ? rightTitle : leftTitle
-                let replacement = ContentTab.terminal(sessionID: survivingID, title: survivingTitle)
-                terminalItems[idx] = replacement
-                selectedContentTab = replacement
-                sessionStore.activateSession(id: survivingID)
-            } else {
-                // .terminal tab — remove it.
-                terminalItems.remove(at: idx)
-                selectedContentTab = terminalItems.last ?? openTabs.first
-                if let next = selectedContentTab?.sessionID {
-                    sessionStore.activateSession(id: next)
+        Task { @MainActor in
+            await sessionStore.closeSession(id: sid)
+            // Only update tab state if the session was actually removed from the store.
+            // closeSession returns without mutating sessions if the DB delete failed.
+            guard !sessionStore.sessions.contains(where: { $0.id == sid }) else { return }
+            // Dissolve or remove the tab that contained the closed session.
+            if let idx = terminalItems.firstIndex(where: { $0.containsSession(sid) }) {
+                let item = terminalItems[idx]
+                if case let .split(left, right, leftTitle, rightTitle) = item {
+                    let survivingID = left == sid ? right : left
+                    let survivingTitle = left == sid ? rightTitle : leftTitle
+                    let replacement = ContentTab.terminal(sessionID: survivingID, title: survivingTitle)
+                    terminalItems[idx] = replacement
+                    selectedContentTab = replacement
+                    sessionStore.activateSession(id: survivingID)
+                } else {
+                    terminalItems.remove(at: idx)
+                    selectedContentTab = terminalItems.last ?? openTabs.first
+                    if let next = selectedContentTab?.sessionID {
+                        sessionStore.activateSession(id: next)
+                    }
                 }
             }
         }
-        sessionStore.closeSession(id: sid)
     }
 }
 

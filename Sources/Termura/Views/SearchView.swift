@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SearchView: View {
-    @StateObject private var viewModel: SearchViewModel
+    @State private var viewModel: SearchViewModel
     @Binding var isPresented: Bool
     let onSelectSession: (SessionID) -> Void
     let vectorService: (any VectorSearchServiceProtocol)?
@@ -14,7 +14,7 @@ struct SearchView: View {
         onSelectSession: @escaping (SessionID) -> Void,
         vectorService: (any VectorSearchServiceProtocol)? = nil
     ) {
-        _viewModel = StateObject(wrappedValue: SearchViewModel(searchService: searchService))
+        _viewModel = State(wrappedValue: SearchViewModel(searchService: searchService))
         _isPresented = isPresented
         self.onSelectSession = onSelectSession
         self.vectorService = vectorService

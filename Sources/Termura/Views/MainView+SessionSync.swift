@@ -85,17 +85,28 @@ extension MainView {
     }
 
     func performCloseSplitPane() {
-        guard let activeID = sessionStore.activeSessionID,
-              let root = splitRoot else { return }
-        if let remaining = SplitNodeMutations.removeLeaf(root: root, targetID: activeID) {
-            if case .leaf = remaining {
-                splitRoot = nil
+        guard let activeID = sessionStore.activeSessionID else { return }
+        Task { @MainActor in
+            await sessionStore.closeSession(id: activeID)
+            // Only update split state if the session was actually removed from the store.
+            // closeSession returns without mutating sessions if the DB delete failed.
+            guard !sessionStore.sessions.contains(where: { $0.id == activeID }) else { return }
+            // Re-read splitRoot after the await — it may have changed during suspension.
+            guard let root = splitRoot else { return }
+            if let remaining = SplitNodeMutations.removeLeaf(root: root, targetID: activeID) {
+                if case .leaf = remaining {
+                    splitRoot = nil
+                } else {
+                    splitRoot = remaining
+                }
             } else {
-                splitRoot = remaining
+                splitRoot = nil
             }
-        } else {
-            splitRoot = nil
+            syncTerminalItems()
+            if let nextID = sessionStore.activeSessionID,
+               let tab = terminalItems.first(where: { $0.containsSession(nextID) }) {
+                selectedContentTab = tab
+            }
         }
-        sessionStore.closeSession(id: activeID)
     }
 }
