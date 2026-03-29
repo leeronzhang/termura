@@ -133,4 +133,18 @@ extension AppConfig {
         static let chunkMaxTokens = 256
         static let topK = 20
     }
+
+    enum AgentResume {
+        /// UserDefaults key for the auto-fill-on-restore toggle.
+        static let autoFillEnabledKey = "agentResume.autoFillEnabled"
+        /// Default value when the key has not yet been written.
+        static let autoFillDefault = true
+    }
+
+    enum Attachments {
+        /// Maximum number of attachments allowed per Composer session.
+        static let maxCount = 3
+        /// Maximum filename character length shown in a pill before truncation.
+        static let pillNameMaxLength = 22
+    }
 }

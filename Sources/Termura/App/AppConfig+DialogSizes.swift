@@ -32,4 +32,8 @@ extension AppConfig.UI {
     // Divider
     static let dividerLineWidth: Double = 1
     static let dividerHitTarget: Double = 9
+    // Attachment bar
+    static let attachmentBarHeight: Double = 40
+    static let attachmentPillHeight: Double = 28
+    static let attachmentPillCornerRadius: Double = 6
 }

@@ -42,15 +42,24 @@ enum AppConfig {
         static let maxConcurrentSessionTasks = 8
         /// Long command notification threshold
         static let longCommandThresholdSeconds: Double = 30.0
+        /// Maximum time (seconds) to wait for DB flush + handoff during app termination.
+        /// If the deadline is exceeded the app still calls reply(toApplicationShouldTerminate:)
+        /// rather than hanging until the OS force-kills the process.
+        static let terminationFlushTimeoutSeconds: Double = 2.0
         /// Visor animation duration
         static let visorAnimationSeconds: Double = 0.2
         /// Delay before dismissing onboarding sheet after install.
         static let onboardingDismissDelay: Duration = .seconds(1)
+        /// Minimum interval between SessionMetadata UI refreshes during streaming output.
+        /// Prevents per-packet SwiftUI redraws during high-throughput terminal output.
+        static let metadataRefreshThrottleSeconds: Double = 0.5
     }
 
     enum SLO {
         /// Launch time P95 target: < 2s
         static let launchSeconds: Double = 2.0
+        /// Session switch target: < 100ms
+        static let sessionSwitchSeconds: Double = 0.1
         /// Full-text search P99 target: < 200ms
         static let searchSeconds: Double = 0.2
         /// Terminal input latency target: < 16ms (1 frame)
@@ -79,7 +88,6 @@ enum AppConfig {
         static let inClauseBatchSize = 500
     }
 
-    // swiftlint:disable:next type_name
     enum AI {
         /// ASCII chars per token (4 ASCII bytes ≈ 1 BPE token for English/code text).
         static let asciiCharsPerToken = 4
@@ -113,7 +121,6 @@ enum AppConfig {
         static let notificationCooldownSeconds: Double = 60.0
     }
 
-    // swiftlint:disable:next type_name
     enum UI {
         static let sidebarMinWidth: Double = 220
         static let sidebarMaxWidth: Double = 480
@@ -152,6 +159,9 @@ enum AppConfig {
         static let expansionPersistDebounce: Duration = .milliseconds(300)
         /// Scale factor for agent icon relative to the size parameter.
         static let agentIconScaleFactor: Double = 0.75
+        /// Delay before toggling fullscreen when restoring window state on launch (200ms).
+        /// Gives the window time to become key before the fullscreen animation starts.
+        static let fullScreenRestoreDelay: Duration = .milliseconds(200)
     }
 
     enum ShellIntegration {
@@ -188,6 +198,79 @@ enum AppConfig {
     enum URLs {
         /// Harness product page — shown in the free-build upsell panel.
         static let harnessProduct = "https://termura.app/harness"
+    }
+
+    /// All UserDefaults keys used by the app. No inline string literals at call sites.
+    enum UserDefaultsKeys {
+        // MARK: - Static keys
+
+        /// Stores the list of project root paths that were open at last quit.
+        static let openProjectPaths = "openProjectPaths"
+
+        /// Persisted terminal font size in points.
+        static let terminalFontSize = "terminalFontSize"
+
+        /// Sentinel written after migrating the legacy default font size (15 pt to 16 pt).
+        static let terminalFontSizeMigratedV1 = "terminalFontSize.migrated_v1"
+
+        /// Sentinel written after the one-time global-to-per-project DB migration completes.
+        static let projectMigrationCompleted = "projectMigrationCompleted"
+
+        // MARK: - Per-project dynamic keys
+
+        /// Persisted content-tab strip state for a given project root.
+        static func openTabs(projectRoot: String) -> String {
+            "openTabs-\(sanitized(projectRoot))"
+        }
+
+        /// Persisted selected content-tab ID for a given project root.
+        static func openTabsSelected(projectRoot: String) -> String {
+            "\(openTabs(projectRoot: projectRoot)).selected"
+        }
+
+        /// Persisted file-tree expanded node IDs for a given project root.
+        static func fileTreeExpandedIDs(projectRoot: String) -> String {
+            "fileTree.expandedIDs-\(sanitized(projectRoot))"
+        }
+
+        /// Persisted "hide ignored files" toggle state for a given project root.
+        static func fileTreeHideIgnored(projectRoot: String) -> String {
+            "fileTree.hideIgnored-\(sanitized(projectRoot))"
+        }
+
+        // MARK: - Per-project window state keys
+
+        /// Persisted windowed frame for a project window, stored as an NSRect string.
+        static func windowFrame(projectURL: URL) -> String {
+            "window.frame-\(sanitized(projectURL.path))"
+        }
+
+        /// Whether the project window was in fullscreen at last quit.
+        static func windowFullScreen(projectURL: URL) -> String {
+            "window.fullScreen-\(sanitized(projectURL.path))"
+        }
+
+        // MARK: - Private
+
+        /// Sanitizes a file-system path into a safe UserDefaults key suffix.
+        /// ASCII letters, digits, `/`, `.`, `-`, `_`, and space pass through unchanged;
+        /// all other Unicode scalars are replaced with `_`.
+        /// Typical macOS paths (ASCII-only) produce the same output as the raw path,
+        /// so existing persisted values remain accessible without migration.
+        private static func sanitized(_ path: String) -> String {
+            path.unicodeScalars.map { scalar -> String in
+                let value = scalar.value
+                let isSafe = (value >= 65 && value <= 90)    // A-Z
+                          || (value >= 97 && value <= 122)   // a-z
+                          || (value >= 48 && value <= 57)    // 0-9
+                          || value == 47    // /
+                          || value == 46    // .
+                          || value == 45    // -
+                          || value == 95    // _
+                          || value == 32    // space
+                return isSafe ? String(scalar) : "_"
+            }.joined()
+        }
     }
 
 }
