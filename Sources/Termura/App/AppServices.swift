@@ -16,4 +16,7 @@ struct AppServices {
     let themeImportService: ThemeImportService
     let recentProjects: RecentProjectsService
     let metricsCollector: any MetricsCollectorProtocol
+    /// Persists session metrics to ~/.termura/metrics/ for cross-session SLO analysis.
+    let metricsPersistenceService: MetricsPersistenceService
+    let shellHookInstaller: any ShellHookInstallerProtocol
 }

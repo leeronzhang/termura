@@ -21,7 +21,6 @@ actor MockMetricsCollector: MetricsCollectorProtocol {
     }
 
     func snapshot() -> MetricsSnapshot {
-        // Derive accumulated state from recorded calls so snapshot mirrors the real implementation.
         // Counters: cumulative sum of all increments per metric.
         var counters: [MetricName: Int] = [:]
         for (name, value) in incrementCalls {
@@ -32,12 +31,46 @@ actor MockMetricsCollector: MetricsCollectorProtocol {
         for (name, value) in gaugeCalls {
             gauges[name] = value
         }
-        // Histogram counts: one entry per recordDuration call.
-        var histogramCounts: [MetricName: Int] = [:]
-        for (name, _) in durationCalls {
-            histogramCounts[name, default: 0] += 1
+        // Build HistogramStats from recorded duration calls.
+        // Local accumulator struct avoids a large-tuple lint violation.
+        struct DurationBucket {
+            var count: Int
+            var sum: Double
+            var minVal: Double
+            var maxVal: Double
+            var samples: [Double]
         }
-        return MetricsSnapshot(counters: counters, gauges: gauges, histogramCounts: histogramCounts)
+        var buckets: [MetricName: DurationBucket] = [:]
+        for (name, value) in durationCalls {
+            if var b = buckets[name] {
+                b.count += 1
+                b.sum += value
+                if value < b.minVal { b.minVal = value }
+                if value > b.maxVal { b.maxVal = value }
+                b.samples.append(value)
+                buckets[name] = b
+            } else {
+                buckets[name] = DurationBucket(count: 1, sum: value, minVal: value, maxVal: value, samples: [value])
+            }
+        }
+        let histograms: [MetricName: HistogramStats] = buckets.mapValues { bucket in
+            let sorted = bucket.samples.sorted()
+            func pct(_ proportion: Double) -> Double? {
+                guard !sorted.isEmpty else { return nil }
+                return sorted[Swift.max(0, Int(ceil(proportion * Double(sorted.count))) - 1)]
+            }
+            return HistogramStats(
+                count: bucket.count,
+                sum: bucket.sum,
+                min: bucket.minVal,
+                max: bucket.maxVal,
+                mean: bucket.sum / Double(bucket.count),
+                p50: pct(0.50),
+                p95: pct(0.95),
+                p99: pct(0.99)
+            )
+        }
+        return MetricsSnapshot(counters: counters, gauges: gauges, histograms: histograms)
     }
 
     // MARK: - Test helpers

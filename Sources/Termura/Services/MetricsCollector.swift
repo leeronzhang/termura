@@ -31,10 +31,7 @@ actor MetricsCollector: MetricsCollectorProtocol {
 
     // MARK: - Histogram storage (lightweight summary stats)
 
-    private var histogramCounts: [MetricName: Int] = [:]
-    private var histogramSums: [MetricName: Double] = [:]
-    private var histogramMins: [MetricName: Double] = [:]
-    private var histogramMaxes: [MetricName: Double] = [:]
+    private var histograms: [MetricName: HistogramEntry] = [:]
 
     // MARK: - Init
 
@@ -52,20 +49,8 @@ actor MetricsCollector: MetricsCollectorProtocol {
     }
 
     func recordDuration(_ name: MetricName, seconds: Double) {
-        histogramCounts[name, default: 0] += 1
-        histogramSums[name, default: 0] += seconds
-
-        if let current = histogramMins[name] {
-            histogramMins[name] = min(current, seconds)
-        } else {
-            histogramMins[name] = seconds
-        }
-
-        if let current = histogramMaxes[name] {
-            histogramMaxes[name] = max(current, seconds)
-        } else {
-            histogramMaxes[name] = seconds
-        }
+        // Single subscript lookup — all four histogram fields updated in one inout operation.
+        histograms[name, default: HistogramEntry()].record(seconds)
 
         // Single emitEvent — correct for post-hoc duration recording where the measured
         // interval has already elapsed. A begin/end pair would create a zero-width span
@@ -83,15 +68,23 @@ actor MetricsCollector: MetricsCollectorProtocol {
     }
 
     func snapshot() -> MetricsSnapshot {
-        let snap = MetricsSnapshot(
-            counters: counters,
-            gauges: gauges,
-            histogramCounts: histogramCounts
-        )
+        let stats = histograms.mapValues { entry -> HistogramStats in
+            HistogramStats(
+                count: entry.count,
+                sum: entry.sum,
+                min: entry.min == .infinity ? 0 : entry.min,
+                max: entry.max == -.infinity ? 0 : entry.max,
+                mean: entry.mean,
+                p50: entry.percentile(0.50),
+                p95: entry.percentile(0.95),
+                p99: entry.percentile(0.99)
+            )
+        }
+        let snap = MetricsSnapshot(counters: counters, gauges: gauges, histograms: stats)
         // Summary log at .info — called intentionally (crash context, diagnostics),
         // not on every metric event.
         logger.info(
-            "metrics.snapshot counters=\(snap.counters.count) gauges=\(snap.gauges.count) histograms=\(snap.histogramCounts.count)"
+            "metrics.snapshot counters=\(snap.counters.count) gauges=\(snap.gauges.count) histograms=\(snap.histograms.count)"
         )
         return snap
     }

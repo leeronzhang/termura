@@ -124,6 +124,20 @@ extension AppConfig {
 
     enum CrashDiagnostics {
         static let ringBufferCapacity = 50
+        /// Subdirectory under .termura/ for file-backed crash diagnostics.
+        static let diagnosticsDirectoryName: String = "diagnostics"
+        /// Filename for the file-backed crash context snapshot.
+        static let crashContextFileName: String = "crash_context.json"
+    }
+
+    enum Metrics {
+        /// Reservoir sample capacity per histogram metric for percentile computation.
+        /// Stores the most recent N samples; percentiles are computed over this window.
+        static let reservoirCapacity: Int = 256
+        /// Number of persisted session metric records retained in ~/.termura/metrics/.
+        static let persistedSessionCount: Int = 30
+        /// Subdirectory name under .termura/ for flushed metrics JSON files.
+        static let metricsDirectoryName: String = "metrics"
     }
 
     enum SemanticSearch {

@@ -37,6 +37,9 @@ enum AppConfig {
         static let searchDebounceSeconds: Double = 0.3
         /// Notes auto-save debounce
         static let notesAutoSave: Duration = .seconds(1)
+        /// Debounce before persisting session metadata changes (rename, working directory).
+        /// Intentionally separate from notesAutoSave so each can be tuned independently.
+        static let sessionMetadataDebounce: Duration = .seconds(1)
         /// Maximum concurrent background tasks per terminal session.
         /// Bounds CPU/memory usage during high-frequency output (e.g. `cat` large file).
         static let maxConcurrentSessionTasks = 8
