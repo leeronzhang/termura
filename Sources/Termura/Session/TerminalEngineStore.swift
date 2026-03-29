@@ -6,7 +6,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalEng
 /// Maps SessionID → TerminalEngine. Owns engine lifecycle.
 /// Kept separate from SessionStore to respect single-responsibility.
 @MainActor
-final class TerminalEngineStore: ObservableObject {
+final class TerminalEngineStore {
     private var engines: [SessionID: any TerminalEngine] = [:]
     private let factory: any TerminalEngineFactory
 

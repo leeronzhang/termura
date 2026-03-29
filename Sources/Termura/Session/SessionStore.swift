@@ -127,13 +127,28 @@ final class SessionStore: SessionStoreProtocol {
         return "Terminal"
     }
 
-    func closeSession(id: SessionID) {
+    func closeSession(id: SessionID) async {
+        // Verify the session exists before touching the DB.
+        guard sessions.contains(where: { $0.id == id }) else { return }
+
+        // DB delete first — prevents ghost sessions resurfacing on next launch if we
+        // removed from memory first and the delete subsequently failed.
+        if let repo = repository {
+            do {
+                try await repo.delete(id: id)
+            } catch {
+                errorMessage = "Failed to close session: \(error.localizedDescription)"
+                logger.error("DB delete failed for session \(id): \(error)")
+                return
+            }
+        }
+
+        // Re-check after the await — a concurrent operation may have already removed it.
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions.remove(at: idx)
         engineStore.terminateEngine(for: id)
         if activeSessionID == id { activeSessionID = sessions.last?.id }
         restoredSessionIDs.remove(id)
-        persistTracked { try await $0.delete(id: id) }
         _sessionDidClose.send(id)
         logger.info("Closed session \(id)")
         if let collector = metricsCollector {
@@ -214,81 +229,4 @@ final class SessionStore: SessionStoreProtocol {
         persistTracked { try await $0.reorder(ids: ids) }
     }
 
-    // MARK: - Flush
-
-    /// Awaits all in-flight persistence Tasks and force-saves current in-memory
-    /// state to capture any debounced changes not yet written to DB.
-    /// Call during app termination or project close.
-    func flushPendingWrites() async {
-        guard let repo = repository else { return }
-
-        // 1. Cancel all per-operation debounce timers — force-save below covers them.
-        for task in debounceTasks.values { task.cancel() }
-        debounceTasks.removeAll()
-
-        // 2. Await all tracked writes so prior mutations land in DB.
-        let snapshot = Array(pendingWrites.values)
-        pendingWrites.removeAll()
-        for task in snapshot {
-            await task.value
-        }
-
-        // 3. Force-save every session to capture debounced changes
-        //    (rename, workingDirectory) that may not have been flushed yet.
-        for session in sessions {
-            do {
-                try await repo.save(session)
-            } catch {
-                errorMessage = "Failed to save session: \(error.localizedDescription)"
-                logger.error("Flush save error for session \(session.id): \(error)")
-            }
-        }
-    }
-
-    // MARK: - Tracked persistence helpers
-
-    /// Persists an operation asynchronously while tracking the Task so it can
-    /// be awaited during `flushPendingWrites()`.
-    func persistTracked(
-        _ operation: @Sendable @escaping (any SessionRepositoryProtocol) async throws -> Void
-    ) {
-        guard let repo = repository else { return }
-        let id = UUID()
-        let task = Task { [weak self] in
-            defer { self?.pendingWrites.removeValue(forKey: id) }
-            do {
-                try await operation(repo)
-            } catch {
-                self?.errorMessage = "Failed to save session: \(error.localizedDescription)"
-                logger.error("Persistence error: \(error)")
-            }
-        }
-        pendingWrites[id] = task
-    }
-
-    /// Debounces a persistence operation under a named `key`.
-    /// Each unique key has its own cancellation slot, so concurrent operations
-    /// (e.g. rename and workingDirectory update for the same session) do not
-    /// cancel each other. Use the pattern `"<operation>-\(id)"` for keys.
-    func scheduleDebounced(
-        key: String,
-        _ operation: @Sendable @escaping (any SessionRepositoryProtocol) async throws -> Void
-    ) {
-        guard let repo = repository else { return }
-        debounceTasks[key]?.cancel()
-        debounceTasks[key] = Task { [weak self] in
-            do {
-                guard let self else { return }
-                try await self.clock.sleep(for: AppConfig.Runtime.notesAutoSave)
-                guard !Task.isCancelled else { return }
-                try await operation(repo)
-            } catch is CancellationError {
-                // CancellationError is expected — a newer save supersedes this one.
-                return
-            } catch {
-                self?.errorMessage = "Failed to save session: \(error.localizedDescription)"
-                logger.error("Debounced save error: \(error)")
-            }
-        }
-    }
 }

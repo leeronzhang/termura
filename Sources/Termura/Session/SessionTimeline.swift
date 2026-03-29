@@ -21,9 +21,10 @@ struct BranchPointMarker: Identifiable, Sendable {
 
 /// Maintains an ordered list of timeline turns driven by OutputChunk arrivals.
 /// Bound to an OutputStore and updated as chunks are appended.
+@Observable
 @MainActor
-final class SessionTimeline: ObservableObject {
-    @Published private(set) var turns: Deque<TimelineTurn> = []
+final class SessionTimeline {
+    private(set) var turns: Deque<TimelineTurn> = []
 
     func append(_ chunk: OutputChunk) {
         let turn = TimelineTurn(

@@ -1,19 +1,20 @@
 import Foundation
 
 /// Groups per-session view objects whose lifetimes are tied to a single terminal session.
-/// Owned by `ProjectContext.sessionViewStates` — views receive these via `@ObservedObject`.
-///
-/// This avoids the fragile `@StateObject(wrappedValue:)` in `init` pattern where shared
-/// references (OutputStore → TerminalViewModel) can desynchronise if SwiftUI re-invokes
-/// the view's initialiser without discarding the old `@StateObject` instance.
+/// Owned by `SessionViewStateManager` — views receive these via `@Bindable` for binding
+/// support while `@Observable` drives automatic SwiftUI re-renders.
+@Observable
 @MainActor
-final class SessionViewState: ObservableObject {
+final class SessionViewState {
     let outputStore: OutputStore
     var viewModel: TerminalViewModel
     var editorViewModel: EditorViewModel
     let modeController: InputModeController
     let timeline: SessionTimeline
     let editorHandle = EditorViewHandle()
+    /// Whether the session-info metadata panel is visible in single-pane mode.
+    /// In dual-pane mode, CommandRouter.showDualPaneMetadata takes precedence.
+    var showMetadata: Bool = true
 
     init(
         outputStore: OutputStore,

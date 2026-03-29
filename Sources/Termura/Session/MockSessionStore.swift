@@ -30,7 +30,7 @@ final class MockSessionStore: SessionStoreProtocol {
         return record
     }
 
-    func closeSession(id: SessionID) {
+    func closeSession(id: SessionID) async {
         closeCallCount += 1
         sessions.removeAll { $0.id == id }
         if activeSessionID == id {

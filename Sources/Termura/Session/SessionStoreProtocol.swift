@@ -3,7 +3,7 @@ import Foundation
 
 /// Observable session store — owns the list of active sessions and selection state.
 @MainActor
-protocol SessionStoreProtocol: AnyObject {
+protocol SessionStoreProtocol: AnyObject, Sendable {
     var sessions: [SessionRecord] { get }
     var activeSessionID: SessionID? { get }
     /// Fires once when persisted sessions have finished loading. Use to gate
@@ -12,7 +12,7 @@ protocol SessionStoreProtocol: AnyObject {
 
     @discardableResult
     func createSession(title: String?, shell: String?) -> SessionRecord
-    func closeSession(id: SessionID)
+    func closeSession(id: SessionID) async
     func activateSession(id: SessionID)
     func renameSession(id: SessionID, title: String)
     func updateWorkingDirectory(id: SessionID, path: String)
