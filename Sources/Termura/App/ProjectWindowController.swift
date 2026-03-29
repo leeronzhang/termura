@@ -32,11 +32,57 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         window.contentViewController = hostingController
         window.commandRouter = projectContext.commandRouter
         window.delegate = self
+
+        // Restore windowed frame AFTER contentViewController is set.
+        // setFrameAutosaveName/setFrameUsingName is unreliable here because
+        // setting contentViewController can trigger a SwiftUI layout pass that
+        // overrides the restored frame and re-saves the wrong size to UserDefaults.
+        // By restoring explicitly at the end of init, we guarantee our saved frame wins.
+        restoreWindowedFrame()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         preconditionFailure("Use init(projectContext:themeManager:fontSettings:)")
+    }
+
+    // MARK: - Window state persistence
+
+    private var windowedFrameKey: String {
+        AppConfig.UserDefaultsKeys.windowFrame(projectURL: projectContext.projectURL)
+    }
+
+    private var fullScreenStateKey: String {
+        AppConfig.UserDefaultsKeys.windowFullScreen(projectURL: projectContext.projectURL)
+    }
+
+    private func restoreWindowedFrame() {
+        guard let frameStr = UserDefaults.standard.string(forKey: windowedFrameKey) else { return }
+        let frame = NSRectFromString(frameStr)
+        guard frame.width > 0, frame.height > 0 else { return }
+        // Reject frames that would land entirely off all connected screens.
+        guard NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) else { return }
+        window?.setFrame(frame, display: false)
+    }
+
+    private func saveWindowedFrame() {
+        guard let window, !window.styleMask.contains(.fullScreen) else { return }
+        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: windowedFrameKey)
+    }
+
+    /// Restore full-screen state after the window is on screen.
+    /// Call from the opener after showWindow + makeKeyAndOrderFront.
+    func restoreFullScreenIfNeeded() {
+        guard UserDefaults.standard.bool(forKey: fullScreenStateKey),
+              let window else { return }
+        Task { @MainActor [weak window] in
+            do {
+                try await Task.sleep(for: AppConfig.UI.fullScreenRestoreDelay)
+            } catch is CancellationError {
+                return
+            }
+            window?.toggleFullScreen(nil)
+        }
     }
 
     // MARK: - NSWindowDelegate
@@ -47,6 +93,23 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         // (keyboard shortcut via performClose), TabAwareWindow routes it
         // to tab closure instead, and this delegate method is never reached.
         return true
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        saveWindowedFrame()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        saveWindowedFrame()
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        UserDefaults.standard.set(true, forKey: fullScreenStateKey)
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        UserDefaults.standard.set(false, forKey: fullScreenStateKey)
+        saveWindowedFrame()
     }
 
     // MARK: - Window factory
@@ -63,16 +126,12 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
         window.minSize = NSSize(width: AppConfig.UI.projectWindowMinWidth, height: AppConfig.UI.projectWindowMinHeight)
-        // Restore saved frame. setFrameAutosaveName auto-persists on resize/move.
-        let autosaveName = "ProjectWindow-\(title)"
-        if !window.setFrameUsingName(autosaveName) {
-            window.center()
-        }
-        window.setFrameAutosaveName(autosaveName)
-        // Ensure window is on a visible screen (guard against external monitor disconnect).
-        if !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(window.frame) }) {
-            window.center()
-        }
+        // Disable macOS system-level window tabbing so Cmd+T is not intercepted
+        // by the OS before reaching the app's "New Session" menu shortcut.
+        window.tabbingMode = .disallowed
+        // Center as default; explicit frame restoration happens in init() after
+        // contentViewController is set, so SwiftUI layout cannot override it.
+        window.center()
         return window
     }
 }

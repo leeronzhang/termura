@@ -7,10 +7,8 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ProjectMigr
 /// One-time migration that splits the global `~/.termura/termura.db` into
 /// per-project databases at `<project>/.termura/termura.db`.
 enum ProjectMigrationService {
-    private static let migratedKey = "projectMigrationCompleted"
-
     static var needsMigration: Bool {
-        guard !UserDefaults.standard.bool(forKey: migratedKey) else { return false }
+        guard !UserDefaults.standard.bool(forKey: AppConfig.UserDefaultsKeys.projectMigrationCompleted) else { return false }
         let home = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
         let legacyDB = home
             .appendingPathComponent(AppConfig.Persistence.directoryName)
@@ -44,7 +42,7 @@ enum ProjectMigrationService {
             let backupPath = legacyDir.appendingPathComponent("termura.db.migrated")
             try FileManager.default.moveItem(at: legacyPath, to: backupPath)
 
-            UserDefaults.standard.set(true, forKey: migratedKey)
+            UserDefaults.standard.set(true, forKey: AppConfig.UserDefaultsKeys.projectMigrationCompleted)
             logger.info("Migration complete — \(projects.count) projects migrated")
         } catch {
             // Non-critical: one-time migration — if it fails, legacy data remains intact at the

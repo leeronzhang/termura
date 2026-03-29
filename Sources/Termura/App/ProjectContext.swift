@@ -46,113 +46,103 @@ final class ProjectContext {
     let crashContext: CrashContext
     /// Per-project notes ViewModel — created here so views can share it via @EnvironmentObject.
     let notesViewModel: NotesViewModel
-
     /// Per-project file tree ViewModel — owned here so expanded state survives
     /// sidebar re-evaluations. Views receive it as @ObservedObject.
     let projectViewModel: ProjectViewModel
 
+    // MARK: - Feature scopes (injected into SwiftUI environment)
+
+    let sessionScope: SessionScope
+    let dataScope: DataScope
+    let projectScope: ProjectScope
+    let viewStateManager: SessionViewStateManager
+
     // MARK: - Init (private — use open(at:engineFactory:))
 
-    private init(
-        projectURL: URL,
-        databaseService: any DatabaseServiceProtocol,
-        engineStore: TerminalEngineStore,
-        sessionRepository: any SessionRepositoryProtocol,
-        noteRepository: any NoteRepositoryProtocol,
-        sessionMessageRepository: any SessionMessageRepositoryProtocol,
-        harnessEventRepository: any HarnessEventRepositoryProtocol,
-        ruleFileRepository: any RuleFileRepositoryProtocol,
-        sessionSnapshotRepository: any SessionSnapshotRepositoryProtocol,
-        sessionStore: SessionStore,
-        agentStateStore: AgentStateStore,
-        searchService: any SearchServiceProtocol,
-        sessionArchiveService: SessionArchiveService,
-        sessionHandoffService: any SessionHandoffServiceProtocol,
-        contextInjectionService: any ContextInjectionServiceProtocol,
-        experienceCodifier: ExperienceCodifier,
-        gitService: any GitServiceProtocol,
-        commandRouter: CommandRouter,
-        tokenCountingService: any TokenCountingServiceProtocol,
-        metricsCollector: any MetricsCollectorProtocol,
-        dbHealthMonitor: DBHealthMonitor,
-        crashContext: CrashContext,
-        notesViewModel: NotesViewModel,
-        projectViewModel: ProjectViewModel
-    ) {
-        self.projectURL = projectURL
-        self.databaseService = databaseService
-        self.engineStore = engineStore
-        self.sessionRepository = sessionRepository
-        self.noteRepository = noteRepository
-        self.sessionMessageRepository = sessionMessageRepository
-        self.harnessEventRepository = harnessEventRepository
-        self.ruleFileRepository = ruleFileRepository
-        self.sessionSnapshotRepository = sessionSnapshotRepository
-        self.sessionStore = sessionStore
-        self.agentStateStore = agentStateStore
-        self.searchService = searchService
-        self.sessionArchiveService = sessionArchiveService
-        self.sessionHandoffService = sessionHandoffService
-        self.contextInjectionService = contextInjectionService
-        self.experienceCodifier = experienceCodifier
-        self.gitService = gitService
-        self.commandRouter = commandRouter
-        self.tokenCountingService = tokenCountingService
-        self.metricsCollector = metricsCollector
-        self.dbHealthMonitor = dbHealthMonitor
-        self.crashContext = crashContext
-        self.notesViewModel = notesViewModel
-        self.projectViewModel = projectViewModel
+    /// Named struct ensures each of the 28 dependencies is assigned by label, preventing same-typed arg swaps.
+    private struct Components {
+        let projectURL: URL
+        let databaseService: any DatabaseServiceProtocol
+        let engineStore: TerminalEngineStore
+        let sessionRepository: any SessionRepositoryProtocol
+        let noteRepository: any NoteRepositoryProtocol
+        let sessionMessageRepository: any SessionMessageRepositoryProtocol
+        let harnessEventRepository: any HarnessEventRepositoryProtocol
+        let ruleFileRepository: any RuleFileRepositoryProtocol
+        let sessionSnapshotRepository: any SessionSnapshotRepositoryProtocol
+        let sessionStore: SessionStore
+        let agentStateStore: AgentStateStore
+        let searchService: any SearchServiceProtocol
+        let sessionArchiveService: SessionArchiveService
+        let sessionHandoffService: any SessionHandoffServiceProtocol
+        let contextInjectionService: any ContextInjectionServiceProtocol
+        let experienceCodifier: ExperienceCodifier
+        let gitService: any GitServiceProtocol
+        let commandRouter: CommandRouter
+        let tokenCountingService: any TokenCountingServiceProtocol
+        let metricsCollector: any MetricsCollectorProtocol
+        let dbHealthMonitor: DBHealthMonitor
+        let crashContext: CrashContext
+        let notesViewModel: NotesViewModel
+        let projectViewModel: ProjectViewModel
+        let sessionScope: SessionScope
+        let dataScope: DataScope
+        let projectScope: ProjectScope
+        let viewStateManager: SessionViewStateManager
+    }
+
+    private init(_ components: Components) {
+        projectURL = components.projectURL
+        databaseService = components.databaseService
+        engineStore = components.engineStore
+        sessionRepository = components.sessionRepository
+        noteRepository = components.noteRepository
+        sessionMessageRepository = components.sessionMessageRepository
+        harnessEventRepository = components.harnessEventRepository
+        ruleFileRepository = components.ruleFileRepository
+        sessionSnapshotRepository = components.sessionSnapshotRepository
+        sessionStore = components.sessionStore
+        agentStateStore = components.agentStateStore
+        searchService = components.searchService
+        sessionArchiveService = components.sessionArchiveService
+        sessionHandoffService = components.sessionHandoffService
+        contextInjectionService = components.contextInjectionService
+        experienceCodifier = components.experienceCodifier
+        gitService = components.gitService
+        commandRouter = components.commandRouter
+        tokenCountingService = components.tokenCountingService
+        metricsCollector = components.metricsCollector
+        dbHealthMonitor = components.dbHealthMonitor
+        crashContext = components.crashContext
+        notesViewModel = components.notesViewModel
+        projectViewModel = components.projectViewModel
+        sessionScope = components.sessionScope
+        dataScope = components.dataScope
+        projectScope = components.projectScope
+        viewStateManager = components.viewStateManager
     }
 
     /// Project display name (directory basename).
     var displayName: String { projectURL.lastPathComponent }
 
-    // MARK: - Feature scopes (injected into SwiftUI environment)
-
-    private(set) lazy var sessionScope = SessionScope(
-        store: sessionStore,
-        engines: engineStore,
-        agentStates: agentStateStore
-    )
-
-    private(set) lazy var dataScope = DataScope(
-        searchService: searchService,
-        vectorSearchService: nil,
-        ruleFileRepository: ruleFileRepository,
-        sessionMessageRepository: sessionMessageRepository
-    )
-
-    private(set) lazy var projectScope = ProjectScope(
-        gitService: gitService,
-        viewModel: projectViewModel
-    )
-
-    private(set) lazy var viewStateManager = SessionViewStateManager(
-        commandRouter: commandRouter,
-        sessionStore: sessionStore,
-        tokenCountingService: tokenCountingService,
-        agentStateStore: agentStateStore,
-        contextInjectionService: contextInjectionService,
-        sessionHandoffService: sessionHandoffService,
-        metricsCollector: metricsCollector
-    )
-
     // MARK: - Factory
 
     /// Opens a project, creating `<projectURL>/.termura/termura.db` if needed.
+    /// Async so that DB migration runs on the DatabaseService actor executor (off main thread).
     static func open(
         at projectURL: URL,
         engineFactory: any TerminalEngineFactory,
         tokenCountingService: any TokenCountingServiceProtocol,
         metricsCollector: (any MetricsCollectorProtocol)? = nil
-    ) throws -> ProjectContext {
+    ) async throws -> ProjectContext {
         let fallbackMetrics: any MetricsCollectorProtocol = metricsCollector ?? MetricsCollector()
-        let db = try DatabaseService(pool: DatabaseService.makePool(at: projectURL), metrics: fallbackMetrics)
+        let db = try await DatabaseService(
+            pool: DatabaseService.makePool(at: projectURL), metrics: fallbackMetrics
+        )
         let repos = makeRepositories(db: db)
         let services = makeServices(
-            repos: repos, projectURL: projectURL, engineFactory: engineFactory,
-            metricsCollector: fallbackMetrics
+            repos: repos, projectURL: projectURL,
+            engineFactory: engineFactory, metricsCollector: fallbackMetrics
         )
         let healthMonitor = DBHealthMonitor(db: db, metrics: fallbackMetrics)
         let crashCtx = CrashContext(metrics: fallbackMetrics)
@@ -162,8 +152,19 @@ final class ProjectContext {
         let url = projectURL
         Task.detached { ensureProjectGitignore(at: url) }
         logger.info("Opened project at \(projectURL.path)")
-
-        return ProjectContext(
+        let notesVM = NotesViewModel(repository: repos.note)
+        let projectVM = ProjectViewModel(
+            gitService: services.git,
+            projectRoot: projectURL.path,
+            commandRouter: services.router
+        )
+        let scopes = makeScopes(
+            repos: repos, services: services,
+            tokenCountingService: tokenCountingService,
+            metricsCollector: fallbackMetrics,
+            projectVM: projectVM
+        )
+        return ProjectContext(Components(
             projectURL: projectURL,
             databaseService: db,
             engineStore: services.engineStore,
@@ -186,18 +187,18 @@ final class ProjectContext {
             metricsCollector: fallbackMetrics,
             dbHealthMonitor: healthMonitor,
             crashContext: crashCtx,
-            notesViewModel: NotesViewModel(repository: repos.note),
-            projectViewModel: ProjectViewModel(
-                gitService: services.git,
-                projectRoot: projectURL.path,
-                commandRouter: services.router
-            )
-        )
+            notesViewModel: notesVM,
+            projectViewModel: projectVM,
+            sessionScope: scopes.session,
+            dataScope: scopes.data,
+            projectScope: scopes.project,
+            viewStateManager: scopes.viewState
+        ))
     }
 
     // MARK: - Factory helpers
 
-    private struct Repos {
+    private struct ProjectRepositories {
         let session: any SessionRepositoryProtocol
         let note: any NoteRepositoryProtocol
         let message: any SessionMessageRepositoryProtocol
@@ -206,13 +207,13 @@ final class ProjectContext {
         let snapshot: any SessionSnapshotRepositoryProtocol
     }
 
-    private static func makeRepositories(db: any DatabaseServiceProtocol) -> Repos {
+    private static func makeRepositories(db: any DatabaseServiceProtocol) -> ProjectRepositories {
         #if HARNESS_ENABLED
         let ruleRepo: any RuleFileRepositoryProtocol = RuleFileRepository(db: db)
         #else
         let ruleRepo: any RuleFileRepositoryProtocol = NullRuleFileRepository()
         #endif
-        return Repos(
+        return ProjectRepositories(
             session: SessionRepository(db: db),
             note: NoteRepository(db: db),
             message: SessionMessageRepository(db: db),
@@ -222,7 +223,7 @@ final class ProjectContext {
         )
     }
 
-    private struct Svc {
+    private struct ProjectServices {
         let engineStore: TerminalEngineStore
         let sessionStore: SessionStore
         let agentState: AgentStateStore
@@ -236,14 +237,15 @@ final class ProjectContext {
     }
 
     private static func makeServices(
-        repos: Repos, projectURL: URL, engineFactory: any TerminalEngineFactory,
+        repos: ProjectRepositories, projectURL: URL,
+        engineFactory: any TerminalEngineFactory,
         metricsCollector: any MetricsCollectorProtocol
-    ) -> Svc {
+    ) -> ProjectServices {
         let eng = TerminalEngineStore(factory: engineFactory)
         let hoff = SessionHandoffService(
             messageRepo: repos.message, harnessEventRepo: repos.harness
         )
-        return Svc(
+        return ProjectServices(
             engineStore: eng,
             sessionStore: SessionStore(
                 engineStore: eng, projectRoot: projectURL.path,
@@ -259,6 +261,40 @@ final class ProjectContext {
             injection: ContextInjectionService(handoffService: hoff),
             codifier: ExperienceCodifier(harnessEventRepo: repos.harness),
             git: GitService(), router: CommandRouter()
+        )
+    }
+
+    private struct ProjectScopes {
+        let session: SessionScope
+        let data: DataScope
+        let project: ProjectScope
+        let viewState: SessionViewStateManager
+    }
+
+    private static func makeScopes(
+        repos: ProjectRepositories,
+        services: ProjectServices,
+        tokenCountingService: any TokenCountingServiceProtocol,
+        metricsCollector: any MetricsCollectorProtocol,
+        projectVM: ProjectViewModel
+    ) -> ProjectScopes {
+        let session = SessionScope(
+            store: services.sessionStore, engines: services.engineStore, agentStates: services.agentState
+        )
+        let data = DataScope(
+            searchService: services.search, vectorSearchService: nil,
+            ruleFileRepository: repos.rule, sessionMessageRepository: repos.message
+        )
+        let viewState = SessionViewStateManager(
+            commandRouter: services.router, sessionStore: services.sessionStore,
+            tokenCountingService: tokenCountingService, agentStateStore: services.agentState,
+            contextInjectionService: services.injection, sessionHandoffService: services.handoff,
+            metricsCollector: metricsCollector
+        )
+        return ProjectScopes(
+            session: session, data: data,
+            project: ProjectScope(gitService: services.git, viewModel: projectVM),
+            viewState: viewState
         )
     }
 }

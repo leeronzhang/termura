@@ -18,6 +18,7 @@ extension AppDelegate {
             do {
                 try await Task.sleep(for: AppConfig.UI.windowConfigDelay)
             } catch is CancellationError {
+                // CancellationError is expected — window may have closed before the delay fired.
                 return
             } catch {
                 // Non-critical: window chrome is cosmetic; app functions without traffic-light tuning.
@@ -88,6 +89,7 @@ extension AppDelegate {
                 do {
                     try await Task.sleep(for: AppConfig.UI.fullScreenExitDelay)
                 } catch is CancellationError {
+                    // CancellationError is expected — window closed before exit animation completed.
                     return
                 } catch {
                     // Non-critical: fullscreen transition chrome is cosmetic.

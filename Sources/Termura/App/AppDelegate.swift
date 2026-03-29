@@ -19,7 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - UI controllers
 
     var visorController: VisorWindowController?
-    @Published var showShellOnboarding = false
 
     // MARK: - Init
 
@@ -57,7 +56,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CrashContext.clearPersistedData()
 
         setupVisorShortcut()
-        checkShellIntegrationOnboarding()
         setupMenuBarActivation()
         projectCoordinator.start(with: ProjectCoordinator.Dependencies(
             appServices: services,

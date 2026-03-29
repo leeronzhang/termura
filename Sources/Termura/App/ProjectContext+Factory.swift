@@ -4,11 +4,15 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "ProjectContext+ViewState")
 
 /// Appends `.termura/` to the project's `.gitignore` if not already present.
-func ensureProjectGitignore(at projectURL: URL) {
+/// Accepts an injectable `fileManager` for testability; defaults to `FileManager.default`.
+func ensureProjectGitignore(
+    at projectURL: URL,
+    fileManager: any FileManagerProtocol = FileManager.default
+) {
     let gitignoreURL = projectURL.appendingPathComponent(".gitignore")
     let entry = ".termura/"
 
-    if FileManager.default.fileExists(atPath: gitignoreURL.path) {
+    if fileManager.fileExists(atPath: gitignoreURL.path) {
         let contents: String
         do {
             contents = try String(contentsOf: gitignoreURL, encoding: .utf8)
@@ -31,7 +35,7 @@ func ensureProjectGitignore(at projectURL: URL) {
         }
     } else {
         let gitDir = projectURL.appendingPathComponent(".git")
-        guard FileManager.default.fileExists(atPath: gitDir.path) else { return }
+        guard fileManager.fileExists(atPath: gitDir.path) else { return }
         do {
             try (entry + "\n").write(to: gitignoreURL, atomically: true, encoding: .utf8)
             logger.info("Created .gitignore with \(entry)")
@@ -55,6 +59,8 @@ extension ProjectContext {
     func close() {
         viewStateManager.clearAll()
         engineStore.terminateAll()
+        let monitor = dbHealthMonitor
+        Task { await monitor.stop() }
         let path = projectURL.path
         logger.info("Closed project at \(path)")
     }

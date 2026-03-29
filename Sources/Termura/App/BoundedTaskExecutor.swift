@@ -67,14 +67,6 @@ final class BoundedTaskExecutor {
         tracked[id] = task
     }
 
-    /// Cancels all tracked tasks and clears the tracking dictionary.
-    func cancelAll() {
-        for task in tracked.values {
-            task.cancel()
-        }
-        tracked.removeAll()
-    }
-
     private func removeTracked(_ id: UUID) {
         tracked.removeValue(forKey: id)
     }

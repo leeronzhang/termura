@@ -33,12 +33,12 @@ struct RuleFileRecord: Identifiable, Sendable {
 
     // FNV-1a hash — no CryptoKit dependency required.
     private static func hash(_ string: String) -> String {
-        var h: UInt64 = 14_695_981_039_346_656_037
+        var fnv: UInt64 = 14_695_981_039_346_656_037
         for byte in Data(string.utf8) {
-            h ^= UInt64(byte)
-            h &*= 1_099_511_628_211
+            fnv ^= UInt64(byte)
+            fnv &*= 1_099_511_628_211
         }
-        return String(format: "%016llx", h)
+        return String(format: "%016llx", fnv)
     }
 }
 

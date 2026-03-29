@@ -1,4 +1,6 @@
+import Combine
 import Foundation
+import Observation
 
 // Feature-scoped DI containers. Each scope groups related services
 // so views declare only the dependencies they actually use.
@@ -9,6 +11,7 @@ import Foundation
 
 /// Core session lifecycle: store, terminal engines, agent state.
 /// Used by views that display or manage sessions.
+@Observable
 @MainActor
 final class SessionScope {
     let store: SessionStore
@@ -30,6 +33,7 @@ final class SessionScope {
 
 /// Data-access services: repositories and search.
 /// Used by views that query or display persisted data (sheets, harness, etc.).
+@Observable
 @MainActor
 final class DataScope {
     let searchService: any SearchServiceProtocol
@@ -56,6 +60,7 @@ final class DataScope {
 
 /// Git and project file-tree services.
 /// Used by views that display project structure or diffs.
+@Observable
 @MainActor
 final class ProjectScope {
     let gitService: any GitServiceProtocol
@@ -71,6 +76,7 @@ final class ProjectScope {
 
 /// Owns the per-session view-state cache (OutputStore, TerminalViewModel, etc.).
 /// Extracted from ProjectContext so the cache + factory logic lives in a focused type.
+@Observable
 @MainActor
 final class SessionViewStateManager {
     private(set) var sessionViewStates: [SessionID: SessionViewState] = [:]
@@ -84,6 +90,9 @@ final class SessionViewStateManager {
     private let contextInjectionService: any ContextInjectionServiceProtocol
     private let sessionHandoffService: any SessionHandoffServiceProtocol
     private let metricsCollector: (any MetricsCollectorProtocol)?
+    // @ObservationIgnored: internal Combine subscription state; views must never
+    // observe cancellables directly — mutation here must not trigger SwiftUI re-renders.
+    @ObservationIgnored private var cancellables: Set<AnyCancellable> = []
 
     init(
         commandRouter: CommandRouter,
@@ -101,6 +110,20 @@ final class SessionViewStateManager {
         self.contextInjectionService = contextInjectionService
         self.sessionHandoffService = sessionHandoffService
         self.metricsCollector = metricsCollector
+
+        sessionStore.sessionDidClose
+            .receive(on: RunLoop.main)
+            .sink { [weak self] id in
+                guard let self else { return }
+                removeViewState(for: id)
+                self.agentStateStore.remove(sessionID: id)
+                // Release per-session token accumulation data from the shared actor.
+                // Must be done here — TokenCountingService is a shared project-level
+                // actor, so its session entries are NOT freed by SessionViewState dealloc.
+                let service = self.tokenCountingService
+                Task { await service.reset(for: id) }
+            }
+            .store(in: &cancellables)
     }
 
     /// Returns (or lazily creates) the per-session view state for the given session.
@@ -158,7 +181,9 @@ final class SessionViewStateManager {
     }
 
     /// Remove cached view state when a session is closed.
+    /// Clears attachments first to ensure any temporary image files are deleted.
     func removeViewState(for sessionID: SessionID) {
+        sessionViewStates[sessionID]?.editorViewModel.clearAttachments()
         sessionViewStates[sessionID] = nil
         outputStores[sessionID] = nil
     }
@@ -176,5 +201,6 @@ final class SessionViewStateManager {
     func clearAll() {
         sessionViewStates.removeAll()
         outputStores.removeAll()
+        agentStateStore.clearAll()
     }
 }

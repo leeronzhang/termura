@@ -23,6 +23,11 @@ final class ProjectCoordinator {
 
     private var deps: Dependencies?
     private var windowObserver: NSObjectProtocol?
+    /// Tracks the chunk-handler token per open project so it can be removed on close.
+    private var chunkHandlerTokens: [URL: UUID] = [:]
+    /// Fired exactly once with the first project's CommandRouter after its window opens.
+    /// Set by AppDelegate to perform launch-time work that requires a live CommandRouter.
+    var onFirstProjectOpened: ((CommandRouter) -> Void)?
 
     // MARK: - Lifecycle
 
@@ -36,7 +41,7 @@ final class ProjectCoordinator {
     // MARK: - Project management
 
     func openProject(at url: URL) {
-        guard let deps else {
+        guard deps != nil else {
             logger.error("ProjectCoordinator not started before openProject call")
             return
         }
@@ -47,46 +52,63 @@ final class ProjectCoordinator {
             return
         }
 
-        do {
-            let context = try ProjectContext.open(
-                at: url,
-                engineFactory: deps.appServices.engineFactory,
-                tokenCountingService: deps.appServices.tokenCountingService,
-                metricsCollector: deps.appServices.metricsCollector
-            )
-            let controller = ProjectWindowController(
-                projectContext: context,
-                themeManager: deps.appServices.themeManager,
-                fontSettings: deps.appServices.fontSettings
-            )
-            projectWindows[url] = controller
-            activeContext = context
-            deps.appServices.recentProjects.addRecent(url)
-            setupChunkHandler(for: context)
-            persistOpenProjects()
-            controller.showWindow(nil)
-            if let window = controller.window {
-                window.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-                deps.windowChromeConfigurator(window)
+        // Open asynchronously so DB migration (inside DatabaseService.init) runs off the main thread.
+        Task { @MainActor [weak self] in
+            guard let self, let deps = self.deps else { return }
+            // Re-check inside task — a concurrent open for the same URL may have completed.
+            if let existing = self.projectWindows[url] {
+                existing.window?.makeKeyAndOrderFront(nil)
+                return
             }
-
-            Task { @MainActor in
-                await context.sessionStore.loadPersistedSessions()
+            do {
+                let context = try await ProjectContext.open(
+                    at: url,
+                    engineFactory: deps.appServices.engineFactory,
+                    tokenCountingService: deps.appServices.tokenCountingService,
+                    metricsCollector: deps.appServices.metricsCollector
+                )
+                let controller = ProjectWindowController(
+                    projectContext: context,
+                    themeManager: deps.appServices.themeManager,
+                    fontSettings: deps.appServices.fontSettings
+                )
+                self.projectWindows[url] = controller
+                self.activeContext = context
+                // Fire the launch-time callback exactly once after the first window opens.
+                if self.projectWindows.count == 1 {
+                    self.onFirstProjectOpened?(context.commandRouter)
+                    self.onFirstProjectOpened = nil
+                }
+                deps.appServices.recentProjects.addRecent(url)
+                self.chunkHandlerTokens[url] = self.setupChunkHandler(for: context)
+                self.persistOpenProjects()
+                controller.showWindow(nil)
+                if let window = controller.window {
+                    window.makeKeyAndOrderFront(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                    deps.windowChromeConfigurator(window)
+                }
+                controller.restoreFullScreenIfNeeded()
+                Task { @MainActor in
+                    await context.sessionStore.loadPersistedSessions()
+                }
+                logger.info("Opened project window: \(url.path)")
+            } catch {
+                logger.error("Failed to open project at \(url.path): \(error)")
+                let alert = NSAlert()
+                alert.messageText = "Failed to open project"
+                alert.informativeText = "Could not open \(url.lastPathComponent): \(error.localizedDescription)"
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
             }
-            logger.info("Opened project window: \(url.path)")
-        } catch {
-            logger.error("Failed to open project at \(url.path): \(error)")
-            let alert = NSAlert()
-            alert.messageText = "Failed to open project"
-            alert.informativeText = "Could not open \(url.lastPathComponent): \(error.localizedDescription)"
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
         }
     }
 
     func closeProject(at url: URL) {
+        if let token = chunkHandlerTokens.removeValue(forKey: url) {
+            projectWindows[url]?.projectContext.commandRouter.removeChunkHandler(token: token)
+        }
         guard let controller = projectWindows.removeValue(forKey: url) else { return }
         controller.projectContext.close()
         controller.close()
@@ -98,7 +120,6 @@ final class ProjectCoordinator {
     }
 
     func showProjectPicker() {
-        NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -106,11 +127,12 @@ final class ProjectCoordinator {
         panel.prompt = "Open Project"
         panel.message = "Choose a project directory to open in Termura"
 
+        // begin(completionHandler:) presents a standalone non-blocking panel that works
+        // correctly whether or not a project window is already open. runModal() blocks
+        // the @MainActor with a nested run loop and fails to show when a window is key.
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in
-                self?.openProject(at: url)
-            }
+            self?.openProject(at: url)
         }
     }
 
@@ -154,24 +176,39 @@ final class ProjectCoordinator {
         guard needsDefer else { return .terminateNow }
 
         // Lifecycle: termination — app waits for reply(toApplicationShouldTerminate:)
-        // before actually exiting, so these Tasks are guaranteed to complete.
+        // before actually exiting. We race the flush+handoff work against a hard deadline
+        // so a hung DB or network call never prevents the reply from being sent.
         Task.detached {
-            // Flush all pending persistence writes to guarantee DB consistency.
-            for ctx in contexts {
-                await ctx.flushPendingWrites()
-            }
-
-            for item in handoffItems {
-                do {
-                    try await item.handoff.generateHandoff(
-                        session: item.session,
-                        chunks: item.chunks,
-                        agentState: item.agentState
-                    )
-                } catch {
-                    // Non-critical: app is terminating; handoff is best-effort.
-                    logger.error("generateHandoff failed on termination: \(error)")
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for ctx in contexts { await ctx.flushPendingWrites() }
+                    for item in handoffItems {
+                        do {
+                            try await item.handoff.generateHandoff(
+                                session: item.session,
+                                chunks: item.chunks,
+                                agentState: item.agentState
+                            )
+                        } catch {
+                            // Non-critical: app is terminating; handoff is best-effort.
+                            logger.error("generateHandoff failed on termination: \(error)")
+                        }
+                    }
                 }
+                group.addTask {
+                    do {
+                        try await Task.sleep(for: .seconds(AppConfig.Runtime.terminationFlushTimeoutSeconds))
+                        // Only reached when the deadline fires before work completes.
+                        logger.warning("Termination flush deadline exceeded — replying anyway")
+                    } catch {
+                        // CancellationError thrown when work task finishes first and
+                        // TaskGroup cancels this timeout task — this is the normal fast path.
+                        logger.debug("Termination deadline cancelled (work completed on time)")
+                    }
+                }
+                // First child to finish (work or timeout) causes the group to return;
+                // TaskGroup cancels and awaits the remaining child automatically.
+                _ = await group.next()
             }
             await MainActor.run {
                 NSApp.reply(toApplicationShouldTerminate: true)
@@ -184,6 +221,10 @@ final class ProjectCoordinator {
         if let observer = windowObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        for (url, token) in chunkHandlerTokens {
+            projectWindows[url]?.projectContext.commandRouter.removeChunkHandler(token: token)
+        }
+        chunkHandlerTokens.removeAll()
         for (_, controller) in projectWindows {
             controller.projectContext.close()
         }
@@ -210,13 +251,14 @@ final class ProjectCoordinator {
 
     private func persistOpenProjects() {
         let paths = projectWindows.keys.map(\.path)
-        UserDefaults.standard.set(paths, forKey: "openProjectPaths")
+        UserDefaults.standard.set(paths, forKey: AppConfig.UserDefaultsKeys.openProjectPaths)
     }
 
-    private func setupChunkHandler(for context: ProjectContext) {
+    @discardableResult
+    private func setupChunkHandler(for context: ProjectContext) -> UUID {
         let menuBar = deps?.appServices.menuBarService
         let notification = deps?.appServices.notificationService
-        context.commandRouter.onChunkCompleted { chunk in
+        return context.commandRouter.onChunkCompleted { chunk in
             if let code = chunk.exitCode, code != 0 {
                 menuBar?.recordFailure()
             }

@@ -7,16 +7,19 @@ private let logger = Logger(subsystem: "com.termura.app", category: "RecentProje
 /// Stored at `~/.termura/recent-projects.json` — the only global (non-project-scoped) file.
 struct RecentProjectsService: Sendable {
     private let fileURL: URL
+    private let fileManager: any FileManagerProtocol
 
-    init() {
+    init(fileManager: any FileManagerProtocol = FileManager.default) {
         let home = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
         let dir = home.appendingPathComponent(AppConfig.RecentProjects.globalDirectoryName)
         fileURL = dir.appendingPathComponent(AppConfig.RecentProjects.fileName)
+        self.fileManager = fileManager
     }
 
-    /// Testable initializer allowing injection of a custom file URL.
-    init(fileURL: URL) {
+    /// Testable initializer allowing injection of a custom file URL and file manager.
+    init(fileURL: URL, fileManager: any FileManagerProtocol = FileManager.default) {
         self.fileURL = fileURL
+        self.fileManager = fileManager
     }
 
     // MARK: - Read
@@ -43,7 +46,7 @@ struct RecentProjectsService: Sendable {
     func lastOpened() -> URL? {
         guard let first = fetchRecent().first else { return nil }
         let url = URL(fileURLWithPath: first.path)
-        guard FileManager.default.fileExists(atPath: first.path) else { return nil }
+        guard fileManager.fileExists(atPath: first.path) else { return nil }
         return url
     }
 
@@ -64,8 +67,7 @@ struct RecentProjectsService: Sendable {
     }
 
     func removeRecent(_ url: URL) {
-        let list = fetchRecent().filter { $0.path != url.path }
-        save(list)
+        save(fetchRecent().filter { $0.path != url.path })
     }
 
     // MARK: - Private
@@ -73,7 +75,7 @@ struct RecentProjectsService: Sendable {
     private func save(_ list: [RecentProject]) {
         do {
             let dir = fileURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(list)
