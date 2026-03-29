@@ -13,7 +13,9 @@ private let logger = Logger(subsystem: "com.termura.app", category: "BoundedTask
 final class BoundedTaskExecutor {
     private let semaphore: AsyncSemaphore
     private let maxConcurrent: Int
-    private var tracked: [UUID: Task<Void, Never>] = [:]
+    // nonisolated(unsafe): deinit is nonisolated; last-reference guarantee makes
+    // the access free of data races — no concurrent mutation is possible at deinit time.
+    nonisolated(unsafe) private var tracked: [UUID: Task<Void, Never>] = [:]
 
     /// - Parameter maxConcurrent: Maximum tasks executing simultaneously.
     init(maxConcurrent: Int) {

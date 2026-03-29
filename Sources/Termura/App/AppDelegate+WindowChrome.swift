@@ -57,7 +57,7 @@ extension AppDelegate {
         NotificationCenter.default.addObserver(
             forName: NSWindow.didEnterFullScreenNotification,
             object: window,
-            queue: .main
+            queue: nil
         ) { [weak window] _ in
             Task { @MainActor in
                 guard let window else { return }
@@ -69,7 +69,7 @@ extension AppDelegate {
         NotificationCenter.default.addObserver(
             forName: NSWindow.willExitFullScreenNotification,
             object: window,
-            queue: .main
+            queue: nil
         ) { [weak self, weak window] _ in
             Task { @MainActor in
                 guard let self, let window else { return }
@@ -82,7 +82,7 @@ extension AppDelegate {
         NotificationCenter.default.addObserver(
             forName: NSWindow.didExitFullScreenNotification,
             object: window,
-            queue: .main
+            queue: nil
         ) { [weak self, weak window] _ in
             Task { @MainActor [weak self, weak window] in
                 guard let self, let window else { return }

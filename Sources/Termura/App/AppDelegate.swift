@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Register bundled fonts FIRST, before any UI or FontSettings init.
         Self.registerBundledFonts()
 
+        let collector = MetricsCollector()
         services = AppServices(
             engineFactory: LiveTerminalEngineFactory(),
             themeManager: ThemeManager(),
@@ -35,7 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBarService: MenuBarService(),
             themeImportService: ThemeImportService(),
             recentProjects: RecentProjectsService(),
-            metricsCollector: MetricsCollector()
+            metricsCollector: collector,
+            metricsPersistenceService: MetricsPersistenceService(metrics: collector),
+            shellHookInstaller: ShellHookInstaller()
         )
         projectCoordinator = ProjectCoordinator()
 
@@ -111,6 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         projectCoordinator.tearDown()
+        // Flush metrics to disk on clean quit for cross-session SLO analysis.
+        // Task.detached: MetricsPersistenceService is file I/O and must not run on main.
+        let persistence = services.metricsPersistenceService
+        Task.detached { await persistence.flush() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

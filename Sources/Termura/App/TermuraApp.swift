@@ -9,7 +9,8 @@ struct TermuraApp: App {
             SettingsView(
                 themeManager: appDelegate.services.themeManager,
                 fontSettings: appDelegate.services.fontSettings,
-                themeImportService: appDelegate.services.themeImportService
+                themeImportService: appDelegate.services.themeImportService,
+                shellHookInstaller: appDelegate.services.shellHookInstaller
             )
         }
         .commands {

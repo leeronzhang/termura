@@ -15,7 +15,7 @@ struct AppCommands: Commands {
     private var sessionCommands: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Session") {
-                appDelegate?.activeContext?.sessionStore.createSession(title: "Terminal")
+                appDelegate?.activeContext?.sessionScope.store.createSession(title: "Terminal")
             }
             .keyboardShortcut("t", modifiers: .command)
 
@@ -49,7 +49,7 @@ struct AppCommands: Commands {
             Divider()
 
             Button("Export Session\u{2026}") {
-                guard let id = appDelegate?.activeContext?.sessionStore.activeSessionID else { return }
+                guard let id = appDelegate?.activeContext?.sessionScope.store.activeSessionID else { return }
                 appDelegate?.activeContext?.commandRouter.requestExport(sessionID: id)
             }
             .keyboardShortcut("e", modifiers: [.command, .shift])
@@ -142,8 +142,8 @@ struct AppCommands: Commands {
         CommandGroup(after: .undoRedo) {
             Button("Jump to Next Alert") {
                 guard let ctx = appDelegate?.activeContext,
-                      let targetID = ctx.agentStateStore.nextAttentionSessionID else { return }
-                ctx.sessionStore.activateSession(id: targetID)
+                      let targetID = ctx.sessionScope.agentStates.nextAttentionSessionID else { return }
+                ctx.sessionScope.store.activateSession(id: targetID)
             }
             .keyboardShortcut("u", modifiers: [.command, .shift])
 
@@ -161,7 +161,7 @@ struct AppCommands: Commands {
         Menu("New Branch") {
             ForEach(BranchType.allCases.filter { $0 != .main }, id: \.self) { type in
                 Button(type.rawValue.capitalized) {
-                    guard let store = appDelegate?.activeContext?.sessionStore,
+                    guard let store = appDelegate?.activeContext?.sessionScope.store,
                           let id = store.activeSessionID else { return }
                     Task { @MainActor in
                         await store.createBranch(from: id, type: type)
@@ -184,21 +184,21 @@ private struct SessionSwitchCommands: View {
         ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
             if index < 9 {
                 Button(session.title) {
-                    (NSApp.delegate as? AppDelegate)?.activeContext?.sessionStore.activateSession(id: session.id)
+                    (NSApp.delegate as? AppDelegate)?.activeContext?.sessionScope.store.activateSession(id: session.id)
                 }
                 .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
             }
         }
         .onChange(of: sessionCount) { _, _ in
-            sessions = (NSApp.delegate as? AppDelegate)?.activeContext?.sessionStore.sessions ?? []
+            sessions = (NSApp.delegate as? AppDelegate)?.activeContext?.sessionScope.store.sessions ?? []
         }
         .onAppear {
-            sessions = (NSApp.delegate as? AppDelegate)?.activeContext?.sessionStore.sessions ?? []
+            sessions = (NSApp.delegate as? AppDelegate)?.activeContext?.sessionScope.store.sessions ?? []
         }
     }
 
     /// Observe the session store's published count to trigger updates.
     private var sessionCount: Int {
-        (NSApp.delegate as? AppDelegate)?.activeContext?.sessionStore.sessions.count ?? 0
+        (NSApp.delegate as? AppDelegate)?.activeContext?.sessionScope.store.sessions.count ?? 0
     }
 }

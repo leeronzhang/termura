@@ -5,6 +5,9 @@
 #if !HARNESS_ENABLED
 import Foundation
 
+// open-core base: subclassed by termura-harness, kept ObservableObject for binary compatibility.
+// Must only be injected via @ObservedObject or @StateObject — never via @Environment.
+// Remove this exception once termura-harness migrates to @Observable.
 @MainActor
 open class HarnessViewModel: ObservableObject {
     @Published var ruleFiles: [RuleFileRecord] = []

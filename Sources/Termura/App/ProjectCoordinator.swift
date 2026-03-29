@@ -90,7 +90,7 @@ final class ProjectCoordinator {
                 }
                 controller.restoreFullScreenIfNeeded()
                 Task { @MainActor in
-                    await context.sessionStore.loadPersistedSessions()
+                    await context.sessionScope.store.loadPersistedSessions()
                 }
                 logger.info("Opened project window: \(url.path)")
             } catch {
@@ -155,12 +155,12 @@ final class ProjectCoordinator {
         let contexts = projectWindows.values.map(\.projectContext)
         let handoffItems: [TerminationHandoffItem] = projectWindows.values.compactMap { controller in
             let ctx = controller.projectContext
-            guard let activeID = ctx.sessionStore.activeSessionID,
-                  let session = ctx.sessionStore.sessions.first(where: { $0.id == activeID }) else {
+            guard let activeID = ctx.sessionScope.store.activeSessionID,
+                  let session = ctx.sessionScope.store.sessions.first(where: { $0.id == activeID }) else {
                 return nil
             }
             let chunks = ctx.viewStateManager.outputStores[activeID].map { Array($0.chunks) } ?? []
-            let agentState = ctx.agentStateStore.agents[activeID]
+            let agentState = ctx.sessionScope.agentStates.agents[activeID]
                 ?? AgentState(sessionID: activeID, agentType: .unknown)
             return TerminationHandoffItem(
                 handoff: ctx.sessionHandoffService,
@@ -210,9 +210,7 @@ final class ProjectCoordinator {
                 // TaskGroup cancels and awaits the remaining child automatically.
                 _ = await group.next()
             }
-            await MainActor.run {
-                NSApp.reply(toApplicationShouldTerminate: true)
-            }
+            Task { @MainActor in NSApp.reply(toApplicationShouldTerminate: true) }
         }
         return .terminateLater
     }
@@ -236,7 +234,7 @@ final class ProjectCoordinator {
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: nil,
-            queue: .main
+            queue: nil
         ) { [weak self] notification in
             guard let window = notification.object as? NSWindow else { return }
             Task { @MainActor [weak self] in

@@ -39,6 +39,8 @@ final class CommandRouter {
         case toggleDualPane
         case closeTab
         case createNote
+        case toggleTimeline
+        case toggleAgentDashboard
         /// Pre-fills the Composer with the agent's default launch command and opens it.
         /// Fired once per restored session when the first shell prompt is detected.
         case resumeAgent(AgentType)
@@ -63,8 +65,6 @@ final class CommandRouter {
 
     // MARK: - Per-terminal toggles
 
-    var toggleTimelineTick: UInt = 0
-    var toggleAgentDashboardTick: UInt = 0
     var showComposer: Bool = false
 
     /// Closure injected by TerminalAreaView to insert text into the active Composer editor.
@@ -130,11 +130,11 @@ final class CommandRouter {
     }
 
     func toggleTimeline() {
-        toggleTimelineTick &+= 1
+        pendingCommand = .toggleTimeline
     }
 
     func toggleAgentDashboard() {
-        toggleAgentDashboardTick &+= 1
+        pendingCommand = .toggleAgentDashboard
     }
 
     func toggleDualPane() {

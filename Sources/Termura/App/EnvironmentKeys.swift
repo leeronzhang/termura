@@ -118,7 +118,8 @@ private struct ProjectScopeKey: @preconcurrency EnvironmentKey {
         viewModel: ProjectViewModel(
             gitService: MockGitService(),
             projectRoot: "",
-            commandRouter: CommandRouter()
+            commandRouter: CommandRouter(),
+            fileTreeService: MockFileTreeService()
         )
     )
 }
