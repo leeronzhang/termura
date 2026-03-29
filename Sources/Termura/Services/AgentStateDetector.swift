@@ -90,14 +90,15 @@ actor AgentStateDetector {
     // MARK: - Output Analysis
 
     /// Analyze a batch of terminal output to update agent status.
-    /// Evaluates the status rule table top-to-bottom; first match wins.
-    /// Applies cooldown and state-transition constraints to suppress false positives.
+    /// Rule table evaluated top-to-bottom (first match wins); cooldown and state-transition constraints suppress noise.
+    @discardableResult
     func analyzeOutput(_ text: String) -> AgentStatus {
         guard detectedType != nil else { return .idle }
 
         let sample = String(text.suffix(AppConfig.Agent.outputAnalysisSuffixLength))
+        let lowercasedSample = sample.lowercased()
 
-        guard let matched = evaluateRules(sample),
+        guard let matched = evaluateRules(sample, lowercased: lowercasedSample),
               matched != currentStatus else {
             return currentStatus
         }
@@ -283,10 +284,15 @@ actor AgentStateDetector {
         StatusRule(.completed, .contains("\u{2713}"), label: "checkmark")
     ]
 
-    /// Evaluates status rules against a text sample.
-    /// Returns the status of the first matching rule, or nil if no rule matches.
-    private func evaluateRules(_ text: String) -> AgentStatus? {
-        for rule in Self.statusRules where rule.matches(text) {
+    /// Pre-computed rule subsets per state — only rules leading to a valid transition are kept.
+    private static let reachableRules: [AgentStatus: [StatusRule]] = validTransitions.reduce(into: [:]) { map, entry in
+        map[entry.key] = statusRules.filter { entry.value.contains($0.status) }
+    }
+
+    /// Evaluates only the rules reachable from `currentStatus`, using a pre-lowercased sample.
+    private func evaluateRules(_ text: String, lowercased lowercasedText: String) -> AgentStatus? {
+        let rules = Self.reachableRules[currentStatus] ?? Self.statusRules
+        for rule in rules where rule.matchesFast(text, lowercased: lowercasedText) {
             return rule.status
         }
         return nil

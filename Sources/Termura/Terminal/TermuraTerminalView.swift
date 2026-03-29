@@ -15,6 +15,9 @@ final class TermuraTerminalView: LocalProcessTerminalView {
     /// Called synchronously on the main queue for every PTY read batch.
     /// @MainActor ensures this closure is only set and invoked on the main thread.
     var onDataReceived: (@MainActor (ArraySlice<UInt8>) -> Void)?
+    /// Called when the user triggers a context action (Quote / Ask) from the right-click menu.
+    /// Receives the pre-formatted composer prefill string. Always invoked on the main actor.
+    var onContextAction: (@MainActor (String) -> Void)?
 
     // MARK: - Force-selection state
 
@@ -114,7 +117,15 @@ final class TermuraTerminalView: LocalProcessTerminalView {
 
     // MARK: - Context menu
 
+    /// Cached selected text captured at menu-build time.
+    /// Right-click does not clear the SwiftTerm selection, but by the time a menu item
+    /// fires its action the selection may already be gone — so we snapshot it here.
+    private var menuCachedSelection: String = ""
+
     override func menu(for event: NSEvent) -> NSMenu? {
+        menuCachedSelection = getSelection() ?? ""
+        let hasSelection = !menuCachedSelection.isEmpty
+
         let menu = NSMenu()
 
         let copyItem = menu.addItem(
@@ -149,10 +160,51 @@ final class TermuraTerminalView: LocalProcessTerminalView {
         )
         clearItem.target = self
 
+        if hasSelection {
+            menu.addItem(.separator())
+
+            let quoteItem = menu.addItem(
+                withTitle: "Quote in Composer",
+                action: #selector(performQuote),
+                keyEquivalent: ""
+            )
+            quoteItem.target = self
+
+            let askItem = menu.addItem(
+                withTitle: "Ask About This",
+                action: #selector(performAsk),
+                keyEquivalent: ""
+            )
+            askItem.target = self
+        }
+
         return menu
     }
 
     @objc private func performClearScreen() {
         send(txt: "clear\n")
+    }
+
+    @objc private func performQuote() {
+        let text = formatAsQuote(menuCachedSelection)
+        guard !text.isEmpty else { return }
+        onContextAction?(text)
+    }
+
+    @objc private func performAsk() {
+        let text = formatAsQuote(menuCachedSelection) + "Question: "
+        guard !menuCachedSelection.isEmpty else { return }
+        onContextAction?(text)
+    }
+
+    /// Prefixes each line of `text` with "> " and appends two newlines.
+    /// Trims leading/trailing whitespace so the quote block is clean.
+    private func formatAsQuote(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let quoted = trimmed.components(separatedBy: "\n")
+            .map { "> \($0)" }
+            .joined(separator: "\n")
+        return quoted + "\n\n"
     }
 }

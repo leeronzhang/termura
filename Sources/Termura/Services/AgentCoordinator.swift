@@ -8,18 +8,24 @@ private let logger = Logger(subsystem: "com.termura.app", category: "AgentCoordi
 ///
 /// Extracted from `TerminalViewModel` to reduce its init parameter count and
 /// isolate agent-related responsibilities behind a single facade.
+///
+/// Alert state is NOT owned here — callbacks propagate detections to the owning
+/// TerminalViewModel, which holds the @Published properties observed by views.
 @MainActor
-final class AgentCoordinator: ObservableObject {
-    // MARK: - Published state (forwarded to TerminalViewModel via Combine)
+final class AgentCoordinator {
+    // MARK: - Alert callbacks (wired by TerminalViewModel in init)
 
-    @Published var pendingRiskAlert: RiskAlert?
-    @Published var contextWindowAlert: ContextWindowAlert?
+    /// Called on MainActor when a risk alert is detected. TerminalViewModel applies
+    /// the deduplication guard (skip if alert already pending) and sets its own state.
+    var onRiskAlertDetected: ((RiskAlert) -> Void)?
+    /// Called on MainActor when a context-window alert is computed.
+    var onContextWindowAlertDetected: ((ContextWindowAlert) -> Void)?
 
     // MARK: - Dependencies
 
     let agentDetector: AgentStateDetector
     let contextWindowMonitor: ContextWindowMonitor
-    weak var agentStateStore: AgentStateStore?
+    private let agentStateStore: (any AgentStateStoreProtocol)?
     private let metricsCollector: (any MetricsCollectorProtocol)?
 
     // MARK: - Agent detection state
@@ -32,7 +38,7 @@ final class AgentCoordinator: ObservableObject {
 
     init(
         sessionID: SessionID,
-        agentStateStore: AgentStateStore? = nil,
+        agentStateStore: (any AgentStateStoreProtocol)? = nil,
         metricsCollector: (any MetricsCollectorProtocol)? = nil
     ) {
         agentDetector = AgentStateDetector(sessionID: sessionID)
@@ -41,24 +47,26 @@ final class AgentCoordinator: ObservableObject {
         self.metricsCollector = metricsCollector
     }
 
+    // MARK: - Store accessors
+
+    /// The number of active agents across all sessions, or 0 if the store is absent.
+    var activeAgentCount: Int { agentStateStore?.activeAgentCount ?? 0 }
+
     // MARK: - Agent detection from commands
 
     /// Detect agent type from a submitted command and update session/agent state.
+    /// Callers must spawn this inside a tracked task (e.g. `spawnTracked`).
     func detectAgentFromCommand(
         _ command: String,
         sessionStore: any SessionStoreProtocol,
         sessionID: SessionID
-    ) {
-        let detector = agentDetector
-        let stateStore = agentStateStore
-        Task { @MainActor in
-            guard let agentType = await detector.detectFromCommand(command) else { return }
-            let agentState = await detector.buildState()
-            sessionStore.renameSession(id: sessionID, title: agentType.displayName)
-            sessionStore.setAgentType(id: sessionID, type: agentType)
-            if let state = agentState {
-                stateStore?.update(state: state)
-            }
+    ) async {
+        guard let agentType = await agentDetector.detectFromCommand(command) else { return }
+        let agentState = await agentDetector.buildState()
+        sessionStore.renameSession(id: sessionID, title: agentType.displayName)
+        sessionStore.setAgentType(id: sessionID, type: agentType)
+        if let state = agentState {
+            agentStateStore?.update(state: state)
         }
     }
 
@@ -131,11 +139,37 @@ final class AgentCoordinator: ObservableObject {
     }
 
     /// Scan terminal output for agent signatures and update session when detected.
+    ///
+    /// All shared-state mutations (buffer, flags) are confined to the synchronous
+    /// `bufferAndDetect` helper so no interleaving task can observe intermediate state
+    /// across suspension points. The async section uses only the locally captured type.
     func detectAgentFromOutput(
         _ text: String,
         sessionStore: any SessionStoreProtocol,
         sessionID: SessionID
     ) async {
+        guard let detectedType = bufferAndDetect(text) else { return }
+
+        if let collector = metricsCollector {
+            Task { await collector.increment(.agentDetected) }
+        }
+        sessionStore.renameSession(id: sessionID, title: detectedType.displayName)
+        sessionStore.setAgentType(id: sessionID, type: detectedType)
+        await agentDetector.setDetectedType(detectedType)
+        if let state = await agentDetector.buildState() {
+            agentStateStore?.update(state: state)
+        }
+    }
+
+    /// Appends `text` to the rolling detection buffer, trims it to the configured
+    /// suffix window, then returns the first newly matched agent type.
+    /// Returns `nil` if the buffer yields no match, or if the match duplicates the
+    /// already-known agent type (dedup guard).
+    ///
+    /// This is a **synchronous** function with no suspension points. All writes to
+    /// `agentDetectionBuffer`, `hasDetectedAgentFromOutput`, and `lastDetectedAgentType`
+    /// happen here, atomically from the perspective of the @MainActor executor.
+    private func bufferAndDetect(_ text: String) -> AgentType? {
         agentDetectionBuffer += text
         let maxLen = AppConfig.Agent.outputAnalysisSuffixLength
         if agentDetectionBuffer.count > maxLen {
@@ -143,20 +177,12 @@ final class AgentCoordinator: ObservableObject {
         }
         let lower = agentDetectionBuffer.lowercased()
         for (pattern, type) in Self.outputSignatures where lower.contains(pattern) {
-            if hasDetectedAgentFromOutput, lastDetectedAgentType == type { return }
+            if hasDetectedAgentFromOutput, lastDetectedAgentType == type { return nil }
             hasDetectedAgentFromOutput = true
             lastDetectedAgentType = type
-            if let collector = metricsCollector {
-                Task { await collector.increment(.agentDetected) }
-            }
-            sessionStore.renameSession(id: sessionID, title: type.displayName)
-            sessionStore.setAgentType(id: sessionID, type: type)
-            await agentDetector.setDetectedType(type)
-            if let state = await agentDetector.buildState() {
-                agentStateStore?.update(state: state)
-            }
-            return
+            return type
         }
+        return nil
     }
 
     // MARK: - Output analysis (background)
@@ -171,7 +197,7 @@ final class AgentCoordinator: ObservableObject {
     ) async {
         let detector = agentDetector
 
-        _ = await detector.analyzeOutput(stripped)
+        await detector.analyzeOutput(stripped)
         if let stats = await detector.parseTokenStats(stripped) {
             if let cached = stats.cachedTokens, cached > 0 {
                 await tokenCountingService.accumulateCached(for: sessionID, count: cached)
@@ -182,32 +208,50 @@ final class AgentCoordinator: ObservableObject {
         }
         if let risk = InterventionService.detectRisk(in: stripped) {
             await MainActor.run { @Sendable [weak self] in
-                self?.pendingRiskAlert = risk
+                self?.onRiskAlertDetected?(risk)
             }
         }
     }
 
     // MARK: - Agent state update
 
-    /// Build agent state from detector + token service, update store, evaluate context alerts.
-    func updateAgentState(
+    /// Compute agent state and context alert off the main actor.
+    /// All async work (token breakdown, actor hops) runs on background executors.
+    /// Call `applyAgentStateUpdate(state:alert:)` on main to commit the result.
+    nonisolated func computeAgentStateUpdate(
         tokenCountingService: any TokenCountingServiceProtocol,
         sessionID: SessionID
-    ) async {
+    ) async -> (state: AgentState, alert: ContextWindowAlert?)? {
         let detector = agentDetector
+        let monitor = contextWindowMonitor
         let breakdown = await tokenCountingService.tokenBreakdown(for: sessionID)
-        guard var state = await detector.buildState(tokenCount: breakdown.totalTokens) else { return }
+        guard var state = await detector.buildState(tokenCount: breakdown.totalTokens) else { return nil }
         state.inputTokens = breakdown.inputTokens
         state.outputTokens = breakdown.outputTokens
         state.cachedTokens = breakdown.cachedTokens
-        agentStateStore?.update(state: state)
-
         let hasParsedData = state.cachedTokens > 0 || state.estimatedCostUSD > 0
-        if hasParsedData {
-            let monitor = contextWindowMonitor
-            if let alert = await monitor.evaluate(state: state) {
-                contextWindowAlert = alert
-            }
+        let alert: ContextWindowAlert? = hasParsedData ? await monitor.evaluate(state: state) : nil
+        return (state, alert)
+    }
+
+    /// Apply a previously computed agent state update. Must be called on the main actor.
+    func applyAgentStateUpdate(state: AgentState, alert: ContextWindowAlert?) {
+        agentStateStore?.update(state: state)
+        if let alert {
+            onContextWindowAlertDetected?(alert)
         }
+    }
+
+    // MARK: - Execution finish reset
+
+    /// Resets all agent detection state when the shell signals execution has finished (OSC 133 D).
+    /// Without this, agent status badges remain in a non-idle state after the agent exits,
+    /// keeping repeatForever animations running and causing continuous CPU drain when idle.
+    func resetOnExecutionFinished(sessionID: SessionID) async {
+        await agentDetector.reset()
+        agentStateStore?.remove(sessionID: sessionID)
+        hasDetectedAgentFromOutput = false
+        lastDetectedAgentType = nil
+        agentDetectionBuffer = ""
     }
 }

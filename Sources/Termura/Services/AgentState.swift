@@ -35,6 +35,20 @@ enum AgentType: String, Sendable, Codable, CaseIterable {
         case .unknown: AppConfig.ContextWindow.unknownLimit
         }
     }
+
+    /// Shell command used to launch this agent in a fresh terminal session.
+    /// Empty for `.unknown`; callers must guard against an empty result.
+    var defaultLaunchCommand: String {
+        switch self {
+        case .claudeCode: return "claude"
+        case .codex:      return "codex"
+        case .aider:      return "aider"
+        case .openCode:   return "opencode"
+        case .gemini:     return "gemini"
+        case .pi:         return "pi"
+        case .unknown:    return ""
+        }
+    }
 }
 
 /// Current operational status of a detected agent.

@@ -58,6 +58,7 @@ extension TerminalViewModel {
         let cursorLine = lines.last?.trimmingCharacters(in: .whitespaces) ?? ""
         if isShellPromptLine(cursorLine) {
             isInteractivePrompt = false
+            triggerAgentResumeIfNeeded()
         }
     }
 
@@ -87,6 +88,7 @@ extension TerminalViewModel {
             do {
                 try await self?.clock.sleep(for: AppConfig.UI.promptRecheckDelay)
             } catch is CancellationError {
+                // CancellationError is expected — a newer output event supersedes this check.
                 return
             } catch {
                 // Non-critical: prompt recheck is a debounced UI hint; missing it is imperceptible.

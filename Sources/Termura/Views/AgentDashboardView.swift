@@ -3,14 +3,13 @@ import SwiftUI
 /// Multi-agent overview panel showing all detected agents and their statuses.
 /// Accessible via Cmd+Shift+A or the Agents sidebar tab.
 struct AgentDashboardView: View {
-    @ObservedObject var agentStore: AgentStateStore
+    var agentStore: AgentStateStore
     let sessionTitles: [SessionID: String]
     let onJumpToSession: (SessionID) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(spacing: 0) {
             header
-            Divider()
             ScrollView(.vertical, showsIndicators: false) {
                 if agentStore.agents.isEmpty {
                     emptyState
@@ -23,7 +22,6 @@ struct AgentDashboardView: View {
                 summaryFooter
             }
         }
-        .background(.ultraThinMaterial)
     }
 
     // MARK: - Header
@@ -50,7 +48,7 @@ struct AgentDashboardView: View {
             }
         }
         .padding(.vertical, AppUI.Spacing.smMd)
-        .padding(.horizontal, AppUI.Spacing.sm)
+        .padding(.horizontal, AppUI.Spacing.lg)
     }
 
     private var sortedAgents: [AgentState] {
@@ -158,7 +156,6 @@ struct AgentDashboardView: View {
                 .font(AppUI.Font.label)
                 .foregroundColor(.secondary)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, AppUI.Spacing.xxxxl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

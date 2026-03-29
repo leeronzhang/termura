@@ -1,16 +1,18 @@
 import Foundation
+import Observation
 import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "AgentStateStore")
 
 /// Aggregates agent states across all active sessions.
 /// Provides the data layer for the multi-agent dashboard and notification system.
+@Observable
 @MainActor
-final class AgentStateStore: ObservableObject, AgentStateStoreProtocol {
-    // MARK: - Published state
+final class AgentStateStore: AgentStateStoreProtocol {
+    // MARK: - Observable state
 
     /// All detected agent states, keyed by session ID.
-    @Published private(set) var agents: [SessionID: AgentState] = [:]
+    private(set) var agents: [SessionID: AgentState] = [:]
 
     // MARK: - Computed
 

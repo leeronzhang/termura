@@ -43,7 +43,11 @@ struct AgentStatusBadgeView: View {
                 isPulsing = true
             }
         } else {
-            isPulsing = false
+            // Wrap in withAnimation to interrupt the Core Animation repeatForever layer.
+            // Without this, CA may continue driving the animation after the view value change.
+            withAnimation(.easeOut(duration: AppUI.Animation.fadeOut)) {
+                isPulsing = false
+            }
         }
     }
 

@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import Foundation
 import OSLog
 
@@ -37,12 +36,26 @@ final class TerminalViewModel: ObservableObject {
     // MARK: - Internal state
 
     /// Debounced re-check for prompt detection after PTY output settles.
+    /// Internal (not private) so TerminalViewModel+PromptDetection.swift can access it;
+    /// no external code outside the TerminalViewModel family should touch this.
     var promptRecheckTask: Task<Void, Never>?
+    /// Throttled metadata refresh: independent slot from promptRecheckTask (CLAUDE.md §6 debounce rule).
+    /// Internal so TerminalViewModel+Metadata.swift can manage the throttle lifecycle.
+    var pendingMetadataRefreshTask: Task<Void, Never>?
+    /// Timestamp of the last completed metadata refresh, used for throttle calculation.
+    /// Internal so TerminalViewModel+Metadata.swift can update it after each refresh.
+    var lastMetadataRefreshDate: Date = .distantPast
     /// Bounded executor for background tasks.
     private let taskExecutor: BoundedTaskExecutor
     private var streamTask: Task<Void, Never>?
     private var shellTask: Task<Void, Never>?
-    private var cancellables: Set<AnyCancellable> = []
+
+    // MARK: - Agent resume
+
+    /// Called at most once when the first shell prompt is detected in a restored session.
+    /// Set by TerminalAreaView; nil-ed and guarded after first fire.
+    var onShellPromptReadyForResume: (() -> Void)?
+    private var hasTriggeredAgentResume = false
 
     // MARK: - Init
 
@@ -72,15 +85,16 @@ final class TerminalViewModel: ObservableObject {
             workingDirectory: initialWorkingDirectory
         )
 
-        // Forward @Published state from AgentCoordinator to keep view bindings stable.
-        agentCoordinator.$pendingRiskAlert
-            .receive(on: RunLoop.main)
-            .sink { [weak self] alert in self?.pendingRiskAlert = alert }
-            .store(in: &cancellables)
-        agentCoordinator.$contextWindowAlert
-            .receive(on: RunLoop.main)
-            .sink { [weak self] alert in self?.contextWindowAlert = alert }
-            .store(in: &cancellables)
+        // Wire AgentCoordinator callbacks — coordinator detects, ViewModel owns the state.
+        agentCoordinator.onRiskAlertDetected = { [weak self] risk in
+            // Only surface a new alert if none is already pending — prevents continuous
+            // agent output from re-opening the sheet immediately after dismiss.
+            guard self?.pendingRiskAlert == nil else { return }
+            self?.pendingRiskAlert = risk
+        }
+        agentCoordinator.onContextWindowAlertDetected = { [weak self] alert in
+            self?.contextWindowAlert = alert
+        }
 
         subscribeToOutput()
         subscribeToShellEvents()
@@ -90,6 +104,7 @@ final class TerminalViewModel: ObservableObject {
         streamTask?.cancel()
         shellTask?.cancel()
         promptRecheckTask?.cancel()
+        pendingMetadataRefreshTask?.cancel()
     }
 
     func spawnTracked(_ operation: @escaping @MainActor () async -> Void) {
@@ -98,6 +113,15 @@ final class TerminalViewModel: ObservableObject {
 
     func spawnDetachedTracked(_ operation: @Sendable @escaping () async -> Void) {
         taskExecutor.spawnDetached(operation)
+    }
+
+    /// Fires `onShellPromptReadyForResume` exactly once per session lifecycle.
+    /// Called from both OSC 133 (`promptStarted`) and screen-buffer fallback paths.
+    func triggerAgentResumeIfNeeded() {
+        guard !hasTriggeredAgentResume else { return }
+        hasTriggeredAgentResume = true
+        onShellPromptReadyForResume?()
+        onShellPromptReadyForResume = nil
     }
 
     // MARK: - Public
@@ -114,16 +138,22 @@ final class TerminalViewModel: ObservableObject {
 
     /// Detect agent type from a submitted command.
     func detectAgentFromCommand(_ command: String) {
-        agentCoordinator.detectAgentFromCommand(
-            command,
-            sessionStore: sessionStore,
-            sessionID: sessionID
-        )
+        let coordinator = agentCoordinator
+        let store = sessionStore
+        let sid = sessionID
+        spawnTracked {
+            await coordinator.detectAgentFromCommand(command, sessionStore: store, sessionID: sid)
+        }
     }
 
     func resize(columns: UInt16, rows: UInt16) {
         let eng = engine
         spawnTracked { await eng.resize(columns: columns, rows: rows) }
+    }
+
+    /// Dismiss the pending risk alert. ViewModel is the single source of truth for alert state.
+    func dismissRiskAlert() {
+        pendingRiskAlert = nil
     }
 
     // MARK: - Output subscription
@@ -173,19 +203,32 @@ final class TerminalViewModel: ObservableObject {
         let coordinator = agentCoordinator
         let tokenService = outputProcessor.tokenCountingService
 
-        detectPromptFromScreenBuffer()
+        // Debounced prompt check: schedulePromptRecheck already cancels-and-replaces,
+        // so the immediate detectPromptFromScreenBuffer() call on every packet was redundant.
         schedulePromptRecheck()
-        // detectAgentFromOutput uses @MainActor SessionStoreProtocol — must stay on main actor.
-        await coordinator.detectAgentFromOutput(stripped, sessionStore: sessionStore, sessionID: sid)
+
+        // Once the agent type is confirmed from output, skip further per-packet scanning.
+        // bufferAndDetect is O(bufferLen) due to lowercased(); skipping saves that work entirely.
+        if !coordinator.hasDetectedAgentFromOutput {
+            await coordinator.detectAgentFromOutput(stripped, sessionStore: sessionStore, sessionID: sid)
+        }
 
         spawnDetachedTracked { [weak self] in
             await processor.processDataOutput(text, stripped: stripped, sessionID: sid)
             await coordinator.analyzeOutput(stripped, sessionID: sid, tokenCountingService: tokenService)
-            await coordinator.updateAgentState(
+            let update = await coordinator.computeAgentStateUpdate(
                 tokenCountingService: processor.tokenCountingService,
                 sessionID: sid
             )
-            await self?.refreshMetadata()
+            // Single hop to main for all state writes + UI refresh (Principle 3).
+            Task { @MainActor [weak self] in
+                if let (state, alert) = update {
+                    coordinator.applyAgentStateUpdate(state: state, alert: alert)
+                }
+                // Throttled: at most one SwiftUI refresh per metadataRefreshThrottleSeconds
+                // during streaming. Shell events bypass this and call refreshMetadata() directly.
+                self?.scheduleMetadataRefresh()
+            }
         }
     }
 
@@ -206,6 +249,7 @@ final class TerminalViewModel: ObservableObject {
         case .promptStarted:
             isInteractivePrompt = false
             modeController.switchToEditor()
+            triggerAgentResumeIfNeeded()
             sessionServices.injectContextIfNeeded(
                 workingDirectory: currentMetadata.workingDirectory,
                 engine: engine,
@@ -214,6 +258,9 @@ final class TerminalViewModel: ObservableObject {
         case .executionFinished:
             isInteractivePrompt = false
             modeController.switchToEditor()
+            // Reset agent state so badges stop animating after the agent process exits.
+            // Without this, repeatForever animations keep running, consuming ~80% CPU when idle.
+            await agentCoordinator.resetOnExecutionFinished(sessionID: sessionID)
         case .executionStarted:
             isInteractivePrompt = false
             modeController.switchToPassthrough()
@@ -222,51 +269,9 @@ final class TerminalViewModel: ObservableObject {
             break
         }
 
-        if let chunk = await outputProcessor.handleShellEvent(event) {
-            _ = chunk
+        if await outputProcessor.handleShellEvent(event) != nil {
             await refreshMetadata()
         }
     }
 
-    // MARK: - Metadata
-
-    func refreshMetadata(workingDirectory: String? = nil) async {
-        let service = outputProcessor.tokenCountingService
-        let sid = sessionID
-        let breakdown = await service.tokenBreakdown(for: sid)
-        let tokens = breakdown.totalTokens
-        let elapsed = Date().timeIntervalSince(sessionStartTime)
-        let cmdCount = outputProcessor.outputStore.chunks.count
-        let dir = workingDirectory ?? currentMetadata.workingDirectory
-        let agentDet = agentCoordinator.agentDetector
-        let agentState = await agentDet.buildState()
-
-        let ctxLimit = agentState?.contextWindowLimit ?? 0
-        let ctxFraction = agentState?.contextUsageFraction ?? 0
-        let agentElapsed = agentState.map {
-            Date().timeIntervalSince($0.startedAt)
-        } ?? 0
-        let cost = agentState?.estimatedCostUSD ?? 0
-
-        currentMetadata = SessionMetadata(
-            sessionID: sessionID,
-            estimatedTokenCount: tokens,
-            totalCharacterCount: tokens * AppConfig.AI.asciiCharsPerToken,
-            inputTokenCount: breakdown.inputTokens,
-            outputTokenCount: breakdown.outputTokens,
-            cachedTokenCount: breakdown.cachedTokens,
-            estimatedCostUSD: cost,
-            sessionDuration: elapsed,
-            commandCount: cmdCount,
-            workingDirectory: dir,
-            activeAgentCount: agentCoordinator.agentStateStore?.activeAgentCount ?? 0,
-            currentAgentType: agentState?.agentType,
-            currentAgentStatus: agentState?.status,
-            currentAgentTask: agentState?.currentTask,
-            agentElapsedTime: agentElapsed,
-            contextWindowLimit: ctxLimit,
-            contextUsageFraction: ctxFraction,
-            agentActiveFilePath: agentState?.activeFilePath
-        )
-    }
 }
