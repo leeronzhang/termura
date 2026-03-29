@@ -218,10 +218,15 @@ extension TerminalAreaView {
                                 vm.appendText("\n" + text)
                             }
                         }
-                        .transition(
-                            .move(edge: .bottom)
-                                .animation(.spring(response: 0.35, dampingFraction: 0.85))
-                        )
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom)
+                                .animation(.spring(
+                                    response: AppConfig.UI.composerSpringResponse,
+                                    dampingFraction: AppConfig.UI.composerSpringDamping
+                                )),
+                            removal: .opacity
+                                .animation(.easeOut(duration: AppConfig.UI.composerDismissDuration))
+                        ))
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

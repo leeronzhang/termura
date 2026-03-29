@@ -79,6 +79,7 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
             do {
                 try await Task.sleep(for: AppConfig.UI.fullScreenRestoreDelay)
             } catch is CancellationError {
+                // CancellationError is expected — window was closed before the delay elapsed.
                 return
             }
             window?.toggleFullScreen(nil)

@@ -166,17 +166,22 @@ final class CommandRouter {
     /// Both isComposerNotesActive and selectedSidebarTab change in the same call so
     /// SwiftUI batches them into one render pass — no intermediate notesEmptyState flash.
     func toggleComposerNotes() {
-        isComposerNotesActive.toggle()
-        if isComposerNotesActive {
+        if !isComposerNotesActive {
+            isComposerNotesActive = true
             tabBeforeComposer = selectedSidebarTab
             withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
                 selectedSidebarTab = .notes
             }
         } else if let previous = tabBeforeComposer {
+            // Close: both state changes inside one animation block so SwiftUI
+            // produces a single render pass — prevents notesEmptyState flashing
+            // when selectedSidebarTab is still .notes but isComposerNotesActive
+            // has already flipped to false.
+            tabBeforeComposer = nil
             withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                isComposerNotesActive = false
                 selectedSidebarTab = previous
             }
-            tabBeforeComposer = nil
         }
     }
 }

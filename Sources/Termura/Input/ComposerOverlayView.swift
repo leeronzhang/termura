@@ -9,6 +9,7 @@ struct ComposerOverlayView: View {
     let onToggleNotes: () -> Void
     let onDismiss: () -> Void
     @Environment(\.themeManager) private var themeManager
+    @State private var isMounted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,10 +34,12 @@ struct ComposerOverlayView: View {
         }
         .frame(height: AppConfig.UI.composerMaxHeight)
         .onAppear {
+            isMounted = true
             editorViewModel.onSubmit = onDismiss
             focusEditor()
         }
         .onDisappear {
+            isMounted = false
             editorViewModel.onSubmit = nil
         }
     }
@@ -116,6 +119,7 @@ struct ComposerOverlayView: View {
                 // CancellationError is expected — parent task was cancelled (e.g. view dismissed).
                 return
             }
+            guard isMounted else { return }
             guard let textView = editorHandle.textView,
                   let window = textView.window else { return }
             window.makeFirstResponder(textView)

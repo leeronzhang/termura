@@ -40,7 +40,11 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("Agent Resume")
             } footer: {
-                Text("When enabled, reopening a project pre-fills the Composer with the previous session\u{2019}s agent command (e.g. \u{201C}claude\u{201D}). Press Enter to launch or edit before confirming.")
+                Text(
+                    "When enabled, reopening a project pre-fills the Composer with the previous"
+                    + " session\u{2019}s agent command (e.g. \u{201C}claude\u{201D})."
+                    + " Press Enter to launch or edit before confirming."
+                )
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
