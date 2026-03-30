@@ -12,7 +12,7 @@ struct SearchView: View {
         searchService: any SearchServiceProtocol,
         isPresented: Binding<Bool>,
         onSelectSession: @escaping (SessionID) -> Void,
-        vectorService: (any VectorSearchServiceProtocol)? = nil
+        vectorService: (any VectorSearchServiceProtocol)? = nil // Optional: harness feature gate
     ) {
         _viewModel = State(wrappedValue: SearchViewModel(searchService: searchService))
         _isPresented = isPresented

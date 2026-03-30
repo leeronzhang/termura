@@ -56,10 +56,12 @@ enum ContentTab: Identifiable, Hashable, Codable {
         }
     }
 
-    /// Split and terminal tabs are managed via the sidebar — not closable from the tab bar.
+    /// Whether the tab shows a close (xmark) button in the tab bar.
+    /// Closing a terminal tab ends the session (PTY terminated, record preserved).
+    /// Closing a split tab ends the focused pane session.
     var isClosable: Bool {
         switch self {
-        case .terminal, .split: false
+        case .terminal, .split: true
         case .note, .diff, .file, .preview: true
         }
     }
@@ -117,7 +119,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
 /// Horizontal tab strip for the main content area.
 struct ContentTabBar: View {
     let tabs: [ContentTab]
-    @Binding var selectedTab: ContentTab
+    @Binding var selectedTab: ContentTab?
     var isFullScreen: Bool = false
     let onClose: (ContentTab) -> Void
 

@@ -7,7 +7,6 @@ struct SessionTreeView: View {
     let activeSessionID: SessionID?
     let onActivate: (SessionID) -> Void
     let onRename: (SessionID, String) -> Void
-    let onClose: (SessionID) -> Void
     let onCreateBranch: (SessionID, BranchType) -> Void
 
     var body: some View {
@@ -19,7 +18,6 @@ struct SessionTreeView: View {
                         activeSessionID: activeSessionID,
                         onActivate: onActivate,
                         onRename: onRename,
-                        onClose: onClose,
                         onCreateBranch: onCreateBranch
                     )
                 }
@@ -35,7 +33,6 @@ private struct SessionTreeRowView: View {
     let activeSessionID: SessionID?
     let onActivate: (SessionID) -> Void
     let onRename: (SessionID, String) -> Void
-    let onClose: (SessionID) -> Void
     let onCreateBranch: (SessionID, BranchType) -> Void
 
     var body: some View {
@@ -54,8 +51,7 @@ private struct SessionTreeRowView: View {
                     isActive: activeSessionID == node.id,
                     hasUnreadFailure: false,
                     onActivate: { onActivate(node.id) },
-                    onRename: { onRename(node.id, $0) },
-                    onClose: { onClose(node.id) }
+                    onRename: { onRename(node.id, $0) }
                 )
                 .contextMenu {
                     branchContextMenu
@@ -70,7 +66,6 @@ private struct SessionTreeRowView: View {
                         activeSessionID: activeSessionID,
                         onActivate: onActivate,
                         onRename: onRename,
-                        onClose: onClose,
                         onCreateBranch: onCreateBranch
                     )
                 )
@@ -97,11 +92,6 @@ private struct SessionTreeRowView: View {
                     onActivate(parentID)
                 }
             }
-            Divider()
-        }
-
-        Button("Close", role: .destructive) {
-            onClose(node.id)
         }
     }
 }

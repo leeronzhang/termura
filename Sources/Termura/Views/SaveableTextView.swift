@@ -35,6 +35,24 @@ final class SaveableTextView: NSTextView {
                 undoManager?.undo()
             }
             return true
+        case "f":
+            // Cmd+F: find; Cmd+Option+F: find and replace
+            let action: NSTextFinder.Action = event.modifierFlags.contains(.option)
+                ? .showReplaceInterface
+                : .showFindInterface
+            let item = NSMenuItem()
+            item.tag = action.rawValue
+            performTextFinderAction(item)
+            return true
+        case "g":
+            // Cmd+G: next match; Cmd+Shift+G: previous match
+            let action: NSTextFinder.Action = event.modifierFlags.contains(.shift)
+                ? .previousMatch
+                : .nextMatch
+            let item = NSMenuItem()
+            item.tag = action.rawValue
+            performTextFinderAction(item)
+            return true
         default:
             return super.performKeyEquivalent(with: event)
         }

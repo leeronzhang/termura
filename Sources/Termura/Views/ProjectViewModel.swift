@@ -74,6 +74,12 @@ final class ProjectViewModel {
         setupObservers()
     }
 
+    deinit {
+        refreshTask?.cancel()
+        debounceTask?.cancel()
+        persistTask?.cancel()
+    }
+
     func tearDown() {
         if let observer = appActiveObserver {
             NotificationCenter.default.removeObserver(observer)
@@ -125,7 +131,6 @@ final class ProjectViewModel {
             do {
                 return try await self.gitService.status(at: self.projectRoot)
             } catch {
-                // Non-critical: git status is optional — project tree still works without it.
                 logger.warning("Git status failed: \(error.localizedDescription)")
                 return GitStatusResult.notARepo
             }
@@ -134,7 +139,6 @@ final class ProjectViewModel {
             do {
                 return try await self.gitService.trackedFiles(at: self.projectRoot)
             } catch {
-                // Non-critical: tracked files are optional — tree shows all files as fallback.
                 logger.warning("Tracked files fetch failed: \(error.localizedDescription)")
                 return Set<String>()
             }
@@ -179,11 +183,9 @@ final class ProjectViewModel {
         appActiveObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
-            queue: nil
+            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
         ) { [weak self] _ in
-            Task { @MainActor in
-                self?.refresh()
-            }
+            MainActor.assumeIsolated { self?.refresh() }
         }
     }
 
@@ -206,7 +208,6 @@ final class ProjectViewModel {
                 // CancellationError is expected — a newer expansion event supersedes this persist.
                 return
             } catch {
-                // Non-critical: expansion state is cosmetic; lost state is auto-restored on next scan.
                 logger.debug("Expansion persist debounce interrupted: \(error.localizedDescription)")
                 return
             }
@@ -236,7 +237,6 @@ final class ProjectViewModel {
                 // CancellationError is expected — a newer refresh event supersedes this one.
                 return
             } catch {
-                // Non-critical: git refresh is a background heuristic; the tree remains usable.
                 logger.warning("Git refresh debounce sleep failed: \(error.localizedDescription)")
                 return
             }

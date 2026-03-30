@@ -9,6 +9,11 @@ struct SidebarView: View {
     @Environment(\.commandRouter) var commandRouter
     @Environment(\.notesViewModel) var notesViewModel
 
+    /// ID of the session awaiting delete confirmation from the context menu.
+    @State var sessionPendingDelete: SessionID?
+    /// Per-session rename trigger counters. Incrementing fires inline rename in the row.
+    @State var renameTriggers: [SessionID: Int] = [:]
+
     var isFullScreen: Bool = false
     /// The currently selected content tab — used for session highlight logic.
     var activeContentTab: ContentTab?
@@ -31,7 +36,8 @@ struct SidebarView: View {
             SidebarTabBar(
                 selectedTab: $selectedTab,
                 isFullScreen: isFullScreen,
-                hasUncommittedChanges: commandRouter.hasUncommittedChanges
+                hasUncommittedChanges: commandRouter.hasUncommittedChanges,
+                diagnosticErrorCount: projectScope.diagnosticsStore.errorCount
             )
             tabContent
         }

@@ -21,6 +21,8 @@ extension SidebarView {
 
 /// Project file tree with integrated git status.
 struct SidebarProjectContent: View {
+    @Environment(\.projectScope) private var projectScope
+
     var viewModel: ProjectViewModel
     var activeFilePath: String?
     var onOpenFile: ((String, FileOpenMode) -> Void)?
@@ -38,6 +40,11 @@ struct SidebarProjectContent: View {
             }
             // Row 3: PROJECT label (left) + path (right)
             projectRow
+            // Problems section: appears when diagnostics are present
+            ProblemsSection(
+                diagnosticsStore: projectScope.diagnosticsStore,
+                onOpenFile: onOpenFile
+            )
             // Row 4+: file tree
             fileTree
         }

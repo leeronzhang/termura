@@ -17,16 +17,16 @@ struct SessionRowView: View {
     var currentTaskSnippet: String?
     let onActivate: () -> Void
     let onRename: (String) -> Void
-    let onClose: () -> Void
     /// Optional toggle for expand/collapse. When set, a chevron is shown.
     var onToggleExpand: (() -> Void)?
     var isExpanded: Bool = true
+    /// Increment this value from outside to trigger inline rename. Each increment fires once.
+    var renameTrigger: Int = 0
 
     @State private var isEditing = false
     @State private var editTitle = ""
     @State private var isHovered = false
     @State private var glowOpacity: Double = 0.0
-    @State private var showCloseConfirm = false
     @Environment(\.themeManager) private var themeManager
 
     private var isWaiting: Bool { agentStatus == .waitingInput }
@@ -41,31 +41,19 @@ struct SessionRowView: View {
         }
         .padding(.horizontal, AppUI.Spacing.lg)
         .padding(.vertical, AppUI.Spacing.md)
+        .opacity(session.isEnded ? AppUI.Opacity.secondary : 1.0)
         .background(rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
         .overlay(glowBorder)
-        .overlay(alignment: .topTrailing) {
-            if isHovered { closeButton.padding(AppUI.Spacing.smMd) }
-        }
         .onTapGesture { onActivate() }
         .onHover { isHovered = $0 }
+        .draggable(session.id.rawValue.uuidString)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Session: \(session.title)")
-        .accessibilityValue(isActive ? "Active" : "")
+        .accessibilityValue(isActive ? "Active" : session.isEnded ? "Ended" : "")
         .accessibilityAddTraits(isActive ? .isSelected : [])
-        .contextMenu { contextMenuItems }
+        .onChange(of: renameTrigger) { _, _ in beginEditing() }
         .animation(.easeOut(duration: AppUI.Animation.quick), value: isHovered)
-        // Alert must live on the stable body view, not on closeButton.
-        // closeButton is inside `if isHovered { ... }`, so it is removed from
-        // the hierarchy when the mouse leaves or the alert itself triggers an
-        // isHovered=false transition — which causes SwiftUI to instantly dismiss
-        // any alert anchored to that conditionally-rendered view.
-        .alert("Close Active Session?", isPresented: $showCloseConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("Stop & Close", role: .destructive) { onClose() }
-        } message: {
-            Text("This session is currently active. The running process will be terminated.")
-        }
         .onChange(of: isWaiting) { _, waiting in
             if waiting {
                 withAnimation(
@@ -180,25 +168,6 @@ struct SessionRowView: View {
         .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
     }
 
-    private var closeButton: some View {
-        Button {
-            if isActive {
-                showCloseConfirm = true
-            } else {
-                onClose()
-            }
-        } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.secondary))
-                .frame(width: 20, height: 20)
-                .background(themeManager.current.background.opacity(AppUI.Opacity.strong))
-                .clipShape(Circle())
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-    }
-
     private var rowBackground: some View {
         RoundedRectangle(cornerRadius: AppUI.Radius.md)
             .fill(rowFillColor)
@@ -225,13 +194,6 @@ struct SessionRowView: View {
         }
         return RoundedRectangle(cornerRadius: AppUI.Radius.md)
             .stroke(borderColor, lineWidth: 1)
-    }
-
-    @ViewBuilder
-    private var contextMenuItems: some View {
-        Button("Rename") { beginEditing() }
-        Divider()
-        Button("Close Session", role: .destructive) { onClose() }
     }
 
     // MARK: - Edit helpers
