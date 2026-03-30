@@ -137,7 +137,7 @@ struct TerminalAreaView: View {
     private func setupAgentResumeIfNeeded() {
         let store = sessionScope.store
         guard store.isRestoredSession(id: sessionID) else { return }
-        guard let session = store.sessions.first(where: { $0.id == sessionID }) else { return }
+        guard let session = store.session(id: sessionID) else { return }
         let agentType = session.agentType
         guard agentType != .unknown, !agentType.defaultLaunchCommand.isEmpty else { return }
         let router = commandRouter
@@ -156,10 +156,11 @@ struct TerminalAreaView: View {
         let path = URL(fileURLWithPath: dir)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
             .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
-        // Lifecycle: one-shot cosmetic check. fileExists is fast; @MainActor avoids
-        // the @State capture risk from Task.detached + MainActor.run with value-type wrappers.
-        Task { @MainActor in
-            localUI.contextFileExists = FileManager.default.fileExists(atPath: path)
+        // Lifecycle: one-shot cosmetic check. fileExists is a synchronous stat(2) syscall
+        // that can block on network mounts or under I/O pressure — must not run on MainActor.
+        Task.detached { [path] in
+            let exists = FileManager.default.fileExists(atPath: path)
+            await MainActor.run { localUI.contextFileExists = exists }
         }
     }
 
@@ -176,6 +177,7 @@ struct TerminalAreaView: View {
         let termEngine = engine
         let router = commandRouter
         let sid = sessionID
+        let handle = editorHandle
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             dispatchPrecondition(condition: .onQueue(.main))
 
@@ -199,7 +201,18 @@ struct TerminalAreaView: View {
             // Let other Cmd-key shortcuts pass through to the menu system.
             if flags.contains(.command) { return event }
             // When Composer is open, let all events flow to the Composer's views.
-            if router.showComposer { return event }
+            // Defense-in-depth: if the user clicked the notes list or any non-editor
+            // view and EditorTextView lost first responder, reclaim it on Cmd+V so
+            // paste always lands in the composer editor and never in the terminal PTY.
+            if router.showComposer {
+                if flags == .command,
+                   event.charactersIgnoringModifiers == "v",
+                   let textView = handle.textView,
+                   window.firstResponder !== textView {
+                    window.makeFirstResponder(textView)
+                }
+                return event
+            }
             // In passthrough mode route keys to the terminal.
             if modeCtrl.mode == .passthrough {
                 let termView = termEngine.terminalNSView
@@ -212,13 +225,26 @@ struct TerminalAreaView: View {
             return event
         }
         // Mouse monitor: dual-pane focus tracking only.
-        // Composer backdrop dismissal is handled by SwiftUI tap gesture (TerminalAreaView+Subviews).
+        // Composer backdrop dismissal is handled by AppKitClickableOverlay (TerminalAreaView+Subviews).
+        //
+        // Invariant: while showComposer == true, focusedDualPaneID must not change.
+        // Shifting focus to another pane would (a) visually move the composer to that
+        // pane and (b) give the terminal NSView first responder, causing Cmd+V paste
+        // to land in the PTY instead of the composer editor.
         mouseEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
             if router.isDualPaneActive {
                 let termView = termEngine.terminalNSView
                 let loc = termView.convert(event.locationInWindow, from: nil)
                 if termView.bounds.contains(loc) {
+                    // Don't shift pane focus or give the terminal first responder while
+                    // the composer is open in the currently focused pane.
+                    if router.showComposer && router.focusedDualPaneID != sid {
+                        return event
+                    }
                     router.focusedDualPaneID = sid
+                    if let window = termView.window, window.firstResponder !== termView {
+                        window.makeFirstResponder(termView)
+                    }
                 }
             }
             return event
@@ -235,65 +261,5 @@ struct TerminalAreaView: View {
             NSEvent.removeMonitor(monitor)
             mouseEventMonitor = nil
         }
-    }
-}
-
-// MARK: - Local UI State
-
-/// Groups view-local state that only affects TerminalAreaView layout.
-struct LocalUIState {
-    var showExportSheet = false
-    var showContextSheet = false
-    var contextFileExists = false
-    var metadataPanelWidth: Double = AppConfig.UI.metadataPanelWidth
-}
-
-// MARK: - Sheet modifiers
-
-private struct TerminalAreaSheets: ViewModifier {
-    @Binding var riskAlert: RiskAlert?
-    @Binding var contextWindowAlert: ContextWindowAlert?
-    @Binding var showExportSheet: Bool
-    @Binding var showContextSheet: Bool
-    let engine: any TerminalEngine
-    let sessionID: SessionID
-    let sessionStore: SessionStore
-    let outputStore: OutputStore
-    let viewModel: TerminalViewModel
-
-    func body(content: Content) -> some View {
-        let eng = engine
-        content
-            .sheet(item: $riskAlert) { risk in
-                InterventionAlertView(
-                    alert: risk,
-                    onProceed: { viewModel.dismissRiskAlert() },
-                    onCancel: {
-                        viewModel.dismissRiskAlert()
-                        Task { await eng.send("\u{03}") }
-                    }
-                )
-            }
-            .sheet(item: $contextWindowAlert) { alert in
-                ContextWindowAlertView(alert: alert) {
-                    contextWindowAlert = nil
-                }
-            }
-            .sheet(isPresented: $showExportSheet) {
-                if let session = sessionStore.sessions
-                    .first(where: { $0.id == sessionID }) {
-                    ExportOptionsView(
-                        session: session,
-                        chunks: Array(outputStore.chunks),
-                        isPresented: $showExportSheet
-                    )
-                }
-            }
-            .sheet(isPresented: $showContextSheet) {
-                ContextFileView(
-                    projectRoot: viewModel.currentMetadata.workingDirectory,
-                    isPresented: $showContextSheet
-                )
-            }
     }
 }

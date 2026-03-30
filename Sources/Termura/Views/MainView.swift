@@ -23,8 +23,7 @@ struct MainView: View {
 
     @State var lastContentTabBySidebarTab: [SidebarTab: ContentTab] = [:]
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
-    @State var showCloseSessionConfirm = false
-    @State var splitRoot: SplitNode?
+    @State var showDeleteSessionConfirm = false
     /// Explicitly managed terminal tab list (terminal + split entries).
     @State var terminalItems: [ContentTab] = []
     /// Which slot is focused within the current split tab.
@@ -33,20 +32,27 @@ struct MainView: View {
     @State var openTabs: [ContentTab] = []
     @State var selectedContentTab: ContentTab?
     @State var isFullScreen = false
+    /// The NSWindow hosting this view instance. Captured via HostingWindowCapture so that
+    /// NotificationCenter observers can be filtered to this specific window only.
+    @State private var hostingWindow: NSWindow?
+    /// Tracks which pane slot the user is hovering over during a session drag, for drop-target highlighting.
+    @State var dropTargetSlot: PaneSlot?
 
     // MARK: - Derived split-mode helpers (computed from selected tab)
 
     var leftPaneSessionID: SessionID? {
-        guard case let .split(left, _, _, _) = resolvedSelectedTab else { return nil }
+        guard let resolved = resolvedSelectedTab,
+              case let .split(left, _, _, _) = resolved else { return nil }
         return left
     }
 
     var rightPaneSessionID: SessionID? {
-        guard case let .split(_, right, _, _) = resolvedSelectedTab else { return nil }
+        guard let resolved = resolvedSelectedTab,
+              case let .split(_, right, _, _) = resolved else { return nil }
         return right
     }
 
-    var isInSplitMode: Bool { resolvedSelectedTab.isSplit }
+    var isInSplitMode: Bool { resolvedSelectedTab?.isSplit ?? false }
 
     var focusedPaneSessionID: SessionID? {
         focusedSlot == .left ? leftPaneSessionID : rightPaneSessionID
@@ -63,14 +69,27 @@ struct MainView: View {
             contentArea
         }
         .background(themeManager.current.background)
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
+        // Capture the hosting NSWindow so fullscreen observers are filtered per-window.
+        // Required for correctness when multiple project windows are open simultaneously.
+        .background(HostingWindowCapture { window in
+            hostingWindow = window
+            isFullScreen = window.styleMask.contains(.fullScreen)
+        })
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { notification in
+            guard (notification.object as? NSWindow) === hostingWindow else { return }
             isFullScreen = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { notification in
+            guard (notification.object as? NSWindow) === hostingWindow else { return }
             isFullScreen = false
         }
-        // Single command handler — all menu/toolbar commands funnel through pendingCommand
-        // to avoid concurrent .onChange races between split, dual-pane, and close-tab signals.
+        // onChange inventory — limit: 5 (CLAUDE.md §5.5). Adding a 6th requires PR justification.
+        // NOTE: .onChange attached anywhere in a MainView+*.swift @ViewBuilder also counts here.
+        //   1. pendingCommand        — command channel (all menu/keyboard commands)
+        //   2. focusedDualPaneID     — external sync (NSEvent monitor writes from outside SwiftUI)
+        //   3. sessions.count        — external sync (actor state change, outside render cycle)
+        //   4. selectedSidebarTab    — local state memory (needs old+new for tab history)
+        //   5. selectedContentTab    — local state memory + dual-pane sync
         .onChange(of: commandRouter.pendingCommand) { _, command in
             guard let command else { return }
             commandRouter.pendingCommand = nil
@@ -92,6 +111,17 @@ struct MainView: View {
         }
         .onChange(of: selectedContentTab) { _, newTab in
             if let newTab { trackContentTabForSidebarTab(newTab) }
+            // Sync isDualPaneActive + focusedSlot when selected tab changes externally
+            // (commands, session deletion, initial load) — not just user tab taps.
+            guard let tab = newTab else { return }
+            let isSplit = tab.isSplit
+            commandRouter.isDualPaneActive = isSplit
+            if isSplit {
+                focusedSlot = .left
+                commandRouter.focusedDualPaneID = leftPaneSessionID
+            } else {
+                commandRouter.focusedDualPaneID = nil
+            }
         }
         .task {
             await ensureInitialSession()
@@ -102,11 +132,14 @@ struct MainView: View {
         .sheet(isPresented: showExportBinding) { exportSheet }
         .sheet(isPresented: router.showHarness) { harnessSheet }
         .sheet(isPresented: router.showBranchMerge) { branchMergeSheet }
-        .alert("Close Session", isPresented: $showCloseSessionConfirm) {
+        .alert("Delete Session?", isPresented: $showDeleteSessionConfirm) {
             Button("Cancel", role: .cancel) {}
-            Button("Close", role: .destructive) { confirmCloseActiveSession() }
+            Button("Delete", role: .destructive) {
+                let sid = focusedPaneSessionID ?? sessionStore.activeSessionID
+                if let sid { confirmDeleteSession(id: sid) }
+            }
         } message: {
-            Text("Are you sure you want to close the active session?")
+            Text("This session and all its history will be permanently removed.")
         }
     }
 
@@ -142,5 +175,36 @@ struct MainView: View {
             get: { commandRouter.exportSessionID != nil },
             set: { if !$0 { commandRouter.exportSessionID = nil } }
         )
+    }
+}
+
+// MARK: - Hosting window capture
+
+/// Transparent NSViewRepresentable that resolves the hosting NSWindow via viewDidMoveToWindow.
+/// This is the only reliable way to obtain the specific NSWindow for a SwiftUI view in a
+/// multi-window app. The result is used to scope NotificationCenter observers to one window.
+private struct HostingWindowCapture: NSViewRepresentable {
+    let onWindowFound: @MainActor (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> CaptureView {
+        let view = CaptureView()
+        view.onWindowFound = onWindowFound
+        return view
+    }
+
+    func updateNSView(_ nsView: CaptureView, context: Context) {}
+
+    final class CaptureView: NSView {
+        var onWindowFound: (@MainActor (NSWindow) -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            // viewDidMoveToWindow is called on the main thread. Invoking the callback
+            // synchronously (rather than via Task { @MainActor }) ensures hostingWindow
+            // is set in the same RunLoop cycle, so fullscreen notifications that fire
+            // immediately cannot be silently dropped by the window-identity guard.
+            MainActor.assumeIsolated { onWindowFound?(window) }
+        }
     }
 }

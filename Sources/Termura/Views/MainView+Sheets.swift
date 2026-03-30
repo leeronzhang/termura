@@ -20,7 +20,7 @@ extension MainView {
         // Export is handled by TerminalAreaView which has access to OutputStore chunks.
         // This sheet is a fallback for sessions without an active terminal.
         if let sid = commandRouter.exportSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == sid }) {
+           let session = sessionStore.session(id: sid) {
             ExportOptionsView(
                 session: session,
                 chunks: [],
@@ -46,8 +46,7 @@ extension MainView {
     /// Working directory of the active session, falling back to home directory.
     var activeSessionWorkingDirectory: String {
         if let activeID = sessionStore.activeSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == activeID }),
-           let dir = session.workingDirectory {
+           let dir = sessionStore.session(id: activeID)?.workingDirectory {
             return dir
         }
         return AppConfig.Paths.homeDirectory
@@ -56,7 +55,7 @@ extension MainView {
     @ViewBuilder
     var branchMergeSheet: some View {
         if let activeID = sessionStore.activeSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == activeID }),
+           let session = sessionStore.session(id: activeID),
            session.parentID != nil {
             BranchMergeSheet(
                 branchSession: session,

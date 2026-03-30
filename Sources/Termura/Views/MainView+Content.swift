@@ -1,5 +1,19 @@
 import SwiftUI
 
+// MARK: - Content display kind
+
+/// Resolved display state for the content area.
+/// Computed by `resolveContentDisplay(selectedTab:)` to avoid multi-dimensional
+/// if/else chains directly inside `@ViewBuilder` bodies.
+private enum ContentDisplay {
+    /// No sessions exist or no matching terminal found — show the empty placeholder.
+    case empty
+    /// Notes tab is active but no note is selected — show the notes empty state.
+    case notesEmpty
+    /// Render the specified tab normally.
+    case tab(ContentTab)
+}
+
 // MARK: - Content area views
 
 extension MainView {
@@ -10,10 +24,11 @@ extension MainView {
         terminalItems + openTabs
     }
 
-    /// Resolved selected tab — falls back to the first terminal item.
-    var resolvedSelectedTab: ContentTab {
+    /// Resolved selected tab — nil when no tabs exist (e.g. during startup before sessions load).
+    /// Callers must handle nil rather than receiving a ghost SessionID.
+    var resolvedSelectedTab: ContentTab? {
         if let tab = selectedContentTab, allTabs.contains(tab) { return tab }
-        return terminalItems.first ?? openTabs.first ?? .terminal(sessionID: SessionID(), title: "Terminal")
+        return terminalItems.first ?? openTabs.first
     }
 
     @ViewBuilder
@@ -24,6 +39,7 @@ extension MainView {
                 selectedTab: Binding(
                     get: { resolvedSelectedTab },
                     set: { newTab in
+                        guard let newTab else { return }
                         selectedContentTab = newTab
                         // Sync activeSessionID when switching tabs.
                         // Also sync selectedSidebarTab for non-terminal tabs so that
@@ -49,42 +65,49 @@ extension MainView {
             }
             selectedContentView
         }
-        // Sync isDualPaneActive when selected tab changes.
-        .onChange(of: selectedContentTab) { _, tab in
-            guard let tab else { return }
-            let isSplit = tab.isSplit
-            commandRouter.isDualPaneActive = isSplit
-            if isSplit {
-                focusedSlot = .left
-                commandRouter.focusedDualPaneID = leftPaneSessionID
-            } else {
-                commandRouter.focusedDualPaneID = nil
-            }
-        }
     }
 
     @ViewBuilder
     var selectedContentView: some View {
-        let tab = resolvedSelectedTab
-        // Sessions tab: if resolvedSelectedTab is not a terminal/split (e.g. a note or file tab
-        // was left selected from a previous session), show the active terminal or empty state.
-        if commandRouter.selectedSidebarTab == .sessions, !tab.isTerminal, !tab.isSplit {
-            let best = terminalItems.first(where: {
-                $0.containsSession(sessionStore.activeSessionID ?? SessionID())
-            }) ?? terminalItems.first
-            if let best {
-                tabContent(for: best)
-            } else {
+        if let tab = resolvedSelectedTab {
+            switch resolveContentDisplay(selectedTab: tab) {
+            case .empty:
                 emptyState
+            case .notesEmpty:
+                notesEmptyState
+            case let .tab(contentTab):
+                tabContent(for: contentTab)
             }
-        // Notes tab: show the note editor if a note tab is selected, or an empty state otherwise.
-        } else if commandRouter.selectedSidebarTab == .notes,
-                  !commandRouter.isComposerNotesActive,
-                  !tab.isNote {
-            notesEmptyState
         } else {
-            tabContent(for: tab)
+            emptyState
         }
+    }
+
+    /// Determines which display state the content area should render.
+    ///
+    /// Encoding the three-way branch here keeps `selectedContentView` linear:
+    /// - Sessions sidebar + non-terminal tab → redirect to the active terminal.
+    /// - Notes sidebar + no note selected → show notes empty state.
+    /// - Everything else → show the resolved tab normally.
+    private func resolveContentDisplay(selectedTab: ContentTab) -> ContentDisplay {
+        let sidebar = commandRouter.selectedSidebarTab
+
+        // Sessions sidebar with a stale non-terminal tab selected (e.g. a note was
+        // left open from the previous run): redirect to the active terminal, if any.
+        if sidebar == .sessions, !selectedTab.isTerminal, !selectedTab.isSplit {
+            let best = sessionStore.activeSessionID.flatMap { activeID in
+                terminalItems.first(where: { $0.containsSession(activeID) })
+            } ?? terminalItems.first
+            return best.map { .tab($0) } ?? .empty
+        }
+
+        // Notes sidebar with no note tab selected and the Composer overlay not active:
+        // the editor pane has nothing to show.
+        if sidebar == .notes, !commandRouter.isComposerNotesActive, !selectedTab.isNote {
+            return .notesEmpty
+        }
+
+        return .tab(selectedTab)
     }
 
     @ViewBuilder
@@ -127,8 +150,7 @@ extension MainView {
     var activeProjectRoot: String {
         if let root = sessionStore.projectRoot { return root }
         if let id = sessionStore.activeSessionID,
-           let session = sessionStore.sessions.first(where: { $0.id == id }),
-           let dir = session.workingDirectory {
+           let dir = sessionStore.session(id: id)?.workingDirectory {
             return dir
         }
         return AppConfig.Paths.homeDirectory
@@ -136,15 +158,7 @@ extension MainView {
 
     @ViewBuilder
     func terminalView(for sessionID: SessionID) -> some View {
-        if splitRoot != nil {
-            SplitPaneView(
-                node: Binding(
-                    get: { splitRoot ?? .leaf(SessionID()) },
-                    set: { splitRoot = $0 }
-                ),
-                renderLeaf: { id in AnyView(renderLeaf(sessionID: id)) }
-            )
-        } else if let engine = engineStore.engine(for: sessionID) {
+        if let engine = engineStore.engine(for: sessionID) {
             let state = viewStateManager.viewState(for: sessionID, engine: engine)
             TerminalAreaView(
                 engine: engine,
@@ -156,102 +170,14 @@ extension MainView {
         }
     }
 
-    @ViewBuilder
-    func dualPaneView() -> some View {
-        HStack(spacing: 0) {
-            dualPaneTerminal(sessionID: leftPaneSessionID, slot: .left, hideButtons: true)
-
-            Rectangle()
-                .fill(themeManager.current.sidebarText.opacity(AppUI.Opacity.softBorder))
-                .frame(width: 1)
-
-            dualPaneTerminal(sessionID: rightPaneSessionID, slot: .right, hideButtons: false)
-
-            dualPaneMetadata(focusedID: focusedPaneSessionID)
-        }
-        .onAppear {
-            focusedSlot = .left
-            commandRouter.focusedDualPaneID = leftPaneSessionID
-        }
-    }
-
-    @ViewBuilder
-    func dualPaneTerminal(sessionID: SessionID?, slot: PaneSlot, hideButtons: Bool) -> some View {
-        if let sessionID, let engine = engineStore.engine(for: sessionID) {
-            let isFocused = focusedSlot == slot
-            let state = viewStateManager.viewState(for: sessionID, engine: engine)
-            TerminalAreaView(
-                engine: engine,
-                sessionID: sessionID,
-                forceHideMetadata: true,
-                isFocusedPane: isFocused,
-                hideToolbarButtons: hideButtons,
-                state: state
-            )
-            .id(sessionID)
-            .overlay(alignment: .top) {
-                if isFocused {
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(height: 2)
-                }
-            }
-            .background {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        focusedSlot = slot
-                        commandRouter.focusedDualPaneID = sessionID
-                        sessionStore.activateSession(id: sessionID)
-                    }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func dualPaneMetadata(focusedID: SessionID?) -> some View {
-        if let focusedID,
-           commandRouter.showDualPaneMetadata,
-           let engine = engineStore.engine(for: focusedID) {
-            let state = viewStateManager.viewState(for: focusedID, engine: engine)
-            ResizableDivider(
-                width: .constant(AppConfig.UI.metadataPanelWidth),
-                minWidth: AppConfig.UI.metadataPanelMinWidth,
-                maxWidth: AppConfig.UI.metadataPanelMaxWidth,
-                dragFactor: -1.0
-            )
-            SessionMetadataBarView(
-                metadata: state.viewModel.currentMetadata,
-                timeline: state.timeline,
-                onSelectChunkID: { _ in }
-            )
-            .frame(width: AppConfig.UI.metadataPanelWidth)
-        }
-    }
+    // Dual-pane view rendering is in MainView+DualPane.swift
 
     func noteEditorView(noteID: NoteID) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: AppUI.Spacing.md) {
-                TextField("Title", text: notes.editingTitle)
-                    .font(AppUI.Font.title1Semibold)
-                    .textFieldStyle(.plain)
-                Spacer()
-                noteFavoriteButton(noteID: noteID)
-            }
-            .padding(.horizontal, AppUI.Spacing.xl)
-            .padding(.top, AppUI.Spacing.xl)
-            .padding(.bottom, AppUI.Spacing.md)
-            Divider()
-            NoteEditorView(
-                title: notesViewModel.editingTitle,
-                text: notes.editingBody
-            )
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { notesViewModel.selectNote(id: noteID) }
-        .onChange(of: notesViewModel.editingTitle) { _, newTitle in
-            syncNoteTabTitle(noteID: noteID, title: newTitle)
-        }
+        NoteTabContentView(
+            noteID: noteID,
+            notes: notes,
+            onTitleChange: { id, title in syncNoteTabTitle(noteID: id, title: title) }
+        )
     }
 
     private func syncNoteTabTitle(noteID: NoteID, title: String) {
@@ -263,33 +189,4 @@ extension MainView {
         if case .note = selectedContentTab { selectedContentTab = openTabs[idx] }
     }
 
-    private func noteFavoriteButton(noteID: NoteID) -> some View {
-        let isFav = notesViewModel.selectedNote?.isFavorite ?? false
-        return Button {
-            notesViewModel.toggleFavorite(id: noteID)
-        } label: {
-            Image(systemName: isFav ? "star.fill" : "star")
-                .font(AppUI.Font.body)
-                .foregroundColor(isFav ? .yellow : .secondary)
-        }
-        .buttonStyle(.plain)
-        .help(isFav ? "Remove from favorites" : "Add to favorites")
-    }
-
-    @ViewBuilder
-    func renderLeaf(sessionID: SessionID) -> some View {
-        if let engine = engineStore.engine(for: sessionID) {
-            let state = viewStateManager.viewState(for: sessionID, engine: engine)
-            TerminalAreaView(
-                engine: engine,
-                sessionID: sessionID,
-                isCompact: true,
-                state: state
-            )
-            .id(sessionID)
-        } else {
-            Text("No engine")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
 }

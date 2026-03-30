@@ -28,8 +28,11 @@ struct TerminalContainerView: NSViewRepresentable {
         if let tv = termView as? LocalProcessTerminalView {
             applyTheme(theme, to: tv)
         }
-        hideScroller(in: termView)
         let container = TerminalDragContainerView(terminalView: termView)
+        // Cache NSScroller references once at construction time so updateNSView never
+        // traverses subviews. SwiftTerm adds the scroller during its own init and does
+        // not remove/re-add it, so the reference remains valid for the view's lifetime.
+        container.cacheAndHideScrollers()
         // Seed the font cache so the first updateNSView call skips the redundant font assignment.
         container.lastAppliedFontName = fontFamily
         container.lastAppliedFontSize = fontSize
@@ -54,7 +57,9 @@ struct TerminalContainerView: NSViewRepresentable {
             container.lastAppliedFontName = fontFamily
             container.lastAppliedFontSize = fontSize
         }
-        hideScroller(in: termView)
+        // Use cached scroller references — O(1) instead of O(n) subview traversal.
+        // SwiftTerm may reset isHidden after its own layout pass, so we re-apply each render.
+        container.hideCachedScrollers()
     }
 
     // MARK: - Theme application
@@ -77,14 +82,6 @@ struct TerminalContainerView: NSViewRepresentable {
         applyFont(to: view)
     }
 
-    /// Hides the legacy NSScroller that SwiftTerm adds directly as a subview.
-    /// The scroller track is always visible with `.legacy` style, even when disabled,
-    /// causing a lighter vertical strip at the terminal view's right edge.
-    private func hideScroller(in view: NSView) {
-        for sub in view.subviews where sub is NSScroller {
-            sub.isHidden = true
-        }
-    }
 }
 
 // MARK: - TerminalDragContainerView
@@ -108,9 +105,40 @@ final class TerminalDragContainerView: NSView {
     /// recalculating character dimensions on every parent view re-render.
     var lastAppliedFontName: String?
     var lastAppliedFontSize: CGFloat = 0
+    /// Cached NSScroller subviews found at construction time. SwiftTerm adds its scroller
+    /// during init and never removes it, so this reference stays valid for the view's lifetime.
+    /// Populated by cacheAndHideScrollers(); used by hideCachedScrollers() on every render.
+    private var cachedScrollers: [NSScroller] = []
+    // In-flight task debouncing SIGWINCH delivery after a layout change.
+    // Prevents the double-resize that occurs when SwiftUI issues a transient
+    // wrong-sized layout pass followed immediately by the correct-sized pass.
+    // nonisolated(unsafe): deinit is nonisolated; last-reference guarantee makes
+    // the access free of data races — no concurrent mutation is possible at deinit time.
+    nonisolated(unsafe) private var pendingResizeTask: Task<Void, Never>?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         isPassthrough ? nil : super.hitTest(point)
+    }
+
+    // MARK: - Scroller cache
+
+    /// Called once in makeNSView after SwiftTerm has fully initialised its subview tree.
+    /// Locates all NSScroller instances, hides them, and stores references so that
+    /// hideCachedScrollers() can operate in O(1) on subsequent updateNSView calls.
+    func cacheAndHideScrollers() {
+        cachedScrollers = terminalView.subviews.compactMap { $0 as? NSScroller }
+        for scroller in cachedScrollers {
+            scroller.isHidden = true
+        }
+    }
+
+    /// Re-hides the previously cached NSScroller references.
+    /// SwiftTerm may reset isHidden during its own layout pass, so this is called
+    /// on every updateNSView to keep the scrollers suppressed — cost is O(1).
+    func hideCachedScrollers() {
+        for scroller in cachedScrollers {
+            scroller.isHidden = true
+        }
     }
 
     init(terminalView: NSView) {
@@ -121,14 +149,37 @@ final class TerminalDragContainerView: NSView {
         registerForDraggedTypes([.fileURL, .URL, .tiff, .png])
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
-        logger.fault("TerminalDragContainerView must be instantiated programmatically, not via Interface Builder")
-        return nil
+        preconditionFailure("TerminalDragContainerView must be instantiated programmatically, not via Interface Builder")
+    }
+
+    deinit {
+        pendingResizeTask?.cancel()
     }
 
     override func layout() {
         super.layout()
-        terminalView.frame = bounds
+        let newBounds = bounds
+        guard terminalView.frame != newBounds else { return }
+        terminalView.frame = newBounds
+        // Debounce SIGWINCH delivery by one frame.
+        // SwiftUI issues two layout passes when rebuilding the terminal view tree on a
+        // session switch: the first pass fires with a transient wrong size (observed as
+        // 2x the final dimensions), the second with the correct size. Without debouncing,
+        // layoutSubtreeIfNeeded() sends SIGWINCH at both sizes, causing the terminal to
+        // temporarily reflow at the wrong column count. Waiting one frame (16ms) ensures
+        // only the final, stable bounds triggers changeWindowSize().
+        pendingResizeTask?.cancel()
+        pendingResizeTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(for: AppConfig.Terminal.resizeDebounce)
+            } catch {
+                return
+            }
+            terminalView.layoutSubtreeIfNeeded()
+        }
     }
 
     // MARK: - NSDraggingDestination
@@ -152,7 +203,7 @@ final class TerminalDragContainerView: NSView {
         }
         if let image = pb.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage {
             do {
-                let url = try saveTemporaryImage(image)
+                let url = try saveTemporaryAttachmentImage(image)
                 dragHandler?(url.path.shellEscaped)
                 return true
             } catch {
@@ -163,24 +214,4 @@ final class TerminalDragContainerView: NSView {
         return false
     }
 
-    // MARK: - Private
-
-    private func saveTemporaryImage(_ image: NSImage) throws -> URL {
-        let homeURL = FileManager.default.homeDirectoryForCurrentUser
-        let tmpDir = homeURL.appendingPathComponent(AppConfig.DragDrop.tempImageSubdirectory)
-        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        let name = "\(AppConfig.DragDrop.imagePastePrefix)-\(Int(Date().timeIntervalSince1970)).\(AppConfig.DragDrop.imagePasteExtension)"
-        let fileURL = tmpDir.appendingPathComponent(name)
-        guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:]) else {
-            throw ImageSaveError.conversionFailed
-        }
-        try png.write(to: fileURL)
-        return fileURL
-    }
-}
-
-private enum ImageSaveError: Error {
-    case conversionFailed
 }
