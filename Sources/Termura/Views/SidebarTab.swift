@@ -46,6 +46,10 @@ struct SidebarTabBar: View {
     @Binding var selectedTab: SidebarTab
     var isFullScreen: Bool = false
     var hasUncommittedChanges: Bool = false
+    /// Non-zero when the project has active compiler/linter errors.
+    /// Shows a red badge dot on the project tab, taking visual priority over the blue
+    /// uncommitted-changes dot so the more actionable state is always visible.
+    var diagnosticErrorCount: Int = 0
 
     /// Extra leading space to clear the traffic-light buttons in non-fullscreen.
     private var trafficLightLeading: CGFloat { isFullScreen ? 0 : 80 }
@@ -72,7 +76,13 @@ struct SidebarTabBar: View {
                     .font(AppUI.Font.tabBarIcon)
                     .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
 
-                if tab == .project && hasUncommittedChanges {
+                if tab == .project && diagnosticErrorCount > 0 {
+                    // Errors take priority — red dot replaces the uncommitted-changes dot.
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
+                        .offset(x: 3, y: -1)
+                } else if tab == .project && hasUncommittedChanges {
                     Circle()
                         .fill(Color.accentColor)
                         .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
@@ -84,6 +94,7 @@ struct SidebarTabBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
         .help(tab.label)
         .accessibilityLabel(tab.label)
         .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
