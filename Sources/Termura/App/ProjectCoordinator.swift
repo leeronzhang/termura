@@ -53,7 +53,8 @@ final class ProjectCoordinator {
         }
 
         // Open asynchronously so DB migration (inside DatabaseService.init) runs off the main thread.
-        Task { @MainActor [weak self] in
+        // Task inherits @MainActor from the surrounding @MainActor context — no explicit annotation needed.
+        Task { [weak self] in
             guard let self, let deps = self.deps else { return }
             // Re-check inside task — a concurrent open for the same URL may have completed.
             if let existing = self.projectWindows[url] {
@@ -74,6 +75,7 @@ final class ProjectCoordinator {
                 )
                 self.projectWindows[url] = controller
                 self.activeContext = context
+                controller.onWindowClose = { [weak self] in self?.closeProject(at: url) }
                 // Fire the launch-time callback exactly once after the first window opens.
                 if self.projectWindows.count == 1 {
                     self.onFirstProjectOpened?(context.commandRouter)
@@ -89,9 +91,7 @@ final class ProjectCoordinator {
                     deps.windowChromeConfigurator(window)
                 }
                 controller.restoreFullScreenIfNeeded()
-                Task { @MainActor in
-                    await context.sessionScope.store.loadPersistedSessions()
-                }
+                await context.sessionScope.store.loadPersistedSessions()
                 logger.info("Opened project window: \(url.path)")
             } catch {
                 logger.error("Failed to open project at \(url.path): \(error)")
@@ -127,19 +127,29 @@ final class ProjectCoordinator {
         panel.prompt = "Open Project"
         panel.message = "Choose a project directory to open in Termura"
 
-        // begin(completionHandler:) presents a standalone non-blocking panel that works
-        // correctly whether or not a project window is already open. runModal() blocks
-        // the @MainActor with a nested run loop and fails to show when a window is key.
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            self?.openProject(at: url)
+        NSApp.activate(ignoringOtherApps: true)
+
+        if let keyWindow = NSApp.keyWindow {
+            // Attach as a sheet so the panel is always visible above the current window.
+            panel.beginSheetModal(for: keyWindow) { [weak self] response in
+                guard response == .OK, let url = panel.url else { return }
+                self?.openProject(at: url)
+            }
+        } else {
+            // No key window (e.g. first launch, all windows closed).
+            // runModal() enters a nested AppKit event loop — safe on @MainActor.
+            let response = panel.runModal()
+            if response == .OK, let url = panel.url {
+                openProject(at: url)
+            }
         }
     }
 
     /// Restore the most recently opened project or show the picker.
     /// Called on launch and on Dock icon click.
     func restoreLastProjectOrShowPicker() {
-        Task { @MainActor [weak self] in
+        // Task inherits @MainActor from the surrounding @MainActor context — no explicit annotation needed.
+        Task { [weak self] in
             await ProjectMigrationService.migrateIfNeeded()
             if let lastURL = self?.deps?.appServices.recentProjects.lastOpened() {
                 self?.openProject(at: lastURL)
@@ -151,12 +161,17 @@ final class ProjectCoordinator {
 
     // MARK: - Termination
 
-    func handleTermination() -> NSApplication.TerminateReply {
+    /// - Parameter metricsFlush: Optional additional async work (e.g. metrics persistence) to include
+    ///   in the structured task group so it is protected by the termination timeout.
+    ///   `MetricsPersistenceService` is an actor (Sendable) — safe to capture in @Sendable closure.
+    func handleTermination(
+        metricsFlush: (@Sendable () async -> Void)? = nil
+    ) -> NSApplication.TerminateReply {
         let contexts = projectWindows.values.map(\.projectContext)
         let handoffItems: [TerminationHandoffItem] = projectWindows.values.compactMap { controller in
             let ctx = controller.projectContext
             guard let activeID = ctx.sessionScope.store.activeSessionID,
-                  let session = ctx.sessionScope.store.sessions.first(where: { $0.id == activeID }) else {
+                  let session = ctx.sessionScope.store.session(id: activeID) else {
                 return nil
             }
             let chunks = ctx.viewStateManager.outputStores[activeID].map { Array($0.chunks) } ?? []
@@ -181,6 +196,9 @@ final class ProjectCoordinator {
         Task.detached {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
+                    // Metrics flush runs concurrently with session flush inside the same group,
+                    // so both are protected by the shared termination timeout.
+                    if let flush = metricsFlush { await flush() }
                     for ctx in contexts { await ctx.flushPendingWrites() }
                     for item in handoffItems {
                         do {
@@ -190,7 +208,6 @@ final class ProjectCoordinator {
                                 agentState: item.agentState
                             )
                         } catch {
-                            // Non-critical: app is terminating; handoff is best-effort.
                             logger.error("generateHandoff failed on termination: \(error)")
                         }
                     }
@@ -234,10 +251,11 @@ final class ProjectCoordinator {
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: nil,
-            queue: nil
+            queue: .main  // AppKit delivers on main; .main makes it explicit and avoids a Task hop.
         ) { [weak self] notification in
             guard let window = notification.object as? NSWindow else { return }
-            Task { @MainActor [weak self] in
+            // Already on the main queue — assumeIsolated avoids a redundant Task allocation.
+            MainActor.assumeIsolated { [weak self] in
                 guard let self else { return }
                 for (_, controller) in projectWindows where controller.window === window {
                     activeContext = controller.projectContext
@@ -252,7 +270,6 @@ final class ProjectCoordinator {
         UserDefaults.standard.set(paths, forKey: AppConfig.UserDefaultsKeys.openProjectPaths)
     }
 
-    @discardableResult
     private func setupChunkHandler(for context: ProjectContext) -> UUID {
         let menuBar = deps?.appServices.menuBarService
         let notification = deps?.appServices.notificationService

@@ -86,6 +86,12 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    // MARK: - Close callback
+
+    /// Called by ProjectCoordinator so it can remove this window from its registry when
+    /// the user closes it via the traffic light. Must be set before the window becomes visible.
+    var onWindowClose: (() -> Void)?
+
     // MARK: - NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -94,6 +100,14 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         // (keyboard shortcut via performClose), TabAwareWindow routes it
         // to tab closure instead, and this delegate method is never reached.
         return true
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // Nil out before calling to prevent re-entrancy: closeProject(at:) calls
+        // controller.close() which could otherwise trigger this a second time.
+        let callback = onWindowClose
+        onWindowClose = nil
+        callback?()
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {

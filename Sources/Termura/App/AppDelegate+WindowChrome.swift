@@ -21,7 +21,6 @@ extension AppDelegate {
                 // CancellationError is expected — window may have closed before the delay fired.
                 return
             } catch {
-                // Non-critical: window chrome is cosmetic; app functions without traffic-light tuning.
                 logger.warning("Window config delay failed: \(error.localizedDescription)")
                 return
             }
@@ -53,25 +52,28 @@ extension AppDelegate {
     // MARK: - Fullscreen transitions
 
     private func observeFullScreenTransitions(window: NSWindow) {
+        let key = ObjectIdentifier(window)
+        guard fullScreenObserverTokens[key] == nil else { return }
+
         // On entering fullscreen: add project label to traffic-light container.
-        NotificationCenter.default.addObserver(
+        let enterToken = NotificationCenter.default.addObserver(
             forName: NSWindow.didEnterFullScreenNotification,
             object: window,
-            queue: nil
+            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
         ) { [weak window] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let window else { return }
                 Self.addFullScreenLabel(to: window)
             }
         }
 
         // Hide traffic-light container BEFORE exit animation starts.
-        NotificationCenter.default.addObserver(
+        let willExitToken = NotificationCenter.default.addObserver(
             forName: NSWindow.willExitFullScreenNotification,
             object: window,
-            queue: nil
+            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
         ) { [weak self, weak window] _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard let self, let window else { return }
                 Self.removeFullScreenLabel(from: window)
                 self.trafficLightContainer(in: window)?.alphaValue = 0
@@ -79,7 +81,7 @@ extension AppDelegate {
         }
 
         // After exit animation finishes, reposition traffic lights and fade in.
-        NotificationCenter.default.addObserver(
+        let didExitToken = NotificationCenter.default.addObserver(
             forName: NSWindow.didExitFullScreenNotification,
             object: window,
             queue: nil
@@ -92,7 +94,6 @@ extension AppDelegate {
                     // CancellationError is expected — window closed before exit animation completed.
                     return
                 } catch {
-                    // Non-critical: fullscreen transition chrome is cosmetic.
                     logger.warning("Full-screen exit delay failed: \(error.localizedDescription)")
                     return
                 }
@@ -101,6 +102,26 @@ extension AppDelegate {
                 await NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = AppConfig.UI.trafficLightFadeSeconds
                     self.trafficLightContainer(in: window)?.animator().alphaValue = 1
+                }
+            }
+        }
+
+        fullScreenObserverTokens[key] = [enterToken, willExitToken, didExitToken]
+        scheduleFullScreenObserverCleanup(window: window, key: key)
+    }
+
+    /// Registers a one-shot `willCloseNotification` observer that removes the fullscreen
+    /// transition tokens from the registry when the window is closed.
+    private func scheduleFullScreenObserverCleanup(window: NSWindow, key: ObjectIdentifier) {
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { [weak self] in
+                guard let self else { return }
+                if let tokens = self.fullScreenObserverTokens.removeValue(forKey: key) {
+                    for token in tokens { NotificationCenter.default.removeObserver(token) }
                 }
             }
         }
@@ -193,7 +214,7 @@ final class TrafficLightAdjuster: NSView {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
+    required init?(coder: NSCoder) { preconditionFailure("Use init(window:)") }
 
     override func layout() {
         super.layout()

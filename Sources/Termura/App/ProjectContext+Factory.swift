@@ -17,7 +17,6 @@ func ensureProjectGitignore(
         do {
             contents = try String(contentsOf: gitignoreURL, encoding: .utf8)
         } catch {
-            // Non-critical: gitignore management is a convenience feature; project works without it.
             logger.warning("Could not read .gitignore: \(error)")
             return
         }
@@ -30,7 +29,6 @@ func ensureProjectGitignore(
             try (contents + suffix).write(to: gitignoreURL, atomically: true, encoding: .utf8)
             logger.info("Appended \(entry) to .gitignore")
         } catch {
-            // Non-critical: gitignore update is a convenience; does not affect app operation.
             logger.warning("Could not update .gitignore: \(error)")
         }
     } else {
@@ -40,7 +38,6 @@ func ensureProjectGitignore(
             try (entry + "\n").write(to: gitignoreURL, atomically: true, encoding: .utf8)
             logger.info("Created .gitignore with \(entry)")
         } catch {
-            // Non-critical: gitignore creation is a convenience; does not affect app operation.
             logger.warning("Could not create .gitignore: \(entry)")
         }
     }
@@ -55,12 +52,13 @@ extension ProjectContext {
         at projectURL: URL,
         engineFactory: any TerminalEngineFactory,
         tokenCountingService: any TokenCountingServiceProtocol,
-        metricsCollector: (any MetricsCollectorProtocol)? = nil
+        metricsCollector: (any MetricsCollectorProtocol)? = nil // Optional: observability, nil = MetricsCollector()
     ) async throws -> ProjectContext {
         let fallbackMetrics: any MetricsCollectorProtocol = metricsCollector ?? MetricsCollector()
-        let db = try await DatabaseService(
-            pool: DatabaseService.makePool(at: projectURL), metrics: fallbackMetrics
-        )
+        // makePool is non-isolated async — awaiting it suspends MainActor and runs
+        // filesystem + SQLite work on the cooperative thread pool (CLAUDE.md §6, Principle 6).
+        let pool = try await DatabaseService.makePool(at: projectURL)
+        let db = try await DatabaseService(pool: pool, metrics: fallbackMetrics)
         let repos = makeRepositories(db: db)
         let services = makeServices(
             repos: repos, projectURL: projectURL,
@@ -68,52 +66,28 @@ extension ProjectContext {
         )
         let healthMonitor = DBHealthMonitor(db: db, metrics: fallbackMetrics)
         let crashCtx = CrashContext(metrics: fallbackMetrics)
-        Task { await healthMonitor.start() }
+        // open(at:) is async throws — await the actor hop directly, no Task wrapper needed.
+        await healthMonitor.start()
 
         // Lifecycle: one-shot housekeeping — gitignore management is non-critical.
-        let url = projectURL
-        Task.detached { ensureProjectGitignore(at: url) }
+        Task.detached { ensureProjectGitignore(at: projectURL) }
         logger.info("Opened project at \(projectURL.path)")
-        let notesVM = NotesViewModel(repository: repos.note)
         let projectVM = ProjectViewModel(
             gitService: services.git, projectRoot: projectURL.path,
             commandRouter: services.router, fileTreeService: FileTreeService()
         )
+        let infra = ProjectContext.InfrastructureComponents(
+            databaseService: db, dbHealthMonitor: healthMonitor, crashContext: crashCtx,
+            metricsCollector: fallbackMetrics, tokenCountingService: tokenCountingService
+        )
         let scopes = makeScopes(
             repos: repos, services: services,
             tokenCountingService: tokenCountingService,
-            metricsCollector: fallbackMetrics,
-            projectVM: projectVM
+            metricsCollector: fallbackMetrics, projectVM: projectVM
         )
-        return ProjectContext(Components(
-            projectURL: projectURL,
-            databaseService: db,
-            engineStore: services.engineStore,
-            sessionRepository: repos.session,
-            noteRepository: repos.note,
-            sessionMessageRepository: repos.message,
-            harnessEventRepository: repos.harness,
-            ruleFileRepository: repos.rule,
-            sessionSnapshotRepository: repos.snapshot,
-            sessionStore: services.sessionStore,
-            agentStateStore: services.agentState,
-            searchService: services.search,
-            sessionArchiveService: services.archive,
-            sessionHandoffService: services.handoff,
-            contextInjectionService: services.injection,
-            experienceCodifier: services.codifier,
-            gitService: services.git,
-            commandRouter: services.router,
-            tokenCountingService: tokenCountingService,
-            metricsCollector: fallbackMetrics,
-            dbHealthMonitor: healthMonitor,
-            crashContext: crashCtx,
-            notesViewModel: notesVM,
-            projectViewModel: projectVM,
-            sessionScope: scopes.session,
-            dataScope: scopes.data,
-            projectScope: scopes.project,
-            viewStateManager: scopes.viewState
+        return ProjectContext(makeComponents(
+            projectURL: projectURL, infra: infra,
+            repos: repos, services: services, scopes: scopes
         ))
     }
 
@@ -192,6 +166,40 @@ extension ProjectContext {
         let viewState: SessionViewStateManager
     }
 
+    /// Assembles the full `Components` value passed to `ProjectContext.init`.
+    /// Extracted from `open(at:)` to keep that function within the 60-line body limit.
+    private static func makeComponents(
+        projectURL: URL,
+        infra: ProjectContext.InfrastructureComponents,
+        repos: ProjectRepositories,
+        services: ProjectServices,
+        scopes: ProjectScopes
+    ) -> Components {
+        let notesVM = NotesViewModel(repository: repos.note)
+        return Components(
+            projectURL: projectURL,
+            infrastructure: infra,
+            repositories: ProjectContext.RepositoryComponents(
+                session: repos.session, note: repos.note, message: repos.message,
+                harness: repos.harness, rule: repos.rule, snapshot: repos.snapshot
+            ),
+            services: ProjectContext.ServiceComponents(
+                engineStore: services.engineStore, sessionStore: services.sessionStore,
+                agentStateStore: services.agentState, searchService: services.search,
+                sessionArchiveService: services.archive, sessionHandoffService: services.handoff,
+                contextInjectionService: services.injection, experienceCodifier: services.codifier,
+                gitService: services.git, commandRouter: services.router
+            ),
+            viewModels: ProjectContext.ViewModelComponents(
+                notesViewModel: notesVM, projectViewModel: scopes.project.viewModel
+            ),
+            scopes: ProjectContext.ScopeComponents(
+                sessionScope: scopes.session, dataScope: scopes.data,
+                projectScope: scopes.project, viewStateManager: scopes.viewState
+            )
+        )
+    }
+
     private static func makeScopes(
         repos: ProjectRepositories,
         services: ProjectServices,
@@ -206,15 +214,25 @@ extension ProjectContext {
             searchService: services.search, vectorSearchService: nil,
             ruleFileRepository: repos.rule, sessionMessageRepository: repos.message
         )
-        let viewState = SessionViewStateManager(
-            commandRouter: services.router, sessionStore: services.sessionStore,
-            tokenCountingService: tokenCountingService, agentStateStore: services.agentState,
-            contextInjectionService: services.injection, sessionHandoffService: services.handoff,
+        let viewState = SessionViewStateManager(SessionViewStateManager.Components(
+            commandRouter: services.router,
+            sessionStore: services.sessionStore,
+            tokenCountingService: tokenCountingService,
+            agentStateStore: services.agentState,
+            contextInjectionService: services.injection,
+            sessionHandoffService: services.handoff,
             metricsCollector: metricsCollector
-        )
+        ))
         return ProjectScopes(
             session: session, data: data,
-            project: ProjectScope(gitService: services.git, viewModel: projectVM),
+            project: ProjectScope(
+                gitService: services.git,
+                viewModel: projectVM,
+                diagnosticsStore: DiagnosticsStore(
+                    commandRouter: services.router,
+                    projectRoot: projectVM.projectRootPath
+                )
+            ),
             viewState: viewState
         )
     }

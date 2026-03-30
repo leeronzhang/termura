@@ -1,12 +1,31 @@
 import SwiftUI
 
+// MARK: - Mock Preview Context
+//
+// Centralises the mock objects that must be shared across EnvironmentKey defaults,
+// mirroring the single-instance wiring in ProjectContext.open(at:).
+//
+// Rule: any two EnvironmentKey defaultValues whose real production counterparts
+// share the same underlying object MUST reference the same instance here.
+// Wiring source of truth: ProjectContext+Factory.swift makeScopes().
+//
+// Production code always injects real values via .environment(...).
+// This context is only reached in Xcode Previews and unit tests that omit injection.
+@MainActor
+private enum MockPreviewContext {
+    // Shared across SessionScopeKey and ViewStateManagerKey (matches makeScopes wiring).
+    static let engineStore = TerminalEngineStore(factory: MockTerminalEngineFactory())
+    static let agentStateStore = AgentStateStore()
+    static let sessionStore = SessionStore(engineStore: engineStore, repository: MockSessionRepository())
+    static let commandRouter = CommandRouter()
+}
+
 // MARK: - ThemeManager
 
-@MainActor
-private struct ThemeManagerKey: @preconcurrency EnvironmentKey {
+private struct ThemeManagerKey: EnvironmentKey {
     /// Placeholder default -- production code must inject via `.environment(\.themeManager, ...)`.
     /// If a view reads this without injection, it gets an unconfigured ThemeManager.
-    static let defaultValue = ThemeManager()
+    static let defaultValue: ThemeManager = MainActor.assumeIsolated { ThemeManager() }
 }
 
 extension EnvironmentValues {
@@ -18,10 +37,9 @@ extension EnvironmentValues {
 
 // MARK: - CommandRouter
 
-@MainActor
-private struct CommandRouterKey: @preconcurrency EnvironmentKey {
+private struct CommandRouterKey: EnvironmentKey {
     /// Placeholder default -- production code must inject via `.environment(\.commandRouter, ...)`.
-    static let defaultValue = CommandRouter()
+    static let defaultValue: CommandRouter = MainActor.assumeIsolated { CommandRouter() }
 }
 
 extension EnvironmentValues {
@@ -33,10 +51,9 @@ extension EnvironmentValues {
 
 // MARK: - FontSettings
 
-@MainActor
-private struct FontSettingsKey: @preconcurrency EnvironmentKey {
+private struct FontSettingsKey: EnvironmentKey {
     /// Placeholder default -- production code must inject via `.environment(\.fontSettings, ...)`.
-    static let defaultValue = FontSettings()
+    static let defaultValue: FontSettings = MainActor.assumeIsolated { FontSettings() }
 }
 
 extension EnvironmentValues {
@@ -48,12 +65,13 @@ extension EnvironmentValues {
 
 // MARK: - NotesViewModel
 
-@MainActor
-private struct NotesViewModelKey: @preconcurrency EnvironmentKey {
+private struct NotesViewModelKey: EnvironmentKey {
     // Safe fallback — production code must inject via `.environment(\.notesViewModel, ...)`.
     // SwiftUI accesses defaultValue during attribute-graph propagation before body modifiers
     // take effect, so preconditionFailure here would crash in Release builds.
-    static let defaultValue = NotesViewModel(repository: MockNoteRepository())
+    static let defaultValue: NotesViewModel = MainActor.assumeIsolated {
+        NotesViewModel(repository: MockNoteRepository())
+    }
 }
 
 extension EnvironmentValues {
@@ -65,18 +83,19 @@ extension EnvironmentValues {
 
 // MARK: - SessionScope
 
-@MainActor
-private struct SessionScopeKey: @preconcurrency EnvironmentKey {
+private struct SessionScopeKey: EnvironmentKey {
     // Safe fallback — production code must inject via `.environment(\.sessionScope, ...)`.
     // See NotesViewModelKey comment for why preconditionFailure must not be used here.
-    static let defaultValue = SessionScope(
-        store: SessionStore(
-            engineStore: TerminalEngineStore(factory: MockTerminalEngineFactory()),
-            repository: MockSessionRepository()
-        ),
-        engines: TerminalEngineStore(factory: MockTerminalEngineFactory()),
-        agentStates: AgentStateStore()
-    )
+    // Shared objects come from MockPreviewContext so that SessionScopeKey and
+    // ViewStateManagerKey see the same SessionStore / AgentStateStore, matching
+    // the single-instance wiring in ProjectContext+Factory.swift makeScopes().
+    static let defaultValue: SessionScope = MainActor.assumeIsolated {
+        SessionScope(
+            store: MockPreviewContext.sessionStore,
+            engines: MockPreviewContext.engineStore,
+            agentStates: MockPreviewContext.agentStateStore
+        )
+    }
 }
 
 extension EnvironmentValues {
@@ -88,16 +107,17 @@ extension EnvironmentValues {
 
 // MARK: - DataScope
 
-@MainActor
-private struct DataScopeKey: @preconcurrency EnvironmentKey {
+private struct DataScopeKey: EnvironmentKey {
     // Safe fallback — production code must inject via `.environment(\.dataScope, ...)`.
     // See NotesViewModelKey comment for why preconditionFailure must not be used here.
-    static let defaultValue = DataScope(
-        searchService: MockSearchService(),
-        vectorSearchService: nil,
-        ruleFileRepository: NullRuleFileRepository(),
-        sessionMessageRepository: MockSessionMessageRepository()
-    )
+    static let defaultValue: DataScope = MainActor.assumeIsolated {
+        DataScope(
+            searchService: MockSearchService(),
+            vectorSearchService: nil,
+            ruleFileRepository: NullRuleFileRepository(),
+            sessionMessageRepository: MockSessionMessageRepository()
+        )
+    }
 }
 
 extension EnvironmentValues {
@@ -109,19 +129,25 @@ extension EnvironmentValues {
 
 // MARK: - ProjectScope
 
-@MainActor
-private struct ProjectScopeKey: @preconcurrency EnvironmentKey {
+private struct ProjectScopeKey: EnvironmentKey {
     // Safe fallback — production code must inject via `.environment(\.projectScope, ...)`.
     // See NotesViewModelKey comment for why preconditionFailure must not be used here.
-    static let defaultValue = ProjectScope(
-        gitService: MockGitService(),
-        viewModel: ProjectViewModel(
-            gitService: MockGitService(),
-            projectRoot: "",
-            commandRouter: CommandRouter(),
-            fileTreeService: MockFileTreeService()
+    // gitService is shared between ProjectScope and ProjectViewModel so that
+    // both see the same mock state in previews and tests.
+    static let defaultValue: ProjectScope = MainActor.assumeIsolated {
+        let gitService = MockGitService()
+        let router = CommandRouter()
+        return ProjectScope(
+            gitService: gitService,
+            viewModel: ProjectViewModel(
+                gitService: gitService,
+                projectRoot: "",
+                commandRouter: router,
+                fileTreeService: MockFileTreeService()
+            ),
+            diagnosticsStore: DiagnosticsStore(commandRouter: router, projectRoot: "")
         )
-    )
+    }
 }
 
 extension EnvironmentValues {
@@ -133,21 +159,21 @@ extension EnvironmentValues {
 
 // MARK: - SessionViewStateManager
 
-@MainActor
-private struct ViewStateManagerKey: @preconcurrency EnvironmentKey {
+private struct ViewStateManagerKey: EnvironmentKey {
     // Safe fallback — production code must inject via `.environment(\.viewStateManager, ...)`.
     // See NotesViewModelKey comment for why preconditionFailure must not be used here.
-    static let defaultValue = SessionViewStateManager(
-        commandRouter: CommandRouter(),
-        sessionStore: SessionStore(
-            engineStore: TerminalEngineStore(factory: MockTerminalEngineFactory()),
-            repository: MockSessionRepository()
-        ),
-        tokenCountingService: MockTokenCountingService(),
-        agentStateStore: AgentStateStore(),
-        contextInjectionService: MockContextInjectionService(),
-        sessionHandoffService: MockSessionHandoffService()
-    )
+    // sessionStore and agentStateStore come from MockPreviewContext so they match
+    // the instances in SessionScopeKey, mirroring production wiring in makeScopes().
+    static let defaultValue: SessionViewStateManager = MainActor.assumeIsolated {
+        SessionViewStateManager(.init(
+            commandRouter: MockPreviewContext.commandRouter,
+            sessionStore: MockPreviewContext.sessionStore,
+            tokenCountingService: MockTokenCountingService(),
+            agentStateStore: MockPreviewContext.agentStateStore,
+            contextInjectionService: MockContextInjectionService(),
+            sessionHandoffService: MockSessionHandoffService()
+        ))
+    }
 }
 
 extension EnvironmentValues {

@@ -45,8 +45,6 @@ enum ProjectMigrationService {
             UserDefaults.standard.set(true, forKey: AppConfig.UserDefaultsKeys.projectMigrationCompleted)
             logger.info("Migration complete — \(projects.count) projects migrated")
         } catch {
-            // Non-critical: one-time migration — if it fails, legacy data remains intact at the
-            // original path and migration will be reattempted on next launch.
             logger.error("Project migration failed: \(error)")
         }
     }
@@ -60,7 +58,7 @@ enum ProjectMigrationService {
             return
         }
 
-        let newPool = try DatabaseService.makePool(at: projectURL)
+        let newPool = try await DatabaseService.makePool(at: projectURL)
         // Apply migrations to the new pool
         var migrator = DatabaseMigrator()
         DatabaseMigrations.register(into: &migrator)
@@ -107,7 +105,21 @@ enum ProjectMigrationService {
         }
     }
 
+    // Exhaustive whitelist of tables this migration is permitted to touch.
+    // Any caller passing a name outside this set is a programmer error — crash in
+    // Debug and Release alike so the mistake surfaces immediately during development.
+    private static let allowedMigrationTables: Set<String> = [
+        "sessions", "session_messages", "harness_events", "session_snapshots", "notes"
+    ]
+
     /// Copies rows from a table in the legacy DB to the target database.
+    ///
+    /// - Note: Dynamic SQL safety contract:
+    ///   - `table` is validated against `allowedMigrationTables` above; not user input.
+    ///   - `clause` is hardcoded at every call site ("working_directory = ?",
+    ///     "session_id IN (?,...)", "1=1") or built solely from "?" placeholders.
+    ///   - `columnList` comes from `row.columnNames` (DB schema), not user input.
+    ///   - All actual runtime values are passed via `StatementArguments` (parameterized).
     private static func copyTable(
         _ table: String,
         where clause: String,
@@ -115,6 +127,7 @@ enum ProjectMigrationService {
         from legacy: DatabasePool,
         into target: Database
     ) throws {
+        precondition(allowedMigrationTables.contains(table), "copyTable called with unexpected table '\(table)'")
         let rows = try legacy.read { db in
             try Row.fetchAll(db, sql: "SELECT * FROM \(table) WHERE \(clause)",
                              arguments: StatementArguments(args))

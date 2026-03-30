@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - UI controllers
 
     var visorController: VisorWindowController?
+    /// Stores the NSNotificationCenter tokens registered by `observeFullScreenTransitions`
+    /// keyed by window identity. Prevents duplicate registration and enables cleanup on close.
+    var fullScreenObserverTokens: [ObjectIdentifier: [any NSObjectProtocol]] = [:]
 
     // MARK: - Init
 
@@ -57,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
         CrashContext.clearPersistedData()
+        Self.cleanStaleTempImages()
 
         setupVisorShortcut()
         setupMenuBarActivation()
@@ -71,6 +75,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let launchElapsed = ContinuousClock.now - launchStart
         let collector = services.metricsCollector
         Task { await collector.recordDuration(.launchDuration, seconds: launchElapsed.totalSeconds) }
+    }
+
+    /// Deletes PNG files in `~/.termura/tmp/` that are older than `AppConfig.DragDrop.staleImageAgeSeconds`.
+    /// These files are created by drag-and-drop image operations in the terminal and editor. When the
+    /// image is dropped, its path is pasted as shell text and the file is no longer tracked. The file
+    /// must survive the current session (user may still be composing the command), but can safely be
+    /// removed on the next launch. Runs off the main thread to avoid blocking startup.
+    private static func cleanStaleTempImages() {
+        Task.detached {
+            let fm = FileManager.default
+            let tmpDir = fm.homeDirectoryForCurrentUser
+                .appendingPathComponent(AppConfig.DragDrop.tempImageSubdirectory)
+            guard fm.fileExists(atPath: tmpDir.path) else { return }
+            let cutoff = Date().timeIntervalSinceReferenceDate - AppConfig.DragDrop.staleImageAgeSeconds
+            do {
+                let contents = try fm.contentsOfDirectory(
+                    at: tmpDir,
+                    includingPropertiesForKeys: [.contentModificationDateKey],
+                    options: .skipsHiddenFiles
+                )
+                for url in contents {
+                    guard url.pathExtension == AppConfig.DragDrop.imagePasteExtension else { continue }
+                    let attrs = try url.resourceValues(forKeys: [.contentModificationDateKey])
+                    let modDate = attrs.contentModificationDate?.timeIntervalSinceReferenceDate ?? 0
+                    guard modDate < cutoff else { continue }
+                    do {
+                        try fm.removeItem(at: url)
+                        logger.debug("TempJanitor removed stale image: \(url.lastPathComponent)")
+                    } catch {
+                        logger.debug("TempJanitor could not remove \(url.lastPathComponent): \(error.localizedDescription)")
+                    }
+                }
+            } catch {
+                logger.debug("TempJanitor scan failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Explicitly register bundled fonts via CoreText.
@@ -109,15 +149,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        projectCoordinator.handleTermination()
+        // Include metrics flush in handleTermination's structured task group so it is
+        // protected by the termination timeout (not fire-and-forget after the reply is sent).
+        let persistence = services.metricsPersistenceService
+        return projectCoordinator.handleTermination { await persistence.flush() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         projectCoordinator.tearDown()
-        // Flush metrics to disk on clean quit for cross-session SLO analysis.
-        // Task.detached: MetricsPersistenceService is file I/O and must not run on main.
-        let persistence = services.metricsPersistenceService
-        Task.detached { await persistence.flush() }
+        // Metrics flush is handled in applicationShouldTerminate's handleTermination task group.
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

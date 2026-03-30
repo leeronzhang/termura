@@ -35,7 +35,6 @@ final class CommandRouter {
     var pendingCommand: PendingCommand?
 
     enum PendingCommand: Equatable {
-        case split(SplitAction)
         case toggleDualPane
         case closeTab
         case createNote
@@ -47,10 +46,13 @@ final class CommandRouter {
         /// Pre-fills the Composer with a quoted selection from the terminal output.
         /// Opens the Composer if not already visible, or appends if it is.
         case composerPrefill(text: String)
-    }
-
-    enum SplitAction: Equatable {
-        case vertical, horizontal, closePane
+        /// Terminate the PTY for the given session and remove its tab.
+        /// Record is preserved in the sidebar as ended; session can be reopened.
+        case endSession(SessionID)
+        /// Activate the session at the given 0-based index in the visible (non-ended) session list.
+        case selectSession(index: Int)
+        /// Cycle the selected ContentTab forward or backward by one position.
+        case cycleContentTab(forward: Bool)
     }
 
     // MARK: - Dual pane
@@ -121,9 +123,6 @@ final class CommandRouter {
     }
 
     func requestCloseTab() { pendingCommand = .closeTab }
-    func requestSplitHorizontal() { pendingCommand = .split(.horizontal) }
-    func requestSplitVertical() { pendingCommand = .split(.vertical) }
-    func requestCloseSplitPane() { pendingCommand = .split(.closePane) }
 
     func toggleSidebar() {
         showSidebar.toggle()
@@ -142,11 +141,18 @@ final class CommandRouter {
     }
 
     func toggleComposer() {
-        withAnimation(.spring(
-            response: AppConfig.UI.composerSpringResponse,
-            dampingFraction: AppConfig.UI.composerSpringDamping
-        )) {
-            showComposer.toggle()
+        if showComposer {
+            // Route through dismissComposer() so tabBeforeComposer is restored
+            // and isComposerNotesActive is cleared. A bare showComposer.toggle()
+            // would leave the sidebar on .notes and orphan tabBeforeComposer.
+            dismissComposer()
+        } else {
+            withAnimation(.spring(
+                response: AppConfig.UI.composerSpringResponse,
+                dampingFraction: AppConfig.UI.composerSpringDamping
+            )) {
+                showComposer = true
+            }
         }
     }
 

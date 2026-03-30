@@ -65,10 +65,16 @@ final class DataScope {
 final class ProjectScope {
     let gitService: any GitServiceProtocol
     let viewModel: ProjectViewModel
+    let diagnosticsStore: DiagnosticsStore
 
-    init(gitService: any GitServiceProtocol, viewModel: ProjectViewModel) {
+    init(
+        gitService: any GitServiceProtocol,
+        viewModel: ProjectViewModel,
+        diagnosticsStore: DiagnosticsStore
+    ) {
         self.gitService = gitService
         self.viewModel = viewModel
+        self.diagnosticsStore = diagnosticsStore
     }
 }
 
@@ -94,22 +100,44 @@ final class SessionViewStateManager {
     // observe cancellables directly — mutation here must not trigger SwiftUI re-renders.
     @ObservationIgnored private var cancellables: Set<AnyCancellable> = []
 
-    init(
-        commandRouter: CommandRouter,
-        sessionStore: SessionStore,
-        tokenCountingService: any TokenCountingServiceProtocol,
-        agentStateStore: AgentStateStore,
-        contextInjectionService: any ContextInjectionServiceProtocol,
-        sessionHandoffService: any SessionHandoffServiceProtocol,
-        metricsCollector: (any MetricsCollectorProtocol)? = nil
-    ) {
-        self.commandRouter = commandRouter
-        self.sessionStore = sessionStore
-        self.tokenCountingService = tokenCountingService
-        self.agentStateStore = agentStateStore
-        self.contextInjectionService = contextInjectionService
-        self.sessionHandoffService = sessionHandoffService
-        self.metricsCollector = metricsCollector
+    /// Groups the 7 factory dependencies. Required per CLAUDE.md §5:
+    /// init with more than 6 parameters must pack them into a named struct.
+    struct Components {
+        let commandRouter: CommandRouter
+        let sessionStore: SessionStore
+        let tokenCountingService: any TokenCountingServiceProtocol
+        let agentStateStore: AgentStateStore
+        let contextInjectionService: any ContextInjectionServiceProtocol
+        let sessionHandoffService: any SessionHandoffServiceProtocol
+        let metricsCollector: (any MetricsCollectorProtocol)?
+
+        init(
+            commandRouter: CommandRouter,
+            sessionStore: SessionStore,
+            tokenCountingService: any TokenCountingServiceProtocol,
+            agentStateStore: AgentStateStore,
+            contextInjectionService: any ContextInjectionServiceProtocol,
+            sessionHandoffService: any SessionHandoffServiceProtocol,
+            metricsCollector: (any MetricsCollectorProtocol)? = nil // Optional: observability, nil = no-op
+        ) {
+            self.commandRouter = commandRouter
+            self.sessionStore = sessionStore
+            self.tokenCountingService = tokenCountingService
+            self.agentStateStore = agentStateStore
+            self.contextInjectionService = contextInjectionService
+            self.sessionHandoffService = sessionHandoffService
+            self.metricsCollector = metricsCollector
+        }
+    }
+
+    init(_ components: Components) {
+        self.commandRouter = components.commandRouter
+        self.sessionStore = components.sessionStore
+        self.tokenCountingService = components.tokenCountingService
+        self.agentStateStore = components.agentStateStore
+        self.contextInjectionService = components.contextInjectionService
+        self.sessionHandoffService = components.sessionHandoffService
+        self.metricsCollector = components.metricsCollector
 
         sessionStore.sessionDidClose
             .receive(on: RunLoop.main)
@@ -139,6 +167,7 @@ final class SessionViewStateManager {
 
         let coordinator = AgentCoordinator(
             sessionID: sessionID,
+            sessionStore: sessionStore,
             agentStateStore: agentStateStore,
             metricsCollector: metricsCollector
         )
@@ -153,10 +182,9 @@ final class SessionViewStateManager {
             isRestoredSession: sessionStore.isRestoredSession(id: sessionID)
         )
 
-        let initialDir = sessionStore.sessions
-            .first(where: { $0.id == sessionID })?.workingDirectory
+        let initialDir = sessionStore.session(id: sessionID)?.workingDirectory
             ?? AppConfig.Paths.homeDirectory
-        let vm = TerminalViewModel(
+        let vm = TerminalViewModel(TerminalViewModel.Components(
             sessionID: sessionID,
             engine: engine,
             sessionStore: sessionStore,
@@ -165,7 +193,7 @@ final class SessionViewStateManager {
             outputProcessor: processor,
             sessionServices: services,
             initialWorkingDirectory: initialDir
-        )
+        ))
         let editorVM = EditorViewModel(engine: engine, modeController: modeCtrl)
 
         let state = SessionViewState(

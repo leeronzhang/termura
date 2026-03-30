@@ -29,14 +29,12 @@ struct RecentProjectsService: Sendable {
         do {
             data = try Data(contentsOf: fileURL)
         } catch {
-            // Non-critical: missing file is expected on first launch; returns empty list.
             logger.debug("No recent projects file at \(fileURL.path): \(error.localizedDescription)")
             return []
         }
         do {
             return try JSONDecoder().decode([RecentProject].self, from: data)
         } catch {
-            // Non-critical: corrupted recent-projects file is recoverable — next save will overwrite.
             logger.error("Failed to decode recent projects: \(error)")
             return []
         }
@@ -81,7 +79,6 @@ struct RecentProjectsService: Sendable {
             let data = try encoder.encode(list)
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            // Non-critical: recent-projects list is cosmetic; app fully works without it.
             logger.error("Failed to save recent projects: \(error)")
         }
     }

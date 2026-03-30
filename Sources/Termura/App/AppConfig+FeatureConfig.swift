@@ -34,6 +34,9 @@ extension AppConfig {
         static let htmlTemplateName = "session_export"
         /// Maximum messages per export operation.
         static let maxExportMessages = 10000
+        /// Maximum export files retained in the system temp directory.
+        /// Oldest files are deleted once the count exceeds this limit.
+        static let maxRetainedExports = 20
     }
 
     enum SplitPane {
@@ -107,6 +110,9 @@ extension AppConfig {
         static let tempImageSubdirectory = ".termura/tmp"
         static let imagePastePrefix = "paste"
         static let imagePasteExtension = "png"
+        /// Files older than this threshold are deleted by the startup janitor.
+        /// 1 day is conservative: any drag/paste path has long been consumed before restart.
+        static let staleImageAgeSeconds: Double = 86400
     }
 
     enum RecentProjects {
@@ -160,5 +166,12 @@ extension AppConfig {
         static let maxCount = 3
         /// Maximum filename character length shown in a pill before truncation.
         static let pillNameMaxLength = 22
+    }
+
+    enum Diagnostics {
+        /// Maximum DiagnosticItems extracted from a single OutputChunk (per-chunk cap).
+        static let maxItemsPerChunk = 100
+        /// Maximum total DiagnosticItems retained across all sessions in a project.
+        static let maxTotalItems = 500
     }
 }

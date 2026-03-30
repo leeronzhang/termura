@@ -55,17 +55,27 @@ final class ProjectContext {
 
     // MARK: - Init (private — use open(at:engineFactory:))
 
-    /// Named struct ensures each of the 28 dependencies is assigned by label, preventing same-typed arg swaps.
-    struct Components {
-        let projectURL: URL
+    /// Second-level grouping structs: each of the 28 dependencies is assigned by label
+    /// within a semantically bounded sub-struct, preventing same-typed arg swaps.
+    struct InfrastructureComponents {
         let databaseService: any DatabaseServiceProtocol
+        let dbHealthMonitor: DBHealthMonitor
+        let crashContext: CrashContext
+        let metricsCollector: any MetricsCollectorProtocol
+        let tokenCountingService: any TokenCountingServiceProtocol
+    }
+
+    struct RepositoryComponents {
+        let session: any SessionRepositoryProtocol
+        let note: any NoteRepositoryProtocol
+        let message: any SessionMessageRepositoryProtocol
+        let harness: any HarnessEventRepositoryProtocol
+        let rule: any RuleFileRepositoryProtocol
+        let snapshot: any SessionSnapshotRepositoryProtocol
+    }
+
+    struct ServiceComponents {
         let engineStore: TerminalEngineStore
-        let sessionRepository: any SessionRepositoryProtocol
-        let noteRepository: any NoteRepositoryProtocol
-        let sessionMessageRepository: any SessionMessageRepositoryProtocol
-        let harnessEventRepository: any HarnessEventRepositoryProtocol
-        let ruleFileRepository: any RuleFileRepositoryProtocol
-        let sessionSnapshotRepository: any SessionSnapshotRepositoryProtocol
         let sessionStore: SessionStore
         let agentStateStore: AgentStateStore
         let searchService: any SearchServiceProtocol
@@ -75,47 +85,63 @@ final class ProjectContext {
         let experienceCodifier: ExperienceCodifier
         let gitService: any GitServiceProtocol
         let commandRouter: CommandRouter
-        let tokenCountingService: any TokenCountingServiceProtocol
-        let metricsCollector: any MetricsCollectorProtocol
-        let dbHealthMonitor: DBHealthMonitor
-        let crashContext: CrashContext
+    }
+
+    struct ViewModelComponents {
         let notesViewModel: NotesViewModel
         let projectViewModel: ProjectViewModel
+    }
+
+    struct ScopeComponents {
         let sessionScope: SessionScope
         let dataScope: DataScope
         let projectScope: ProjectScope
         let viewStateManager: SessionViewStateManager
     }
 
+    struct Components {
+        let projectURL: URL
+        let infrastructure: InfrastructureComponents
+        let repositories: RepositoryComponents
+        let services: ServiceComponents
+        let viewModels: ViewModelComponents
+        let scopes: ScopeComponents
+    }
+
     init(_ components: Components) {
         projectURL = components.projectURL
-        databaseService = components.databaseService
-        engineStore = components.engineStore
-        sessionRepository = components.sessionRepository
-        noteRepository = components.noteRepository
-        sessionMessageRepository = components.sessionMessageRepository
-        harnessEventRepository = components.harnessEventRepository
-        ruleFileRepository = components.ruleFileRepository
-        sessionSnapshotRepository = components.sessionSnapshotRepository
-        sessionStore = components.sessionStore
-        agentStateStore = components.agentStateStore
-        searchService = components.searchService
-        sessionArchiveService = components.sessionArchiveService
-        sessionHandoffService = components.sessionHandoffService
-        contextInjectionService = components.contextInjectionService
-        experienceCodifier = components.experienceCodifier
-        gitService = components.gitService
-        commandRouter = components.commandRouter
-        tokenCountingService = components.tokenCountingService
-        metricsCollector = components.metricsCollector
-        dbHealthMonitor = components.dbHealthMonitor
-        crashContext = components.crashContext
-        notesViewModel = components.notesViewModel
-        projectViewModel = components.projectViewModel
-        sessionScope = components.sessionScope
-        dataScope = components.dataScope
-        projectScope = components.projectScope
-        viewStateManager = components.viewStateManager
+
+        databaseService = components.infrastructure.databaseService
+        dbHealthMonitor = components.infrastructure.dbHealthMonitor
+        crashContext = components.infrastructure.crashContext
+        metricsCollector = components.infrastructure.metricsCollector
+        tokenCountingService = components.infrastructure.tokenCountingService
+
+        sessionRepository = components.repositories.session
+        noteRepository = components.repositories.note
+        sessionMessageRepository = components.repositories.message
+        harnessEventRepository = components.repositories.harness
+        ruleFileRepository = components.repositories.rule
+        sessionSnapshotRepository = components.repositories.snapshot
+
+        engineStore = components.services.engineStore
+        sessionStore = components.services.sessionStore
+        agentStateStore = components.services.agentStateStore
+        searchService = components.services.searchService
+        sessionArchiveService = components.services.sessionArchiveService
+        sessionHandoffService = components.services.sessionHandoffService
+        contextInjectionService = components.services.contextInjectionService
+        experienceCodifier = components.services.experienceCodifier
+        gitService = components.services.gitService
+        commandRouter = components.services.commandRouter
+
+        notesViewModel = components.viewModels.notesViewModel
+        projectViewModel = components.viewModels.projectViewModel
+
+        sessionScope = components.scopes.sessionScope
+        dataScope = components.scopes.dataScope
+        projectScope = components.scopes.projectScope
+        viewStateManager = components.scopes.viewStateManager
     }
 
     /// Project display name (directory basename).

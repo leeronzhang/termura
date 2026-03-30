@@ -30,6 +30,11 @@ enum AppConfig {
         /// Oldest events are dropped once the buffer is full; prevents unbounded memory growth
         /// during high-throughput commands (e.g. `cat` on a large file).
         static let streamBufferCapacity = 512
+        /// Debounce window before sending SIGWINCH after a layout change.
+        /// Prevents spurious double-resize when SwiftUI rebuilds the terminal view tree
+        /// during a session switch (first layout pass fires with a transient wrong size,
+        /// second pass fires with the correct size; only the second should send SIGWINCH).
+        static let resizeDebounce: Duration = .milliseconds(16)
     }
 
     enum Runtime {
@@ -60,6 +65,10 @@ enum AppConfig {
         /// Minimum interval between SessionMetadata UI refreshes during streaming output.
         /// Prevents per-packet SwiftUI redraws during high-throughput terminal output.
         static let metadataRefreshThrottleSeconds: Double = 0.5
+        /// Debounce before forking a PTY when activating a session without an existing engine.
+        /// Prevents a PTY fork storm when the user rapidly clicks through the session list:
+        /// only the session the user actually settles on creates a shell process.
+        static let engineCreationDebounce: Duration = .milliseconds(120)
     }
 
     enum SLO {

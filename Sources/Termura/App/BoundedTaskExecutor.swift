@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import os
 
 private let logger = Logger(subsystem: "com.termura.app", category: "BoundedTaskExecutor")
 
@@ -13,9 +14,11 @@ private let logger = Logger(subsystem: "com.termura.app", category: "BoundedTask
 final class BoundedTaskExecutor {
     private let semaphore: AsyncSemaphore
     private let maxConcurrent: Int
-    // nonisolated(unsafe): deinit is nonisolated; last-reference guarantee makes
-    // the access free of data races — no concurrent mutation is possible at deinit time.
-    nonisolated(unsafe) private var tracked: [UUID: Task<Void, Never>] = [:]
+    // OSAllocatedUnfairLock is Sendable, so it can be accessed from nonisolated
+    // deinit without unsafe annotations. All mutations happen on MainActor (no actual
+    // contention); the lock satisfies Swift 6 Sendability for deinit-access.
+    private let _tracked: OSAllocatedUnfairLock<[UUID: Task<Void, Never>]> =
+        OSAllocatedUnfairLock(initialState: [:])
 
     /// - Parameter maxConcurrent: Maximum tasks executing simultaneously.
     init(maxConcurrent: Int) {
@@ -24,34 +27,38 @@ final class BoundedTaskExecutor {
     }
 
     deinit {
-        for task in tracked.values {
-            task.cancel()
-        }
+        _tracked.withLock { $0.values.forEach { $0.cancel() } }
     }
 
     /// Number of tasks currently tracked (pending + executing).
-    var activeCount: Int { tracked.count }
+    var activeCount: Int { _tracked.withLock { $0.count } }
 
     /// True when the queue depth has reached the hard cap.
     /// Callers can check this before spawning non-critical work to shed load
     /// during high-throughput output bursts (e.g. large PTY floods).
-    var isAtCapacity: Bool { tracked.count >= maxConcurrent * AppConfig.Runtime.taskQueueDepthMultiplier }
+    var isAtCapacity: Bool {
+        _tracked.withLock { $0.count } >= maxConcurrent * AppConfig.Runtime.taskQueueDepthMultiplier
+    }
 
     /// Spawns a task on the MainActor context with bounded concurrency.
     /// The task waits for a semaphore permit before executing the operation.
     func spawn(_ operation: @escaping @MainActor () async -> Void) {
         let id = UUID()
         let sem = semaphore
-        let task = Task { @MainActor [weak self] in
+        // Task inherits @MainActor from BoundedTaskExecutor's @MainActor context — no explicit annotation needed.
+        let task = Task { [weak self] in
             await sem.wait()
-            defer {
-                Task { await sem.signal() }
-                self?.removeTracked(id)
+            // Defer handles synchronous tracking cleanup.
+            // sem.signal() is called inline below — Swift defer cannot contain `await`,
+            // so an inner Task would be needed otherwise, but that Task would escape
+            // tracking and could signal the semaphore after deinit (CLAUDE.md §3).
+            defer { self?.removeTracked(id) }
+            if !Task.isCancelled {
+                await operation()
             }
-            guard !Task.isCancelled else { return }
-            await operation()
+            await sem.signal()
         }
-        tracked[id] = task
+        _tracked.withLock { $0[id] = task }
     }
 
     /// Spawns a detached task off MainActor with bounded concurrency.
@@ -64,17 +71,20 @@ final class BoundedTaskExecutor {
         }
         let task = Task.detached {
             await sem.wait()
-            defer {
-                Task { await sem.signal() }
-                Task { @MainActor in cleanup() }
+            // Signal and hop to MainActor for cleanup are called inline — Swift defer
+            // cannot contain `await`, so a nested Task would be required otherwise.
+            // A nested Task escapes the tracked dictionary, preventing deinit from
+            // cancelling it and allowing sem.signal() to fire after executor teardown.
+            if !Task.isCancelled {
+                await operation()
             }
-            guard !Task.isCancelled else { return }
-            await operation()
+            await sem.signal()
+            await cleanup()
         }
-        tracked[id] = task
+        _tracked.withLock { $0[id] = task }
     }
 
     private func removeTracked(_ id: UUID) {
-        tracked.removeValue(forKey: id)
+        _tracked.withLock { _ = $0.removeValue(forKey: id) }
     }
 }

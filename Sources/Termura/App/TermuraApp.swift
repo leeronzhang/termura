@@ -14,7 +14,7 @@ struct TermuraApp: App {
             )
         }
         .commands {
-            AppCommands()
+            AppCommands(appDelegate: appDelegate)
         }
     }
 }
