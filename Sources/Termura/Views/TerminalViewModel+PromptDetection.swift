@@ -25,7 +25,7 @@ extension TerminalViewModel {
     private static let shellPromptSuffixes: [String] = [" $", " %", " #"]
     private static let bareShellPrompts: Set<String> = ["$", "%", "#"]
 
-    func detectPromptFromScreenBuffer() {
+    func detectPromptFromScreenBuffer() async {
         // Scan cursor line + up to 5 lines above. TUI apps (Claude Code) often
         // position the cursor on hint/status lines below the actual prompt.
         let lines = engine.linesNearCursor(above: 5)
@@ -45,11 +45,13 @@ extension TerminalViewModel {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if isAIPromptLine(trimmed) {
                 isInteractivePrompt = true
-                let services = sessionServices
-                let dir = currentMetadata.workingDirectory
-                let eng = engine
-                let clk = clock
-                Task { await services.injectContextIfNeeded(workingDirectory: dir, engine: eng, clock: clk) }
+                // Unified with Path B (OSC 133 shell event): both paths use direct await
+                // so injection order is deterministic and governed by actor serialisation.
+                await sessionServices.injectContextIfNeeded(
+                    workingDirectory: currentMetadata.workingDirectory,
+                    engine: engine,
+                    clock: clock
+                )
                 return
             }
         }
@@ -78,24 +80,4 @@ extension TerminalViewModel {
         return rest.allSatisfy(\.isWhitespace)
     }
 
-    /// Schedules a debounced re-check of the screen buffer after PTY output settles.
-    /// Solves the race where prompt characters arrive across multiple data chunks —
-    /// the immediate `detectPromptFromScreenBuffer()` may fire before SwiftTerm has
-    /// rendered the full prompt line, and no further data event triggers a re-check.
-    func schedulePromptRecheck() {
-        promptRecheckTask?.cancel()
-        promptRecheckTask = Task { @MainActor [weak self] in
-            do {
-                try await self?.clock.sleep(for: AppConfig.UI.promptRecheckDelay)
-            } catch is CancellationError {
-                // CancellationError is expected — a newer output event supersedes this check.
-                return
-            } catch {
-                // Non-critical: prompt recheck is a debounced UI hint; missing it is imperceptible.
-                logger.warning("Prompt recheck delay failed: \(error.localizedDescription)")
-                return
-            }
-            self?.detectPromptFromScreenBuffer()
-        }
-    }
 }

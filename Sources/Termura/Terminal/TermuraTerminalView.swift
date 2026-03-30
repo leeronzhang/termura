@@ -37,17 +37,15 @@ final class TermuraTerminalView: LocalProcessTerminalView {
 
     // MARK: - Option+drag forced text selection (local event monitor)
 
-    /// Holding Option while clicking bypasses terminal mouse reporting so that
-    /// the user can always drag-select text regardless of whether the running
-    /// process (e.g. Claude Code) has enabled mouse event forwarding.
-    ///
-    /// This matches the behaviour of iTerm2 and Terminal.app.
-    ///
-    /// SwiftTerm's mouseDown/mouseUp are declared `public` (not `open`), so
-    /// Swift 6 forbids overriding them outside the module. An NSEvent local
-    /// monitor fires before the responder chain, giving us the same intercept
-    /// point without subclass overrides.
-    nonisolated(unsafe) private var mouseEventMonitor: Any?
+    // Holding Option while clicking bypasses terminal mouse reporting so that
+    // the user can always drag-select text regardless of whether the running
+    // process (e.g. Claude Code) has enabled mouse event forwarding.
+    // This matches the behaviour of iTerm2 and Terminal.app.
+    // SwiftTerm's mouseDown/mouseUp are declared `public` (not `open`), so
+    // Swift 6 forbids overriding them outside the module. An NSEvent local
+    // monitor fires before the responder chain, giving us the same intercept
+    // point without subclass overrides.
+    private var mouseEventMonitor: Any?
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -58,19 +56,13 @@ final class TermuraTerminalView: LocalProcessTerminalView {
         }
     }
 
-    deinit {
-        if let monitor = mouseEventMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-    }
-
     private func installMouseMonitor() {
         removeMouseMonitor()
         mouseEventMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseUp]
-        ) { [weak self] event in
-            self?.handleMouseEvent(event)
-            return event
+        ) { [weak self] event -> NSEvent? in
+            guard let self else { return event }
+            return self.handleMouseEvent(event)
         }
     }
 
@@ -81,8 +73,8 @@ final class TermuraTerminalView: LocalProcessTerminalView {
         }
     }
 
-    private func handleMouseEvent(_ event: NSEvent) {
-        guard event.window === window else { return }
+    private func handleMouseEvent(_ event: NSEvent) -> NSEvent? {
+        guard event.window === window else { return event }
 
         switch event.type {
         case .leftMouseDown:
@@ -99,19 +91,33 @@ final class TermuraTerminalView: LocalProcessTerminalView {
                 // text-selection logic instead.
                 allowMouseReporting = false
             }
+            return event
         case .leftMouseUp:
-            guard isOptionForceSelecting else { return }
-            let savedValue = savedMouseReporting
-            // Clear flag now so a rapid next mouseDown sees clean state.
-            isOptionForceSelecting = false
-            // Defer allowMouseReporting restoration until after super.mouseUp
-            // has processed the event — prevents a spurious PTY mouse-up event
-            // being sent while reporting was disabled for this drag gesture.
-            Task { @MainActor [weak self] in
-                self?.allowMouseReporting = savedValue
+            if isOptionForceSelecting {
+                let savedValue = savedMouseReporting
+                // Clear flag now so a rapid next mouseDown sees clean state.
+                isOptionForceSelecting = false
+                // Defer allowMouseReporting restoration until after super.mouseUp
+                // has processed the event — prevents a spurious PTY mouse-up event
+                // being sent while reporting was disabled for this drag gesture.
+                Task { @MainActor [weak self] in
+                    self?.allowMouseReporting = savedValue
+                }
+                return event
             }
+            // Cmd+click: open URL at the clicked terminal cell.
+            if event.modifierFlags.contains(.command) {
+                let point = convert(event.locationInWindow, from: nil)
+                if bounds.contains(point), let (col, row) = visibleCell(at: point) {
+                    if let url = osc8URL(col: col, row: row) ?? plainTextURL(col: col, row: row) {
+                        openTerminalURL(url)
+                        return nil  // consume — URL was opened
+                    }
+                }
+            }
+            return event
         default:
-            break
+            return event
         }
     }
 
@@ -121,6 +127,17 @@ final class TermuraTerminalView: LocalProcessTerminalView {
     /// Right-click does not clear the SwiftTerm selection, but by the time a menu item
     /// fires its action the selection may already be gone — so we snapshot it here.
     private var menuCachedSelection: String = ""
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        switch item.action {
+        case #selector(performClearScreen):
+            return true
+        case #selector(performQuote), #selector(performAsk):
+            return !menuCachedSelection.isEmpty
+        default:
+            return super.validateUserInterfaceItem(item)
+        }
+    }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         menuCachedSelection = getSelection() ?? ""
