@@ -17,12 +17,10 @@ final class TerminalEngineStore {
     // MARK: - Engine lifecycle
 
     /// Create and store a new engine for the given session.
-    @discardableResult
-    func createEngine(for sessionID: SessionID, shell: String? = nil, currentDirectory: String? = nil) -> any TerminalEngine {
+    func createEngine(for sessionID: SessionID, shell: String? = nil, currentDirectory: String? = nil) {
         let engine = factory.makeEngine(for: sessionID, shell: shell, currentDirectory: currentDirectory)
         engines[sessionID] = engine
         logger.info("Created engine for session \(sessionID)")
-        return engine
     }
 
     func engine(for sessionID: SessionID) -> (any TerminalEngine)? {

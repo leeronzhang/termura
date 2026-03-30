@@ -11,7 +11,8 @@ final class MockSessionStore: SessionStoreProtocol {
     private(set) var activeSessionID: SessionID?
 
     @ObservationIgnored private(set) var createCallCount = 0
-    @ObservationIgnored private(set) var closeCallCount = 0
+    @ObservationIgnored private(set) var deleteCallCount = 0
+    @ObservationIgnored private var sessionIndex: [SessionID: Int] = [:]
 
     @ObservationIgnored private let _sessionsLoaded = PassthroughSubject<Void, Never>()
     var sessionsLoaded: AnyPublisher<Void, Never> { _sessionsLoaded.eraseToAnyPublisher() }
@@ -19,6 +20,14 @@ final class MockSessionStore: SessionStoreProtocol {
     init(sessions: [SessionRecord] = [], activeID: SessionID? = nil) {
         self.sessions = sessions
         activeSessionID = activeID ?? sessions.first?.id
+        for (i, s) in sessions.enumerated() { sessionIndex[s.id] = i }
+    }
+
+    private func rebuildSessionIndex() {
+        sessionIndex.removeAll(keepingCapacity: true)
+        for (i, session) in sessions.enumerated() {
+            sessionIndex[session.id] = i
+        }
     }
 
     @discardableResult
@@ -26,15 +35,32 @@ final class MockSessionStore: SessionStoreProtocol {
         createCallCount += 1
         let record = SessionRecord(title: title ?? "Terminal", orderIndex: sessions.count)
         sessions.append(record)
+        sessionIndex[record.id] = sessions.count - 1
         activeSessionID = record.id
         return record
     }
 
-    func closeSession(id: SessionID) async {
-        closeCallCount += 1
-        sessions.removeAll { $0.id == id }
+    func endSession(id: SessionID) async {
+        guard let idx = sessionIndex[id], !sessions[idx].isEnded else { return }
+        sessions[idx].endedAt = Date()
         if activeSessionID == id {
-            activeSessionID = sessions.last?.id
+            activeSessionID = sessions.last(where: { !$0.isEnded })?.id
+        }
+    }
+
+    func reopenSession(id: SessionID) async {
+        guard let idx = sessionIndex[id], sessions[idx].isEnded else { return }
+        sessions[idx].endedAt = nil
+        activeSessionID = id
+    }
+
+    func deleteSession(id: SessionID) async {
+        deleteCallCount += 1
+        guard let idx = sessionIndex[id] else { return }
+        sessions.remove(at: idx)
+        rebuildSessionIndex()
+        if activeSessionID == id {
+            activeSessionID = sessions.last(where: { !$0.isEnded })?.id
         }
     }
 
@@ -43,37 +69,46 @@ final class MockSessionStore: SessionStoreProtocol {
     }
 
     func renameSession(id: SessionID, title: String) {
-        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        guard let idx = sessionIndex[id] else { return }
         sessions[idx].title = title
     }
 
     func updateWorkingDirectory(id: SessionID, path: String) {
-        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        guard let idx = sessionIndex[id] else { return }
         sessions[idx].workingDirectory = path
     }
 
     func pinSession(id: SessionID) {
-        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        guard let idx = sessionIndex[id] else { return }
         sessions[idx].isPinned = true
     }
 
     func unpinSession(id: SessionID) {
-        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        guard let idx = sessionIndex[id] else { return }
         sessions[idx].isPinned = false
     }
 
     func setColorLabel(id: SessionID, label: SessionColorLabel) {
-        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        guard let idx = sessionIndex[id] else { return }
         sessions[idx].colorLabel = label
     }
 
     func setAgentType(id: SessionID, type: AgentType) {
-        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        guard let idx = sessionIndex[id] else { return }
         sessions[idx].agentType = type
     }
 
     func reorderSessions(from source: IndexSet, to destination: Int) {
         sessions.move(fromOffsets: source, toOffset: destination)
+        for index in sessions.indices {
+            sessions[index].orderIndex = index
+        }
+        rebuildSessionIndex()
+    }
+
+    func session(id: SessionID) -> SessionRecord? {
+        guard let idx = sessionIndex[id] else { return nil }
+        return sessions[idx]
     }
 
     func isRestoredSession(id: SessionID) -> Bool {
@@ -90,23 +125,22 @@ final class MockSessionStore: SessionStoreProtocol {
 
     // MARK: - Session Tree
 
-    @discardableResult
-    func createBranch(from sessionID: SessionID, type: BranchType, title: String? = nil) async -> SessionRecord? {
+    func createBranch(from sessionID: SessionID, type: BranchType, title: String? = nil) async {
         let resolvedTitle = title ?? "\(type.rawValue.capitalized) branch"
         let record = SessionRecord(title: resolvedTitle, parentID: sessionID, branchType: type)
         sessions.append(record)
+        sessionIndex[record.id] = sessions.count - 1
         activeSessionID = record.id
-        return record
     }
 
     func navigateToParent(of sessionID: SessionID) {
-        guard let idx = sessions.firstIndex(where: { $0.id == sessionID }),
+        guard let idx = sessionIndex[sessionID],
               let parentID = sessions[idx].parentID else { return }
         activeSessionID = parentID
     }
 
     func mergeBranchSummary(branchID: SessionID, summary: String, messageRepo: (any SessionMessageRepositoryProtocol)?) async {
-        guard let idx = sessions.firstIndex(where: { $0.id == branchID }),
+        guard let idx = sessionIndex[branchID],
               let parentID = sessions[idx].parentID else { return }
         sessions[idx].summary = summary
         activeSessionID = parentID

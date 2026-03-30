@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// In-memory session repository for unit tests and previews. No GRDB dependency.
 actor MockSessionRepository: SessionRepositoryProtocol {
     private var store: [SessionID: SessionRecord] = [:]
@@ -33,7 +35,11 @@ actor MockSessionRepository: SessionRepositoryProtocol {
     }
 
     func reorder(ids: [SessionID]) async throws {
-        order = ids.filter { store[$0] != nil }
+        let filtered = ids.filter { store[$0] != nil }
+        order = filtered
+        for (index, id) in filtered.enumerated() {
+            store[id]?.orderIndex = index
+        }
     }
 
     func setColorLabel(id: SessionID, label: SessionColorLabel) async throws {
@@ -68,6 +74,16 @@ actor MockSessionRepository: SessionRepositoryProtocol {
     }
 
     func updateSummary(_ sessionID: SessionID, summary: String) async throws {
-        store[sessionID]?.summary = summary
+        store[sessionID]?.summary = String(summary.prefix(AppConfig.SessionTree.summaryMaxLength))
+    }
+
+    func markEnded(id: SessionID, at date: Date) async throws {
+        store[id]?.endedAt = date
+    }
+
+    func markReopened(id: SessionID) async throws {
+        store[id]?.endedAt = nil
     }
 }
+
+#endif

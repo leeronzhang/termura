@@ -2,11 +2,10 @@ import Foundation
 import GRDB
 import OSLog
 
-private let logger = Logger(subsystem: "com.termura.app", category: "SessionRepository")
-
 // MARK: - GRDB Row Adapter (private to this file)
 
-private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
+// SessionRow is internal (not private) so SessionRepository+Tree.swift can access it.
+struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
     static let databaseTableName = "sessions"
 
     var id: String
@@ -22,6 +21,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
     var summary: String
     var branchType: String
     var agentType: String
+    var endedAt: Double?
 
     enum Columns: String, ColumnExpression {
         case id, title
@@ -36,6 +36,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         case summary
         case branchType = "branch_type"
         case agentType = "agent_type"
+        case endedAt = "ended_at"
     }
 
     init(row: Row) throws {
@@ -54,6 +55,8 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         summary = row[Columns.summary] ?? ""
         branchType = row[Columns.branchType] ?? BranchType.main.rawValue
         agentType = row[Columns.agentType] ?? AgentType.unknown.rawValue
+        // v9: ended_at is nullable; NULL means active.
+        endedAt = row[Columns.endedAt]
     }
 
     init(record: SessionRecord, archivedAt: Date? = nil) {
@@ -70,6 +73,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         summary = record.summary ?? ""
         branchType = record.branchType.rawValue
         agentType = record.agentType.rawValue
+        endedAt = record.endedAt?.timeIntervalSince1970
     }
 
     func encode(to container: inout PersistenceContainer) throws {
@@ -86,6 +90,7 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         container[Columns.summary] = summary
         container[Columns.branchType] = branchType
         container[Columns.agentType] = agentType
+        container[Columns.endedAt] = endedAt
     }
 
     func toRecord() throws -> SessionRecord {
@@ -98,6 +103,9 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
         guard let branch = BranchType(rawValue: branchType) else {
             throw RepositoryError.invalidBranchType(rawValue: branchType)
         }
+        // AgentType has a dedicated .unknown case for forward-compatible schema evolution;
+        // unrecognised agent strings degrade gracefully rather than making the session
+        // unloadable. SessionColorLabel/BranchType have no such fallback — hence they throw.
         let agent = AgentType(rawValue: agentType) ?? .unknown
         let parentSessionID: SessionID? = parentId.flatMap { str in
             UUID(uuidString: str).map { SessionID(rawValue: $0) }
@@ -114,7 +122,8 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
             parentID: parentSessionID,
             summary: summary.isEmpty ? nil : summary,
             branchType: branch,
-            agentType: agent
+            agentType: agent,
+            endedAt: endedAt.map { Date(timeIntervalSince1970: $0) }
         )
     }
 }
@@ -122,7 +131,8 @@ private struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
 // MARK: - Repository
 
 actor SessionRepository: SessionRepositoryProtocol {
-    private let db: any DatabaseServiceProtocol
+    // internal: SessionRepository+Tree.swift needs access for tree queries.
+    let db: any DatabaseServiceProtocol
 
     init(db: any DatabaseServiceProtocol) {
         self.db = db
@@ -134,7 +144,17 @@ actor SessionRepository: SessionRepositoryProtocol {
                 .filter(sql: "archived_at IS NULL")
                 .order(sql: "is_pinned DESC, order_index ASC")
                 .fetchAll(database)
-            return try rows.map { try $0.toRecord() }
+            // Title sanitization: strips agent icon prefixes persisted by older app versions
+            // before the prefix list was expanded. Applied here so every caller receives
+            // canonical records without needing a post-fetch loop.
+            // TitleSanitizer (Session/) is a pure-function utility — calling it from the
+            // repository layer is a deliberate pragmatic exception to the usual dependency
+            // direction rule; no domain side-effects are involved.
+            return try rows.map { row in
+                var record = try row.toRecord()
+                record.title = TitleSanitizer.stripAgentPrefixes(record.title)
+                return record
+            }
         }
     }
 
@@ -194,7 +214,11 @@ actor SessionRepository: SessionRepositoryProtocol {
         try await db.write { database in
             for batchStart in stride(from: 0, to: pairs.count, by: batchSize) {
                 let batch = Array(pairs[batchStart ..< min(batchStart + batchSize, pairs.count)])
-                // 3 bindings per row: 2 in CASE WHEN + 1 in IN clause (total <= 999).
+                // Dynamic SQL: safe. Interpolated fragments contain only static SQL
+                // skeleton ("WHEN id = ? THEN ?" / "?") — no user data. All actual
+                // values are passed separately via StatementArguments (parameterized
+                // binding). 3 bindings per row: 2 in CASE WHEN + 1 in IN clause
+                // (total <= 999 per batch, enforced by reorderBatchSize).
                 let cases = batch.map { _ in "WHEN id = ? THEN ?" }.joined(separator: " ")
                 let holders = batch.map { _ in "?" }.joined(separator: ", ")
                 var vals: [DatabaseValue] = []
@@ -227,74 +251,25 @@ actor SessionRepository: SessionRepositoryProtocol {
         }
     }
 
-    // MARK: - Session Tree
-
-    func fetchChildren(of parentID: SessionID) async throws -> [SessionRecord] {
-        let idStr = parentID.rawValue.uuidString
-        return try await db.read { database in
-            let rows = try SessionRow.fetchAll(
-                database,
-                sql: """
-                SELECT * FROM sessions
-                WHERE parent_id = ? AND archived_at IS NULL
-                ORDER BY created_at ASC
-                """,
-                arguments: [idStr]
-            )
-            return try rows.map { try $0.toRecord() }
-        }
-    }
-
-    func fetchAncestors(of sessionID: SessionID) async throws -> [SessionRecord] {
-        let idStr = sessionID.rawValue.uuidString
-        return try await db.read { database in
-            let rows = try SessionRow.fetchAll(
-                database,
-                sql: """
-                WITH RECURSIVE ancestors(id) AS (
-                    SELECT parent_id FROM sessions WHERE id = ?
-                    UNION ALL
-                    SELECT s.parent_id FROM sessions s
-                    JOIN ancestors a ON s.id = a.id
-                    WHERE s.parent_id IS NOT NULL
-                )
-                SELECT s.* FROM sessions s
-                JOIN ancestors a ON s.id = a.id
-                ORDER BY s.created_at ASC
-                """,
-                arguments: [idStr]
-            )
-            return try rows.map { try $0.toRecord() }
-        }
-    }
-
-    func createBranch(
-        from parentID: SessionID,
-        type: BranchType,
-        title: String
-    ) async throws -> SessionRecord {
-        let ancestors = try await fetchAncestors(of: parentID)
-        guard ancestors.count < AppConfig.SessionTree.maxDepth else {
-            throw RepositoryError.branchDepthExceeded(currentDepth: ancestors.count)
-        }
-        let record = SessionRecord(
-            title: title,
-            parentID: parentID,
-            branchType: type
-        )
-        try await save(record)
-        logger.info("Created branch \(record.id) from \(parentID) type=\(type.rawValue)")
-        return record
-    }
-
-    func updateSummary(_ sessionID: SessionID, summary: String) async throws {
-        let idStr = sessionID.rawValue.uuidString
-        let trimmed = String(summary.prefix(AppConfig.SessionTree.summaryMaxLength))
+    func markEnded(id: SessionID, at date: Date) async throws {
+        let idStr = id.rawValue.uuidString
+        let timestamp = date.timeIntervalSince1970
         try await db.write { database in
             try database.execute(
-                sql: "UPDATE sessions SET summary = ? WHERE id = ?",
-                arguments: [trimmed, idStr]
+                sql: "UPDATE sessions SET ended_at = ? WHERE id = ?",
+                arguments: [timestamp, idStr]
             )
         }
     }
+
+    func markReopened(id: SessionID) async throws {
+        let idStr = id.rawValue.uuidString
+        try await db.write { database in
+            try database.execute(
+                sql: "UPDATE sessions SET ended_at = NULL WHERE id = ?",
+                arguments: [idStr]
+            )
+        }
+    }
+
 }

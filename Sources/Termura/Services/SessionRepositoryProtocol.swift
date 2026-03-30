@@ -9,6 +9,10 @@ protocol SessionRepositoryProtocol: Actor {
     func reorder(ids: [SessionID]) async throws
     func setColorLabel(id: SessionID, label: SessionColorLabel) async throws
     func setPinned(id: SessionID, pinned: Bool) async throws
+    /// Mark session as ended (PTY terminated, record preserved). Sets ended_at timestamp.
+    func markEnded(id: SessionID, at date: Date) async throws
+    /// Clear ended_at, making the session active again.
+    func markReopened(id: SessionID) async throws
 
     // MARK: - Session Tree
 

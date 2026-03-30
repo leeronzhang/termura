@@ -20,6 +20,12 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
     var branchType: BranchType
     /// Detected AI agent type running in this session (persisted for sidebar icon).
     var agentType: AgentType
+    /// When set, the session PTY has been terminated but the record is preserved.
+    /// nil = active; non-nil = ended (can be reopened).
+    var endedAt: Date?
+
+    /// True when the PTY has been terminated and the session is awaiting reopen or deletion.
+    var isEnded: Bool { endedAt != nil }
 
     init(
         id: SessionID = SessionID(),
@@ -33,7 +39,8 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
         parentID: SessionID? = nil,
         summary: String? = nil,
         branchType: BranchType = .main,
-        agentType: AgentType = .unknown
+        agentType: AgentType = .unknown,
+        endedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -47,6 +54,7 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
         self.summary = summary
         self.branchType = branchType
         self.agentType = agentType
+        self.endedAt = endedAt
     }
 }
 
