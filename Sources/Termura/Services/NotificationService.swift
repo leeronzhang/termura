@@ -36,7 +36,6 @@ actor NotificationService: NotificationServiceProtocol {
         do {
             try await UNUserNotificationCenter.current().add(request)
         } catch {
-            // Non-critical: system notifications are best-effort; core functionality unaffected.
             logger.error("Failed to schedule notification: \(error)")
         }
     }
@@ -61,7 +60,6 @@ actor NotificationService: NotificationServiceProtocol {
         do {
             try await UNUserNotificationCenter.current().add(request)
         } catch {
-            // Non-critical: system notifications are best-effort; core functionality unaffected.
             logger.error("Failed to schedule context window notification: \(error)")
         }
     }
@@ -76,7 +74,6 @@ actor NotificationService: NotificationServiceProtocol {
                 logger.info("Notification permission not granted by user")
             }
         } catch {
-            // Non-critical: authorization is requested once; user can grant later via System Settings.
             logger.error("Notification authorization error: \(error)")
         }
     }

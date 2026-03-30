@@ -65,11 +65,9 @@ extension GitService {
 
         for line in capped {
             guard line.count >= 4 else { continue }
-            let index = line.index(line.startIndex, offsetBy: 0)
-            let workTree = line.index(line.startIndex, offsetBy: 1)
+            let x = line[line.startIndex]
+            let y = line[line.index(after: line.startIndex)]
             let pathStart = line.index(line.startIndex, offsetBy: 3)
-            let x = line[index]
-            let y = line[workTree]
             let path = String(line[pathStart...])
 
             if x == "?" && y == "?" {
@@ -131,6 +129,10 @@ enum GitServiceError: Error, LocalizedError {
     case commandFailed(command: String, exitCode: Int32, stderr: String)
     /// The git executable could not be launched (e.g., not installed, permission denied).
     case launchFailed(command: String, underlying: Error)
+    /// The process output could not be decoded with any supported encoding.
+    case decodeFailed(command: String)
+    /// The target directory is not inside a git repository (exit 128).
+    case notARepo
 
     var errorDescription: String? {
         switch self {
@@ -138,6 +140,10 @@ enum GitServiceError: Error, LocalizedError {
             "git \(command) failed (\(exitCode)): \(stderr)"
         case let .launchFailed(command, underlying):
             "Failed to launch git \(command): \(underlying.localizedDescription)"
+        case let .decodeFailed(command):
+            "git \(command): output could not be decoded as UTF-8 or Latin-1"
+        case .notARepo:
+            "Not a git repository"
         }
     }
 
@@ -145,8 +151,14 @@ enum GitServiceError: Error, LocalizedError {
     var isRetryable: Bool {
         switch self {
         case let .commandFailed(_, code, _):
-            code >= 128
+            // Exit 128 is mapped to .notARepo before reaching this case;
+            // codes > 128 (e.g. signal termination) may be transient.
+            code > 128
         case .launchFailed:
+            false
+        case .decodeFailed:
+            false
+        case .notARepo:
             false
         }
     }

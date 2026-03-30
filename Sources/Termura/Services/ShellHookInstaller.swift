@@ -64,7 +64,6 @@ actor ShellHookInstaller: ShellHookInstallerProtocol {
                 do {
                     try handle.close()
                 } catch {
-                    // Non-critical: handle will be closed by the OS when the process exits scope.
                     logger.warning("Failed to close RC file handle: \(error)")
                 }
             }
@@ -82,7 +81,6 @@ actor ShellHookInstaller: ShellHookInstallerProtocol {
         do {
             return try isHookPresent(in: rcPath)
         } catch {
-            // Non-critical: if the RC file is unreadable, treat as "not installed" — safe default.
             logger.debug("Could not check hook in \(rcPath): \(error.localizedDescription)")
             return false
         }
@@ -100,7 +98,6 @@ actor ShellHookInstaller: ShellHookInstallerProtocol {
         do {
             contents = try String(contentsOfFile: path, encoding: .utf8)
         } catch {
-            // Non-critical: unreadable RC file treated as "hook not present" — safe default.
             logger.debug("RC file not readable at \(path): \(error.localizedDescription)")
             return false
         }

@@ -1,6 +1,5 @@
 import Foundation
 import OSLog
-import os
 
 private let logger = Logger(subsystem: "com.termura.app", category: "GitService")
 
@@ -11,6 +10,8 @@ protocol GitServiceProtocol: Sendable {
     func diff(file: String, staged: Bool, at directory: String) async throws -> String
     /// Returns the set of file paths tracked by git (relative to the repo root).
     func trackedFiles(at directory: String) async throws -> Set<String>
+    /// Returns the full file content at `path` relative to `directory` (used for untracked files).
+    func showFile(at path: String, directory: String) async throws -> String
 }
 
 // MARK: - Live Implementation
@@ -29,14 +30,15 @@ actor GitService: GitServiceProtocol {
         defer { signposter.endInterval("GitStatus", state) }
         logger.debug("GitService.status dir=\(directory) trace=\(traceLabel)")
 
-        guard await isGitRepo(at: directory) else {
+        let output: String
+        do {
+            output = try await run(
+                ["status", "--porcelain=v1", "-b", "--no-renames"],
+                at: directory
+            )
+        } catch GitServiceError.commandFailed(_, let code, _) where Self.isNotARepoExitCode(code) {
             return .notARepo
         }
-
-        let output = try await run(
-            ["status", "--porcelain=v1", "-b", "--no-renames"],
-            at: directory
-        )
         var result = Self.parse(porcelain: output)
 
         // Fetch last commit message (non-fatal if fails, e.g. empty repo)
@@ -48,7 +50,6 @@ actor GitService: GitServiceProtocol {
             let trimmed = logLine.trimmingCharacters(in: .whitespacesAndNewlines)
             result.lastCommit = trimmed.isEmpty ? nil : trimmed
         } catch {
-            // Non-critical: last commit is a display-only field; empty repos have no log.
             logger.debug("Could not read last commit: \(error.localizedDescription)")
         }
 
@@ -60,7 +61,6 @@ actor GitService: GitServiceProtocol {
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             result.remoteHost = Self.parseRemoteHost(from: url)
         } catch {
-            // Non-critical: remote URL is a display-only field; local-only repos have no remote.
             logger.debug("No remote origin: \(error.localizedDescription)")
         }
 
@@ -78,11 +78,20 @@ actor GitService: GitServiceProtocol {
         if staged { args.append("--cached") }
         args.append("--")
         args.append(file)
-        return try await run(args, at: directory)
+        do {
+            return try await run(args, at: directory)
+        } catch GitServiceError.commandFailed(_, let code, _) where Self.isNotARepoExitCode(code) {
+            throw GitServiceError.notARepo
+        }
     }
 
     func trackedFiles(at directory: String) async throws -> Set<String> {
-        let output = try await run(["ls-files"], at: directory)
+        let output: String
+        do {
+            output = try await run(["ls-files"], at: directory)
+        } catch GitServiceError.commandFailed(_, let code, _) where Self.isNotARepoExitCode(code) {
+            throw GitServiceError.notARepo
+        }
         let paths = output.components(separatedBy: "\n").filter { !$0.isEmpty }
         return Set(paths)
     }
@@ -96,28 +105,19 @@ actor GitService: GitServiceProtocol {
     // MARK: - Helpers
 
     /// Reads all data from `handle` without blocking a Swift cooperative thread.
-    /// `readDataToEndOfFile()` blocks until the child process closes its write end of
-    /// the pipe, which can take several seconds for long-running git commands. Running
-    /// it on a dedicated OS thread (via Thread.detachNewThread) prevents cooperative
-    /// thread pool starvation when multiple git operations run concurrently.
+    /// `readDataToEndOfFile()` is a blocking syscall; offloading it to a detached task
+    /// with `.utility` priority keeps the calling cooperative thread free.
     private static func readAllData(from handle: FileHandle) async -> Data {
         await withCheckedContinuation { continuation in
-            Thread.detachNewThread {
+            Task.detached(priority: .utility) {
                 continuation.resume(returning: handle.readDataToEndOfFile())
             }
         }
     }
 
-    private func isGitRepo(at directory: String) async -> Bool {
-        do {
-            let out = try await run(["rev-parse", "--is-inside-work-tree"], at: directory)
-            return out.trimmingCharacters(in: .whitespacesAndNewlines) == "true"
-        } catch {
-            // Non-critical: non-git directories return false — caller handles the fallback.
-            logger.debug("Not a git repo at \(directory): \(error.localizedDescription)")
-            return false
-        }
-    }
+    /// Git exits 128 for "fatal: not a git repository" and related pre-flight failures.
+    /// Mapping exit code 128 to `.notARepo` eliminates the redundant `rev-parse` pre-check.
+    private static func isNotARepoExitCode(_ code: Int32) -> Bool { code == 128 }
 
     private func run(_ arguments: [String], at directory: String) async throws -> String {
         let cmdString = arguments.joined(separator: " ")
@@ -163,9 +163,9 @@ actor GitService: GitServiceProtocol {
         // If readDataToEndOfFile() were called inside terminationHandler, a child
         // producing >64 KB of output would fill the pipe buffer, block on write,
         // never exit, and the handler would never fire.
-        // Thread.detachNewThread (via readAllData) is used instead of a plain
-        // Task.detached closure so the blocking pipe read does not occupy a
-        // Swift cooperative thread for the lifetime of the git process.
+        // readAllData uses DispatchQueue.global (bounded pool) instead of Task.detached
+        // so the blocking pipe read does not occupy a Swift cooperative thread for the
+        // lifetime of the git process.
         let stdoutHandle = pipe.fileHandleForReading
         let stderrHandle = errPipe.fileHandleForReading
         let stdoutTask = Task.detached { await Self.readAllData(from: stdoutHandle) }
@@ -216,16 +216,34 @@ actor GitService: GitServiceProtocol {
         let stderrData = await stderrTask.value
 
         guard exitStatus == 0 else {
-            let stderr = String(data: stderrData, encoding: .utf8) ?? ""
-            let error = GitServiceError.commandFailed(
-                command: cmdString,
-                exitCode: exitStatus,
-                stderr: stderr
-            )
+            let stderr = Self.decodeOutput(stderrData)
+            let error = GitServiceError.commandFailed(command: cmdString, exitCode: exitStatus, stderr: stderr)
             logger.warning("\(error.localizedDescription)")
             throw error
         }
 
-        return String(data: stdoutData, encoding: .utf8) ?? ""
+        return try Self.decodeStdout(stdoutData, command: cmdString)
+    }
+
+    /// Decodes process output, preferring UTF-8 and falling back to Latin-1.
+    /// Latin-1 always succeeds (every byte is a valid code point), so the fallback
+    /// is safe and preserves content instead of silently returning an empty string.
+    private static func decodeOutput(_ data: Data) -> String {
+        String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1)
+            ?? ""
+    }
+
+    /// Decodes stdout, logging a warning when the output is not valid UTF-8.
+    /// Throws `decodeFailed` only if Latin-1 decode fails (practically impossible).
+    private static func decodeStdout(_ data: Data, command: String) throws -> String {
+        if let utf8 = String(data: data, encoding: .utf8) { return utf8 }
+        // Non-UTF-8 output (e.g. Latin-1 filenames in diffs): fall back so callers
+        // receive actual content rather than a silent empty string.
+        logger.warning("git \(command): stdout is not valid UTF-8, falling back to Latin-1")
+        guard let latin1 = String(data: data, encoding: .isoLatin1) else {
+            throw GitServiceError.decodeFailed(command: command)
+        }
+        return latin1
     }
 }

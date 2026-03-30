@@ -10,7 +10,7 @@ actor DatabaseService: DatabaseServiceProtocol {
 
     /// Designated init — inject a pre-configured pool (enables testing with in-memory pools).
     /// Runs DB migrations on the actor's executor (background thread) to avoid blocking the main thread.
-    init(pool: DatabasePool, metrics: (any MetricsCollectorProtocol)? = nil) async throws {
+    init(pool: DatabasePool, metrics: (any MetricsCollectorProtocol)? = nil /* Optional: observability, nil = no-op */) async throws {
         self.pool = pool
         self.metrics = metrics
         var migrator = DatabaseMigrator()
@@ -20,8 +20,10 @@ actor DatabaseService: DatabaseServiceProtocol {
     }
 
     /// Creates a pool at `<projectURL>/.termura/termura.db`.
-    /// - Throws: `RepositoryError.migrationFailed` if the directory is not writable.
-    static func makePool(at projectURL: URL) throws -> DatabasePool {
+    /// Non-isolated async so the filesystem and SQLite calls run on the cooperative
+    /// thread pool, not on the MainActor — even when called from a @MainActor context.
+    /// - Throws: `RepositoryError.databaseNotAccessible` if the directory is not writable.
+    static func makePool(at projectURL: URL) async throws -> DatabasePool {
         let fm = FileManager.default
         guard fm.isWritableFile(atPath: projectURL.path) else {
             throw RepositoryError.databaseNotAccessible(path: projectURL.path)

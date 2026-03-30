@@ -31,9 +31,12 @@ final class AgentStateStore: AgentStateStoreProtocol {
             .map(\.sessionID)
     }
 
-    /// The next session to jump to via Cmd+Shift+U.
+    /// The next session to jump to via Cmd+Shift+U. O(n) — avoids triggering the full sorted chain.
     var nextAttentionSessionID: SessionID? {
-        sessionsNeedingAttention.first
+        agents.values
+            .filter(\.needsAttention)
+            .min(by: { Self.attentionPriority($0.status) < Self.attentionPriority($1.status) })?
+            .sessionID
     }
 
     /// Agents approaching their context window limit.
@@ -41,15 +44,14 @@ final class AgentStateStore: AgentStateStoreProtocol {
         agents.values.filter(\.isContextWarning)
     }
 
-    /// Total estimated tokens across all active agents.
-    var totalEstimatedTokens: Int {
-        agents.values.reduce(0) { $0 + $1.tokenCount }
-    }
+    /// Total estimated tokens across all active agents. O(1) — updated incrementally on each mutation.
+    private(set) var totalEstimatedTokens: Int = 0
 
     // MARK: - Updates
 
     func update(state: AgentState) {
         let previous = agents[state.sessionID]
+        totalEstimatedTokens += state.tokenCount - (previous?.tokenCount ?? 0)
         agents[state.sessionID] = state
 
         if previous?.status != state.status {
@@ -60,11 +62,13 @@ final class AgentStateStore: AgentStateStoreProtocol {
     }
 
     func remove(sessionID: SessionID) {
+        totalEstimatedTokens -= agents[sessionID]?.tokenCount ?? 0
         agents.removeValue(forKey: sessionID)
     }
 
     func clearAll() {
         agents.removeAll()
+        totalEstimatedTokens = 0
     }
 
     // MARK: - Priority

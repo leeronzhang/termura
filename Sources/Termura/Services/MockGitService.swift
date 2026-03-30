@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test double for `GitServiceProtocol`.
 actor MockGitService: GitServiceProtocol {
     var stubbedResult: GitStatusResult = .notARepo
@@ -23,4 +25,12 @@ actor MockGitService: GitServiceProtocol {
     func trackedFiles(at directory: String) async throws -> Set<String> {
         stubbedTrackedFiles
     }
+
+    var stubbedFileContent: String = ""
+
+    func showFile(at path: String, directory: String) async throws -> String {
+        stubbedFileContent
+    }
 }
+
+#endif

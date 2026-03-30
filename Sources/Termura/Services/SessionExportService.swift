@@ -37,6 +37,7 @@ actor SessionExportService: SessionExportProtocol {
         let fileName = sanitizeFileName(session.title) + ".html"
         let url = exportDirectory.appendingPathComponent(fileName)
         try html.write(to: url, atomically: true, encoding: .utf8)
+        rotateOldExports()
         logger.info("Exported HTML: \(url.path)")
         return url
     }
@@ -51,6 +52,7 @@ actor SessionExportService: SessionExportProtocol {
         let fileName = sanitizeFileName(session.title) + ".json"
         let url = exportDirectory.appendingPathComponent(fileName)
         try data.write(to: url, options: .atomic)
+        rotateOldExports()
         logger.info("Exported JSON: \(url.path)")
         return url
     }
@@ -58,6 +60,50 @@ actor SessionExportService: SessionExportProtocol {
     private func ensureExportDirectory() throws {
         if !fileManager.fileExists(atPath: exportDirectory.path) {
             try fileManager.createDirectory(at: exportDirectory, withIntermediateDirectories: true)
+        }
+    }
+
+    /// Keeps the most recent `AppConfig.Export.maxRetainedExports` files; deletes the oldest.
+    /// Called after a successful export so the directory does not grow without bound.
+    /// Rotation is best-effort: individual delete failures are logged and skipped.
+    private func rotateOldExports() {
+        let contents: [URL]
+        do {
+            contents = try fileManager.contentsOfDirectory(
+                at: exportDirectory,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: .skipsHiddenFiles
+            )
+        } catch {
+            logger.debug("ExportService: could not list exports directory: \(error.localizedDescription)")
+            return
+        }
+
+        let sorted = contents.sorted { lhs, rhs in
+            let lDate = modificationDate(of: lhs)
+            let rDate = modificationDate(of: rhs)
+            return lDate < rDate
+        }
+        let excess = sorted.count - AppConfig.Export.maxRetainedExports
+        guard excess > 0 else { return }
+        for url in sorted.prefix(excess) {
+            do {
+                try fileManager.removeItem(atPath: url.path)
+                logger.debug("ExportService rotated old export: \(url.lastPathComponent)")
+            } catch {
+                logger.debug("ExportService could not rotate \(url.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Returns the modification date of a file URL, or `.distantPast` if unavailable.
+    /// Extracted as a helper so the sort comparator in `rotateOldExports` uses explicit do-catch.
+    private func modificationDate(of url: URL) -> Date {
+        do {
+            return try url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? .distantPast
+        } catch {
+            logger.debug("ExportService: could not read modification date for \(url.lastPathComponent): \(error.localizedDescription)")
+            return .distantPast
         }
     }
 

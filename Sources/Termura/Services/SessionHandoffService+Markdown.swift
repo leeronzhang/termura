@@ -113,8 +113,7 @@ extension SessionHandoffService {
         let stripped = String(line.dropFirst(4))
         guard let endBold = stripped.range(of: "**:") else { return nil }
         let dateStr = String(stripped[stripped.startIndex ..< endBold.lowerBound])
-        let summaryStart = stripped.index(endBold.upperBound, offsetBy: 0)
-        let summary = String(stripped[summaryStart...]).trimmingCharacters(in: .whitespaces)
+        let summary = String(stripped[endBold.upperBound...]).trimmingCharacters(in: .whitespaces)
         guard let date = formatter.date(from: dateStr) else { return nil }
         return DecisionEntry(timestamp: date, summary: summary)
     }

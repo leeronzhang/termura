@@ -1,5 +1,7 @@
 import Foundation
 
+#if DEBUG
+
 /// Test double for `FileTreeServiceProtocol`.
 actor MockFileTreeService: FileTreeServiceProtocol {
     var stubbedTree: [FileTreeNode] = []
@@ -20,3 +22,5 @@ actor MockFileTreeService: FileTreeServiceProtocol {
         return tree
     }
 }
+
+#endif

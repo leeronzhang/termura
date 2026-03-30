@@ -19,7 +19,7 @@ actor SearchService: SearchServiceProtocol {
     init(
         sessionRepository: any SessionRepositoryProtocol,
         noteRepository: any NoteRepositoryProtocol,
-        metrics: (any MetricsCollectorProtocol)? = nil
+        metrics: (any MetricsCollectorProtocol)? = nil // Optional: observability, nil = no-op
     ) {
         self.sessionRepository = sessionRepository
         self.noteRepository = noteRepository

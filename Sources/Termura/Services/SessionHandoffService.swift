@@ -142,7 +142,6 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         do {
             content = try String(contentsOfFile: filePath, encoding: .utf8)
         } catch {
-            // Non-critical: missing context file is expected on first handoff — returns nil.
             logger.debug("No existing context file at \(filePath): \(error.localizedDescription)")
             content = nil
         }
@@ -191,7 +190,6 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
                 do {
                     try fm.removeItem(atPath: backupPath)
                 } catch {
-                    // Non-critical: stale backup is harmless and will be overwritten next time.
                     logger.warning("Failed to remove backup at \(backupPath): \(error.localizedDescription)")
                 }
             }

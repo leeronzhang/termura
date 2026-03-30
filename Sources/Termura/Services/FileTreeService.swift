@@ -73,7 +73,6 @@ actor FileTreeService: FileTreeServiceProtocol {
                 options: [.skipsPackageDescendants]
             )
         } catch {
-            // Non-critical: unreadable directories are skipped; rest of tree renders normally.
             logger.warning("Failed to list directory \(directoryURL.path): \(error.localizedDescription)")
             return []
         }
@@ -118,7 +117,6 @@ actor FileTreeService: FileTreeServiceProtocol {
             do {
                 isDir = try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory ?? false
             } catch {
-                // Non-critical: fallback to treating entry as a file; classification is cosmetic.
                 logger.warning("Failed to read resource values for \(url.path): \(error.localizedDescription)")
                 isDir = false
             }

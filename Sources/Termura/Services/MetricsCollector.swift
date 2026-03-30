@@ -1,5 +1,4 @@
 import Foundation
-import os
 import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "MetricsCollector")

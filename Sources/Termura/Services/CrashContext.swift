@@ -83,7 +83,6 @@ actor CrashContext {
             do {
                 try Self.writeSnapshotToFile(data)
             } catch {
-                // Non-critical: file backup is best-effort; UserDefaults is the primary store.
                 logger.error("Failed to write crash snapshot to file: \(error)")
             }
         } catch {
@@ -105,7 +104,6 @@ actor CrashContext {
             let data = try Data(contentsOf: crashContextFileURL)
             return decodeCrashSnapshot(data)
         } catch {
-            // Non-critical: file may not exist on first launch or after clearPersistedData().
             logger.debug("No file-backed crash context: \(error.localizedDescription)")
             return nil
         }
@@ -118,7 +116,6 @@ actor CrashContext {
         do {
             try FileManager.default.removeItem(at: crashContextFileURL)
         } catch {
-            // Non-critical: stale crash context file; will be overwritten on next capture.
             logger.debug("Could not remove crash context file: \(error.localizedDescription)")
         }
     }

@@ -19,9 +19,9 @@ private enum TokenStatRegex {
         do {
             return try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
         } catch {
-            // Hard-coded patterns should never fail. Log at fault level but don't crash.
+            // Hard-coded patterns should never fail — crash in debug, log+fallback in release.
             assertionFailure("Failed to compile static regex '\(pattern)': \(error)")
-            logger.fault("Failed to compile static regex '\(pattern)': \(error)")
+            logger.error("Failed to compile static regex '\(pattern)': \(error)")
             return NSRegularExpression()
         }
     }
@@ -91,29 +91,22 @@ actor AgentStateDetector {
 
     /// Analyze a batch of terminal output to update agent status.
     /// Rule table evaluated top-to-bottom (first match wins); cooldown and state-transition constraints suppress noise.
-    @discardableResult
-    func analyzeOutput(_ text: String) -> AgentStatus {
-        guard detectedType != nil else { return .idle }
+    func analyzeOutput(_ text: String) {
+        guard detectedType != nil else { return }
         let maxLen = AppConfig.Agent.outputAnalysisSuffixLength
         let sample = text.count > maxLen ? String(text.suffix(maxLen)) : text
         let lowercasedSample = sample.lowercased()
 
         guard let matched = evaluateRules(sample, lowercased: lowercasedSample),
-              matched != currentStatus else {
-            return currentStatus
-        }
+              matched != currentStatus else { return }
 
         // Enforce valid state transitions.
-        guard Self.validTransitions[currentStatus]?.contains(matched) ?? false else {
-            return currentStatus
-        }
+        guard Self.validTransitions[currentStatus]?.contains(matched) ?? false else { return }
 
         // Enforce cooldown between transitions to avoid flip-flopping on noisy output.
         let now = Date()
         if let last = lastStatusChange,
-           now.timeIntervalSince(last) < AppConfig.Agent.statusChangeCooldown {
-            return currentStatus
-        }
+           now.timeIntervalSince(last) < AppConfig.Agent.statusChangeCooldown { return }
 
         currentStatus = matched
         lastStatusChange = now
@@ -125,7 +118,6 @@ actor AgentStateDetector {
         } else if matched == .idle || matched == .completed || matched == .error {
             activeFilePath = nil
         }
-        return currentStatus
     }
 
     /// Build a full AgentState snapshot.

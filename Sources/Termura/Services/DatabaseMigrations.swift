@@ -14,6 +14,7 @@ enum DatabaseMigrations {
         registerV6RuleFiles(into: &migrator)
         registerV7AgentType(into: &migrator)
         registerV8Snippets(into: &migrator)
+        registerV9SessionEndedAt(into: &migrator)
     }
 
     // MARK: - v1: sessions table
@@ -231,6 +232,18 @@ enum DatabaseMigrations {
                     .defaults(to: 0)
             }
             logger.info("v8 migration complete: is_snippet (favorite) column on notes")
+        }
+    }
+
+    // MARK: - v9: session ended_at for soft-close (end vs delete)
+
+    private static func registerV9SessionEndedAt(into migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v9_session_ended_at") { db in
+            try db.alter(table: "sessions") { table in
+                // Nullable: NULL = active, non-NULL = ended (PTY terminated, record preserved).
+                table.add(column: "ended_at", .double)
+            }
+            logger.info("v9 migration complete: ended_at column on sessions")
         }
     }
 

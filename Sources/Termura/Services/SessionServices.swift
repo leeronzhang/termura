@@ -19,15 +19,15 @@ actor SessionServices {
     // MARK: - Internal state
 
     private var hasInjectedContext = false
-    // nonisolated(unsafe): accessed only in deinit (last-reference) and from actor-isolated methods.
-    // The deinit guarantee (last-reference, no concurrent mutation possible) makes this safe.
-    nonisolated(unsafe) private var injectionTask: Task<Void, Never>?
+    // Swift actor deinit runs synchronously under last-reference guarantee and can
+    // access actor-isolated state — no unsafe keyword needed for Task? slots in actors.
+    private var injectionTask: Task<Void, Never>?
 
     // MARK: - Init
 
     init(
-        contextInjectionService: (any ContextInjectionServiceProtocol)? = nil,
-        sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil,
+        contextInjectionService: (any ContextInjectionServiceProtocol)? = nil, // Optional: harness feature gate
+        sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil,      // Optional: harness feature gate
         isRestoredSession: Bool = false
     ) {
         self.contextInjectionService = contextInjectionService
@@ -52,11 +52,12 @@ actor SessionServices {
         guard isRestoredSession, !hasInjectedContext else { return }
         hasInjectedContext = true
         guard !workingDirectory.isEmpty else { return }
+        // contextInjectionService is nil in non-Harness builds (harness feature gate — expected early exit).
         guard let service = contextInjectionService else { return }
         injectionTask?.cancel()
         // Task { @MainActor }: engine.send requires @MainActor (TerminalEngine protocol is @MainActor).
         // The task body does not access any actor-isolated properties of self after the guard check above.
-        injectionTask = Task { @MainActor [weak self] in
+        injectionTask = Task { @MainActor in
             guard let text = await service.buildInjectionText(projectRoot: workingDirectory) else { return }
             do {
                 try await clock.sleep(for: AppConfig.SessionHandoff.injectionDelay)
@@ -67,7 +68,6 @@ actor SessionServices {
                 logger.warning("Context injection delay failed: \(error.localizedDescription)")
                 return
             }
-            _ = self // prevent premature dealloc
             await engine.send(text)
         }
     }
@@ -83,7 +83,10 @@ actor SessionServices {
         agentState: AgentState?
     ) {
         guard let agentState, agentState.agentType != .unknown else { return }
-        guard let session, session.workingDirectory != nil else { return }
+        guard let session else { return }
+        // Require a working directory — generateHandoff uses it to resolve the project root.
+        guard session.workingDirectory != nil else { return }
+        // sessionHandoffService is nil in non-Harness builds (harness feature gate — expected early exit).
         guard let handoffService = sessionHandoffService else { return }
 
         Task.detached {

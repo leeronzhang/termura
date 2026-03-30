@@ -30,7 +30,9 @@ actor DBHealthMonitor {
 
     private var consecutiveFailures = 0
     private(set) var status: DBHealthStatus = .healthy
-    private var monitorTask: Task<Void, Never>?
+    // nonisolated(unsafe): deinit is nonisolated; last-reference guarantee makes
+    // the access free of data races — no concurrent mutation is possible at deinit time.
+    nonisolated(unsafe) private var monitorTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -48,6 +50,10 @@ actor DBHealthMonitor {
         self.probeInterval = probeInterval
         self.degradedThreshold = degradedThreshold
         self.unhealthyThreshold = unhealthyThreshold
+    }
+
+    deinit {
+        monitorTask?.cancel()
     }
 
     // MARK: - Lifecycle

@@ -35,24 +35,26 @@ final class MockAgentStateStore: AgentStateStoreProtocol {
         }
     }
 
-    var totalEstimatedTokens: Int {
-        agents.values.reduce(0) { $0 + $1.tokenCount }
-    }
+    private(set) var totalEstimatedTokens: Int = 0
 
     func update(state: AgentState) {
         updateCallCount += 1
         guard !shouldRejectUpdates else { return }
+        let previous = agents[state.sessionID]
+        totalEstimatedTokens += state.tokenCount - (previous?.tokenCount ?? 0)
         agents[state.sessionID] = state
     }
 
     func remove(sessionID: SessionID) {
         removeCallCount += 1
+        totalEstimatedTokens -= agents[sessionID]?.tokenCount ?? 0
         agents.removeValue(forKey: sessionID)
     }
 
     func clearAll() {
         clearCallCount += 1
         agents.removeAll()
+        totalEstimatedTokens = 0
     }
 }
 
