@@ -18,9 +18,11 @@ final class EditorViewModel {
     private var history: InputHistory
     private let modeController: InputModeController
     private let engine: any TerminalEngine
-    /// Called after a command is submitted, for agent detection / session rename.
+    /// Callback injected by TerminalAreaView for agent detection / session rename after submit.
+    /// Internal (not private): TerminalAreaView sets this at view-setup time. Not an implementation detail.
     @ObservationIgnored var onCommandSubmit: ((String) -> Void)?
-    /// Called after a command is submitted. Used by the Composer overlay to auto-dismiss.
+    /// Callback injected by TerminalAreaView to dismiss the Composer overlay after submit.
+    /// Internal (not private): TerminalAreaView sets and clears this externally.
     @ObservationIgnored var onSubmit: (() -> Void)?
 
     // MARK: - Init
@@ -49,8 +51,6 @@ final class EditorViewModel {
                 do {
                     try FileManager.default.removeItem(at: url)
                 } catch {
-                    // Non-critical: temporary attachment file deletion is best-effort;
-                    // the OS will eventually clean the tmp directory.
                     logger.debug("Temp attachment removal skipped: \(error.localizedDescription)")
                 }
             }
@@ -68,8 +68,6 @@ final class EditorViewModel {
                 do {
                     try FileManager.default.removeItem(at: url)
                 } catch {
-                    // Non-critical: temporary attachment file deletion is best-effort;
-                    // the OS will eventually clean the tmp directory.
                     logger.debug("Temp attachment removal skipped: \(error.localizedDescription)")
                 }
             }
@@ -83,7 +81,7 @@ final class EditorViewModel {
     /// The view reappears when OSC 133 signals the next shell prompt.
     func submit() {
         let text = currentText
-        let pathPrefix = attachments.map(\.url.path).joined(separator: " ")
+        let pathPrefix = attachments.map(\.url.path.shellEscaped).joined(separator: " ")
         let fullCommand: String
         if pathPrefix.isEmpty {
             fullCommand = text

@@ -52,7 +52,8 @@ final class ThemeManager {
         current = ThemeManager.themeForCurrentAppearance()
         observeAppearance()
         // Lifecycle: one-shot init — restores theme from disk; defaults apply if this fails.
-        Task { @MainActor [weak self] in
+        // Task inherits @MainActor from ThemeManager's @MainActor init context.
+        Task { [weak self] in
             await self?.restoreSelectedTheme()
         }
     }
@@ -196,13 +197,11 @@ final class ThemeManager {
                     let data = try Data(contentsOf: url)
                     return try decoder.decode(ThemeDefinition.self, from: data)
                 } catch {
-                    // Non-critical: malformed custom theme files are skipped; built-in themes remain available.
                     logger.warning("Skipping theme file \(url.lastPathComponent): \(error)")
                     return nil
                 }
             }
         } catch {
-            // Non-critical: custom themes directory may not exist yet; built-in themes are available.
             logger.debug("Custom themes directory not available: \(error.localizedDescription)")
             return []
         }
@@ -217,8 +216,6 @@ final class ThemeManager {
             let data = try JSONEncoder().encode(definition)
             try data.write(to: url)
         } catch {
-            // Non-critical: theme save failure means the custom theme won't persist across restarts,
-            // but the theme remains applied in the current session.
             logger.error("Failed to save theme '\(definition.name)': \(error)")
         }
     }

@@ -24,19 +24,24 @@ final class NotesViewModel {
     var errorMessage: String?
 
     private let repository: any NoteRepositoryProtocol
-    private var autoSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var autoSaveTask: Task<Void, Never>?
     /// True while `selectNote` is loading content into `editingTitle`/`editingBody`
     /// to suppress the spurious auto-save triggered by those assignments.
     private var isLoadingNote = false
     /// Tracks in-flight persistence Tasks so they can be awaited during flush.
     /// Keyed by UUID so each Task can remove itself upon completion (self-pruning).
-    private var pendingWrites: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var pendingWrites: [UUID: Task<Void, Never>] = [:]
     /// Tracks the pendingWrites key for the current in-flight note save so that
     /// a new save can cancel the prior one instead of stacking up duplicate writes.
     private var noteSavePendingID: UUID?
 
     init(repository: any NoteRepositoryProtocol) {
         self.repository = repository
+    }
+
+    deinit {
+        autoSaveTask?.cancel()
+        pendingWrites.values.forEach { $0.cancel() }
     }
 
     /// The currently selected note record, if any.
@@ -55,7 +60,8 @@ final class NotesViewModel {
         }
     }
 
-    func createNote(title: String = "Untitled", body: String = "") {
+    @discardableResult
+    func createNote(title: String = "Untitled", body: String = "") -> NoteRecord {
         let note = NoteRecord(title: title, body: body)
         notes.insert(note, at: 0)
         selectedNoteID = note.id
@@ -64,6 +70,7 @@ final class NotesViewModel {
         persistTracked { [repository] in
             try await repository.save(note)
         }
+        return note
     }
 
     func selectNote(id: NoteID) {
@@ -127,13 +134,13 @@ final class NotesViewModel {
         guard !isLoadingNote else { return }
         autoSaveTask?.cancel()
         autoSaveTask = Task { [weak self] in
+            guard let self else { return }
             do {
                 try await Task.sleep(for: AppConfig.Runtime.notesAutoSave)
             } catch {
                 // CancellationError is expected — next edit restarts the debounce.
                 return
             }
-            guard let self else { return }
             persistCurrentNote(title: editingTitle, body: editingBody)
         }
     }

@@ -30,11 +30,9 @@ actor FallbackChunkDetector {
         do {
             return try NSRegularExpression(pattern: AppConfig.Output.aiToolPromptPattern)
         } catch {
-            logger.fault(
-                "Default AI prompt pattern is invalid — falling back to match-nothing: \(error)"
+            preconditionFailure(
+                "Default AI prompt pattern is invalid — fix AppConfig.Output.aiToolPromptPattern: \(error)"
             )
-            // NSRegularExpression() with no arguments creates a valid empty-pattern regex.
-            return NSRegularExpression()
         }
     }()
 

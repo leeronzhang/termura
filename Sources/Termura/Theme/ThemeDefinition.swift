@@ -55,11 +55,19 @@ struct ThemeDefinition: Codable, Sendable, Identifiable {
 // MARK: - Built-in Presets
 
 extension ThemeDefinition {
+    // Hardcoded string literals — parse failure is a programmer error; crash immediately.
+    private static func builtinUUID(_ string: String) -> UUID {
+        guard let uuid = UUID(uuidString: string) else {
+            preconditionFailure("Invalid hardcoded builtin theme UUID: \(string)")
+        }
+        return uuid
+    }
+
     private enum BuiltinID {
-        static let termuraDark = UUID(uuidString: "A1000001-0000-0000-0000-000000000001") ?? UUID()
-        static let termuraLight = UUID(uuidString: "A1000001-0000-0000-0000-000000000002") ?? UUID()
-        static let solarizedDark = UUID(uuidString: "A1000001-0000-0000-0000-000000000003") ?? UUID()
-        static let monokai = UUID(uuidString: "A1000001-0000-0000-0000-000000000004") ?? UUID()
+        static let termuraDark   = builtinUUID("A1000001-0000-0000-0000-000000000001")
+        static let termuraLight  = builtinUUID("A1000001-0000-0000-0000-000000000002")
+        static let solarizedDark = builtinUUID("A1000001-0000-0000-0000-000000000003")
+        static let monokai       = builtinUUID("A1000001-0000-0000-0000-000000000004")
     }
 
     static let termuraDark = ThemeDefinition(

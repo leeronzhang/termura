@@ -39,7 +39,21 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
         let textView = makeTextView(coordinator: context.coordinator)
         scrollView.documentView = textView
         attachRuler(to: scrollView, textView: textView)
+        scheduleInitialFocus(for: textView)
         return scrollView
+    }
+
+    private func scheduleInitialFocus(for textView: SaveableTextView) {
+        Task { @MainActor [weak textView] in
+            do {
+                try await Task.sleep(for: AppConfig.UI.editorFocusDelay)
+            } catch is CancellationError {
+                // CancellationError is expected — view was removed before focus delay elapsed.
+                return
+            }
+            guard let textView, let window = textView.window else { return }
+            window.makeFirstResponder(textView)
+        }
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {

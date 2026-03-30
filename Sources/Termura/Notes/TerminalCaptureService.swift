@@ -19,8 +19,7 @@ final class TerminalCaptureService {
         if notesViewModel.selectedNoteID != nil {
             notesViewModel.editingBody += "\n\n" + markdown
         } else {
-            notesViewModel.createNote()
-            notesViewModel.editingBody = markdown
+            notesViewModel.createNote(body: markdown)
         }
         logger.info("Captured chunk '\(chunk.commandText)' to note")
     }

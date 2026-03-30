@@ -51,7 +51,11 @@ final class EditorTextView: NSTextView {
             options: [.urlReadingFileURLsOnly: true]
         ) as? [URL], !urls.isEmpty {
             if let handler = attachmentDropHandler {
-                urls.forEach { handler($0, .textFile, false) }
+                let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"]
+                urls.forEach { url in
+                    let kind: ComposerAttachment.Kind = imageExtensions.contains(url.pathExtension.lowercased()) ? .image : .textFile
+                    handler(url, kind, false)
+                }
                 return true
             }
             // Fallback: inline text insertion (no attachment bar wired).
@@ -73,7 +77,7 @@ final class EditorTextView: NSTextView {
             }
             // Fallback: inline text insertion (no attachment bar wired).
             do {
-                let url = try saveTemporaryImage(image)
+                let url = try saveTemporaryAttachmentImage(image)
                 let path = url.path.shellEscaped
                 let insertion = string.isEmpty ? path : " " + path
                 insertText(insertion, replacementRange: selectedRange())
@@ -83,21 +87,6 @@ final class EditorTextView: NSTextView {
             }
         }
         return super.performDragOperation(sender)
-    }
-
-        private func saveTemporaryImage(_ image: NSImage) throws -> URL {
-        let homeURL = FileManager.default.homeDirectoryForCurrentUser
-        let tmpDir = homeURL.appendingPathComponent(AppConfig.DragDrop.tempImageSubdirectory)
-        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        let name = "\(AppConfig.DragDrop.imagePastePrefix)-\(Int(Date().timeIntervalSince1970)).\(AppConfig.DragDrop.imagePasteExtension)"
-        let fileURL = tmpDir.appendingPathComponent(name)
-        guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:]) else {
-            throw EditorImageSaveError.conversionFailed
-        }
-        try png.write(to: fileURL)
-        return fileURL
     }
 
     // MARK: - Control sequence callback
@@ -193,12 +182,6 @@ final class EditorTextView: NSTextView {
     private var isSingleLine: Bool {
         !string.contains("\n")
     }
-}
-
-// MARK: - Supporting types
-
-private enum EditorImageSaveError: Error {
-    case conversionFailed
 }
 
 // MARK: - Key codes

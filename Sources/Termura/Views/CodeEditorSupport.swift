@@ -144,7 +144,6 @@ enum MarkdownSyntaxDimmer {
         do {
             regex = try NSRegularExpression(pattern: pattern, options: options)
         } catch {
-            // Non-critical: static regex — if the hard-coded pattern is invalid, dim effect is skipped.
             supportLogger.warning("Invalid regex pattern '\(pattern)': \(error.localizedDescription)")
             return
         }
