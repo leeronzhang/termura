@@ -13,10 +13,17 @@ private enum TokenStatRegex {
     static let cache = compile("Cache read:\\s*([\\d,.]+)k?")
     /// Matches "Writing to <path>" lines emitted by Claude Code and similar agents.
     static let writingTo = compile("Writing to ([^\\n\\r]+)")
+    /// Matches "\u{23FA} Task: <description>" — Claude Code explicit task header lines.
+    static let taskColon = compile("\u{23FA}\\s+Task:\\s+(.+?)\\s*$", options: [.caseInsensitive, .anchorsMatchLines])
+    /// Matches "Working on: <description>" — generic agent status lines.
+    static let workingOn = compile("Working on:\\s+(.+?)\\s*$", options: [.caseInsensitive, .anchorsMatchLines])
+    /// Matches "\u{25CF} <description>" at start of a line — Claude Code tool-use preamble.
+    /// Length-bounded (5-80 chars) to avoid matching long output blocks.
+    static let bulletTask = compile("^\u{25CF}\\s+([^\n]{5,80})$", options: [.anchorsMatchLines])
 
-    private static func compile(_ pattern: String) -> NSRegularExpression {
+    private static func compile(_ pattern: String, options: NSRegularExpression.Options = .caseInsensitive) -> NSRegularExpression {
         do {
-            return try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+            return try NSRegularExpression(pattern: pattern, options: options)
         } catch {
             // Hard-coded patterns should never fail — crash in debug, log+fallback in release.
             assertionFailure("Failed to compile static regex '\(pattern)': \(error)")
@@ -30,7 +37,7 @@ private enum TokenStatRegex {
 /// Uses startup command matching and ongoing output pattern analysis.
 actor AgentStateDetector {
     private var detectedType: AgentType?
-    private var currentStatus: AgentStatus = .idle
+    var currentStatus: AgentStatus = .idle
     private var detectedAt: Date?
     private var lastStatusChange: Date?
     private var parsedCost: Double = 0
@@ -38,9 +45,11 @@ actor AgentStateDetector {
     private let clock: any AppClock
     /// Last file path detected from "Writing to <path>" output; cleared on non-toolRunning transitions.
     private var activeFilePath: String?
+    /// Brief description of what the agent is currently doing; populated from output patterns.
+    private var currentTask: String?
 
     /// Valid state transitions — prevents impossible jumps between non-adjacent states.
-    private static let validTransitions: [AgentStatus: Set<AgentStatus>] = [
+    static let validTransitions: [AgentStatus: Set<AgentStatus>] = [
         .idle: [.thinking, .toolRunning, .waitingInput, .error],
         .thinking: [.toolRunning, .waitingInput, .completed, .error, .idle],
         .toolRunning: [.thinking, .waitingInput, .completed, .error, .idle],
@@ -93,8 +102,14 @@ actor AgentStateDetector {
     @discardableResult func analyzeOutput(_ text: String) -> AgentStatus {
         guard detectedType != nil else { return currentStatus }
         let maxLen = AppConfig.Agent.outputAnalysisSuffixLength
-        let sample = text.count > maxLen ? String(text.suffix(maxLen)) : text
-        let lowercasedSample = sample.lowercased()
+        // Keep as Substring — avoids a String copy when text exceeds the analysis window.
+        // Materialized to String only on the rare transition path where regex calls need it.
+        let sample: Substring = text.count > maxLen ? text.suffix(maxLen) : text[text.startIndex...]
+        // lowercased() allocates a new String; skip it entirely in states whose reachable
+        // rule set contains no .containsCaseInsensitive rules (e.g. .completed, .error).
+        let lowercasedSample: String = Self.statesNeedingLowercased.contains(currentStatus)
+            ? sample.lowercased()
+            : ""
 
         guard let matched = evaluateRules(sample, lowercased: lowercasedSample),
               matched != currentStatus else { return currentStatus }
@@ -109,13 +124,20 @@ actor AgentStateDetector {
 
         currentStatus = matched
         lastStatusChange = now
+        // Rare-path: materialize the Substring once for regex-based extraction helpers.
         // Extract active file path when a tool-write is in progress; clear it otherwise.
         // Guard with a cheap contains() before running the regex to avoid unnecessary
         // regex execution when toolRunning was triggered by a different rule (e.g. "Running:").
         if matched == .toolRunning && sample.contains("Writing to") {
-            activeFilePath = extractActiveFilePath(from: sample) ?? activeFilePath
+            activeFilePath = extractActiveFilePath(from: String(sample)) ?? activeFilePath
         } else if matched == .idle || matched == .completed || matched == .error {
             activeFilePath = nil
+        }
+        // Update current task description from the same sample; clear on terminal states.
+        if let task = extractCurrentTask(from: String(sample)) {
+            currentTask = task
+        } else if matched == .idle || matched == .completed {
+            currentTask = nil
         }
         return currentStatus
     }
@@ -127,6 +149,7 @@ actor AgentStateDetector {
             sessionID: sessionID,
             agentType: type,
             status: currentStatus,
+            currentTask: currentTask,
             tokenCount: tokenCount,
             estimatedCostUSD: parsedCost,
             activeFilePath: activeFilePath,
@@ -134,7 +157,29 @@ actor AgentStateDetector {
         )
     }
 
-    // MARK: - Active File Path Extraction
+    // MARK: - Task and File Path Extraction
+
+    /// Extracts the current task description from agent output, if present.
+    /// Fast-path: skips all regex if no anchor keyword is found.
+    private func extractCurrentTask(from text: String) -> String? {
+        guard text.contains("Task:") || text.contains("Working on:") || text.contains("\u{25CF}") else {
+            return nil
+        }
+        let patterns: [NSRegularExpression] = [
+            TokenStatRegex.taskColon,
+            TokenStatRegex.workingOn,
+            TokenStatRegex.bulletTask
+        ]
+        let range = NSRange(text.startIndex..., in: text)
+        for pattern in patterns {
+            guard let match = pattern.firstMatch(in: text, range: range),
+                  match.numberOfRanges > 1,
+                  let captureRange = Range(match.range(at: 1), in: text) else { continue }
+            let captured = String(text[captureRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !captured.isEmpty { return captured }
+        }
+        return nil
+    }
 
     /// Extracts a file path from "Writing to <path>" agent output, if present.
     private func extractActiveFilePath(from text: String) -> String? {
@@ -189,6 +234,7 @@ actor AgentStateDetector {
         detectedAt = nil
         lastStatusChange = nil
         activeFilePath = nil
+        currentTask = nil
     }
 
     // MARK: - Token Stat Patterns
@@ -228,73 +274,4 @@ actor AgentStateDetector {
         return Int(value)
     }
 
-    // MARK: - Pattern Matching
-
-    private static let launchPatterns: [(String, AgentType)] = [
-        ("claude", .claudeCode),
-        ("codex", .codex),
-        ("aider", .aider),
-        ("opencode", .openCode),
-        ("oc ", .openCode),
-        ("gemini", .gemini),
-        ("pi ", .pi),
-        ("pi-agent", .pi)
-    ]
-
-    /// Ordered rule table — evaluated top-to-bottom, first match wins; each rule is independently testable.
-    static let statusRules: [StatusRule] = [
-        // -- waitingInput: highest priority (user action required) --
-        StatusRule(.waitingInput, .suffix("> "), label: "prompt-suffix"),
-        StatusRule(.waitingInput, .suffix(">\n"), label: "prompt-suffix-nl"),
-        StatusRule(.waitingInput, .contains("[Y/n]"), label: "confirm-yn"),
-        StatusRule(.waitingInput, .contains("[y/N]"), label: "confirm-yN"),
-        StatusRule(.waitingInput, .contains("Do you want to proceed"), label: "proceed-prompt"),
-        StatusRule(.waitingInput, .contains("permission to"), label: "permission-prompt"),
-
-        // -- error: second priority (needs attention) --
-        StatusRule(.error, .containsCaseInsensitive("api error"), label: "api-error"),
-        StatusRule(.error, .containsCaseInsensitive("rate limit"), label: "rate-limit"),
-        StatusRule(.error, .containsCaseInsensitive("fatal:"), label: "fatal"),
-        StatusRule(.error, .containsCaseInsensitive("panic:"), label: "panic"),
-        StatusRule(.error, .containsCaseInsensitive("traceback"), label: "traceback"),
-        StatusRule(.error, .containsCaseInsensitive("error:"), label: "error-colon"),
-
-        // -- toolRunning: agent is executing a tool --
-        StatusRule(.toolRunning, .contains("\u{23FA}"), label: "record-icon"),
-        StatusRule(.toolRunning, .contains("Running:"), label: "running-label"),
-        StatusRule(.toolRunning, .contains("Executing:"), label: "executing-label"),
-        StatusRule(.toolRunning, .contains("Writing to"), label: "writing-to"),
-        StatusRule(.toolRunning, .contains("tool_use"), label: "tool-use-tag"),
-        StatusRule(.toolRunning, .contains("bash("), label: "bash-call"),
-
-        // -- thinking: agent is generating --
-        StatusRule(.thinking, .contains("Thinking"), label: "thinking-word"),
-        // Removed ellipsis (\u{2026}) — too many false positives from npm/build output.
-        StatusRule(.thinking, .contains("Generating"), label: "generating-word"),
-        StatusRule(.thinking, .contains("\u{280B}"), label: "braille-spinner-1"),
-        StatusRule(.thinking, .contains("\u{2819}"), label: "braille-spinner-2"),
-        StatusRule(.thinking, .contains("\u{2839}"), label: "braille-spinner-3"),
-
-        // -- completed: lowest priority --
-        StatusRule(.completed, .contains("Task completed"), label: "task-completed"),
-        StatusRule(.completed, .contains("Done!"), label: "done-bang"),
-        StatusRule(.completed, .contains("finished"), label: "finished-word"),
-        StatusRule(.completed, .contains("\u{2713}"), label: "checkmark")
-    ]
-
-    /// Pre-computed rule subsets per state — only rules leading to a valid transition are kept.
-    private static let reachableRules: [AgentStatus: [StatusRule]] = validTransitions.reduce(into: [:]) { map, entry in
-        map[entry.key] = statusRules.filter { entry.value.contains($0.status) }
-    }
-
-    /// Evaluates reachable rules; one scalar walk gates all rare-char rules, skipping their contains() on ~95% of packets.
-    private func evaluateRules(_ text: String, lowercased lowercasedText: String) -> AgentStatus? {
-        let rules = Self.reachableRules[currentStatus] ?? Self.statusRules
-        let hasRareScalar = text.unicodeScalars.contains(where: StatusRule.agentRareScalars.contains)
-        for rule in rules {
-            if rule.isRareUnicodeRule && !hasRareScalar { continue }
-            if rule.matchesFast(text, lowercased: lowercasedText) { return rule.status }
-        }
-        return nil
-    }
 }

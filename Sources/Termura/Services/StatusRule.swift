@@ -7,11 +7,22 @@ struct StatusRule: Sendable {
     let pattern: Pattern
     /// Human-readable label for debugging and test identification.
     let label: String
+    /// True when this rule's needle is a single rare Unicode scalar that can be gated
+    /// behind the shared `agentRareScalars` pre-scan in `AgentStateDetector.evaluateRules`.
+    /// Stored once at init — `pattern` is immutable so the result never changes.
+    let isRareUnicodeRule: Bool
 
     init(_ status: AgentStatus, _ pattern: Pattern, label: String) {
         self.status = status
         self.pattern = pattern
         self.label = label
+        if case let .contains(needle) = pattern,
+           needle.unicodeScalars.count == 1,
+           let scalar = needle.unicodeScalars.first {
+            self.isRareUnicodeRule = StatusRule.agentRareScalars.contains(scalar)
+        } else {
+            self.isRareUnicodeRule = false
+        }
     }
 
     /// Returns true if the text matches this rule's pattern.
@@ -19,9 +30,10 @@ struct StatusRule: Sendable {
         pattern.evaluate(text)
     }
 
-    /// Fast-path variant that accepts a pre-lowercased copy of `text`.
-    /// Avoids repeated lowercasing for `.containsCaseInsensitive` rules.
-    func matchesFast(_ text: String, lowercased lowercasedText: String) -> Bool {
+    /// Fast-path variant that accepts any `StringProtocol` value (e.g. `Substring`) so callers
+    /// can avoid materializing a `String` copy. Also accepts a pre-lowercased `String` copy
+    /// to avoid repeated lowercasing for `.containsCaseInsensitive` rules.
+    func matchesFast<S: StringProtocol>(_ text: S, lowercased lowercasedText: String) -> Bool {
         pattern.evaluateFast(text, lowercased: lowercasedText)
     }
 
@@ -36,15 +48,6 @@ struct StatusRule: Sendable {
         "\u{2819}", // braille spinner   (thinking)
         "\u{2839}"  // braille spinner   (thinking)
     ]
-
-    /// True when this rule's needle is a single rare Unicode scalar that can be gated
-    /// behind the shared `agentRareScalars` pre-scan in `AgentStateDetector.evaluateRules`.
-    var isRareUnicodeRule: Bool {
-        guard case let .contains(needle) = pattern,
-              needle.unicodeScalars.count == 1,
-              let scalar = needle.unicodeScalars.first else { return false }
-        return Self.agentRareScalars.contains(scalar)
-    }
 
     /// Pattern types for flexible matching.
     enum Pattern: Sendable {
@@ -64,9 +67,11 @@ struct StatusRule: Sendable {
         }
 
         /// Fast-path evaluation using a caller-supplied pre-lowercased copy of `text`.
-        /// For `.containsCaseInsensitive`, all needles in `statusRules` are lowercase literals,
-        /// so `contains` on the pre-lowercased text is equivalent and avoids re-normalising.
-        func evaluateFast(_ text: String, lowercased lowercasedText: String) -> Bool {
+        /// Accepts any `StringProtocol` value so callers can pass a `Substring` without
+        /// materializing a `String` copy first. For `.containsCaseInsensitive`, all needles
+        /// in `statusRules` are lowercase literals, so `contains` on the pre-lowercased text
+        /// is equivalent and avoids re-normalising.
+        func evaluateFast<S: StringProtocol>(_ text: S, lowercased lowercasedText: String) -> Bool {
             switch self {
             case let .contains(needle):
                 return text.contains(needle)
