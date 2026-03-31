@@ -66,7 +66,9 @@ extension MainView {
                         commandRouter.toggleSidebar()
                     }
                 },
-                onClose: { tab in closeContentTab(tab) }
+                onClose: { tab in closeContentTab(tab) },
+                hasUncommittedChanges: commandRouter.hasUncommittedChanges,
+                diagnosticErrorCount: projectScope.diagnosticsStore.errorCount
             )
             selectedContentView
         }

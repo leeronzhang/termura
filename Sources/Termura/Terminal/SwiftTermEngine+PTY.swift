@@ -16,7 +16,7 @@ extension SwiftTermEngine {
 
         terminalView.startProcess(
             executable: resolvedShell,
-            args: [],
+            args: ["-l"],
             currentDirectory: currentDirectory
         )
         isRunning = true

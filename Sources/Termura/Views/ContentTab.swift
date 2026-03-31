@@ -125,12 +125,18 @@ struct ContentTabBar: View {
     var showSidebarButton: Bool = false
     var onShowSidebar: (() -> Void)?
     let onClose: (ContentTab) -> Void
+    /// Mirrors the project-tab badge: blue dot when there are uncommitted changes.
+    var hasUncommittedChanges: Bool = false
+    /// Mirrors the project-tab badge: red dot (takes priority) when there are diagnostic errors.
+    var diagnosticErrorCount: Int = 0
 
     /// Extra top space so the tab content aligns with the sidebar icons,
     /// sitting just below the traffic-light buttons in non-fullscreen.
     private var titleBarTop: CGFloat { isFullScreen ? 0 : AppUI.Spacing.smMd }
     private var tabsLeadingPadding: CGFloat {
-        isFullScreen ? AppUI.Spacing.xxxxl : AppConfig.UI.trafficLightSafeLeading + AppUI.Spacing.xxxxl
+        isFullScreen
+            ? AppUI.Spacing.xxl + AppUI.Spacing.xxxxl
+            : AppConfig.UI.trafficLightSafeLeading + AppUI.Spacing.xxxxl
     }
 
     var body: some View {
@@ -158,16 +164,33 @@ struct ContentTabBar: View {
         Button {
             onShowSidebar?()
         } label: {
-            Image(systemName: "inset.filled.lefthalf.rectangle")
-                .font(AppUI.Font.tabBarIcon)
-                .foregroundColor(.secondary)
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "inset.filled.lefthalf.rectangle")
+                    .font(AppUI.Font.tabBarIcon)
+                    .foregroundColor(.secondary)
+
+                if diagnosticErrorCount > 0 {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
+                        .offset(x: 3, y: -1)
+                } else if hasUncommittedChanges {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
+                        .offset(x: 3, y: -1)
+                }
+            }
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
-        .frame(width: AppUI.Spacing.xxxxl, height: AppConfig.UI.trafficLightContainerHeight)
+        // alignment: .leading so the icon's left edge sits exactly at the padding origin,
+        // matching the leading edge of projectPathBar content (xxl = 20pt).
+        // The extra frame width beyond the icon provides hit-area padding to the right.
+        .frame(width: AppUI.Spacing.xxxxl, height: AppConfig.UI.trafficLightContainerHeight, alignment: .leading)
         // Non-fullscreen: align with traffic-light group (safeLeading + topInset).
-        // Fullscreen: no traffic lights, sit at leading edge with standard top padding.
-        .padding(.leading, isFullScreen ? 0 : AppConfig.UI.trafficLightSafeLeading)
+        // Fullscreen: no traffic lights, align icon left edge with path-bar content (xxl).
+        .padding(.leading, isFullScreen ? AppUI.Spacing.xxl : AppConfig.UI.trafficLightSafeLeading)
         .padding(.top, isFullScreen ? AppUI.Spacing.smMd : AppConfig.UI.trafficLightTopInset)
         .help("Show Sidebar (Cmd+B)")
     }

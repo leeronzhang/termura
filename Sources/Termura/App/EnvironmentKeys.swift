@@ -75,7 +75,7 @@ private struct NotesViewModelKey: EnvironmentKey {
     }
     #else
     static let defaultValue: NotesViewModel = MainActor.assumeIsolated {
-        preconditionFailure("NotesViewModel must be injected via .environment(\\.notesViewModel, ...)")
+        NotesViewModel(repository: NullNoteRepository())
     }
     #endif
 }
@@ -104,7 +104,9 @@ private struct SessionScopeKey: EnvironmentKey {
     }
     #else
     static let defaultValue: SessionScope = MainActor.assumeIsolated {
-        preconditionFailure("SessionScope must be injected via .environment(\\.sessionScope, ...)")
+        let engineStore = TerminalEngineStore(factory: MockTerminalEngineFactory())
+        let store = SessionStore(engineStore: engineStore, repository: NullSessionRepository())
+        return SessionScope(store: store, engines: engineStore, agentStates: AgentStateStore())
     }
     #endif
 }
@@ -131,7 +133,12 @@ private struct DataScopeKey: EnvironmentKey {
     }
     #else
     static let defaultValue: DataScope = MainActor.assumeIsolated {
-        preconditionFailure("DataScope must be injected via .environment(\\.dataScope, ...)")
+        DataScope(
+            searchService: NullSearchService(),
+            vectorSearchService: nil,
+            ruleFileRepository: NullRuleFileRepository(),
+            sessionMessageRepository: NullSessionMessageRepository()
+        )
     }
     #endif
 }
@@ -166,7 +173,13 @@ private struct ProjectScopeKey: EnvironmentKey {
     }
     #else
     static let defaultValue: ProjectScope = MainActor.assumeIsolated {
-        preconditionFailure("ProjectScope must be injected via .environment(\\.projectScope, ...)")
+        let gitService = NullGitService()
+        let router = CommandRouter()
+        return ProjectScope(
+            gitService: gitService,
+            viewModel: ProjectViewModel(gitService: gitService, projectRoot: ""),
+            diagnosticsStore: DiagnosticsStore(commandRouter: router, projectRoot: "")
+        )
     }
     #endif
 }
@@ -197,7 +210,16 @@ private struct ViewStateManagerKey: EnvironmentKey {
     }
     #else
     static let defaultValue: SessionViewStateManager = MainActor.assumeIsolated {
-        preconditionFailure("SessionViewStateManager must be injected via .environment(\\.viewStateManager, ...)")
+        let engineStore = TerminalEngineStore(factory: MockTerminalEngineFactory())
+        let store = SessionStore(engineStore: engineStore, repository: NullSessionRepository())
+        return SessionViewStateManager(.init(
+            commandRouter: CommandRouter(),
+            sessionStore: store,
+            tokenCountingService: NullTokenCountingService(),
+            agentStateStore: AgentStateStore(),
+            contextInjectionService: NullContextInjectionService(),
+            sessionHandoffService: NullSessionHandoffService()
+        ))
     }
     #endif
 }
