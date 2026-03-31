@@ -18,6 +18,8 @@ final class MockTerminalEngine: TerminalEngine {
     private(set) var resizes: [(UInt16, UInt16)] = []
     private(set) var terminateCallCount = 0
     var stubbedLinesNearCursor: [String] = []
+    var stubbedScrollLine: Int = 0
+    private(set) var scrollToLineCalls: [Int] = []
 
     // MARK: - Continuations
 
@@ -71,6 +73,10 @@ final class MockTerminalEngine: TerminalEngine {
     func cursorLineContent() -> String? { nil }
 
     func linesNearCursor(above count: Int) -> [String] { stubbedLinesNearCursor }
+
+    func currentScrollLine() -> Int { stubbedScrollLine }
+
+    func scrollToLine(_ line: Int) async { scrollToLineCalls.append(line) }
 
     func terminate() async {
         isRunning = false

@@ -43,4 +43,13 @@ protocol TerminalEngine: AnyObject, Sendable {
     /// - Parameter count: number of lines above the cursor row to include.
     /// - Returns: array of line strings, ordered top-to-bottom.
     func linesNearCursor(above count: Int) -> [String]
+
+    /// Returns the current scrollback depth: total buffer lines minus visible rows.
+    /// Captured at chunk-append time to record where a command's output starts in the buffer.
+    func currentScrollLine() -> Int
+
+    /// Scrolls the terminal so the given scrollback position is visible.
+    /// `line` is the value previously returned by `currentScrollLine()`.
+    /// No-op if the buffer has no scrollback or `line` is out of range.
+    func scrollToLine(_ line: Int) async
 }

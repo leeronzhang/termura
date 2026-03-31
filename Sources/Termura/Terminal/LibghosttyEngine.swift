@@ -71,4 +71,13 @@ final class LibghosttyEngine: TerminalEngine {
         // libghostty API stub
         []
     }
+
+    func currentScrollLine() -> Int {
+        // libghostty API stub
+        0
+    }
+
+    func scrollToLine(_ line: Int) async {
+        // libghostty API stub
+    }
 }

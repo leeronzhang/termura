@@ -107,6 +107,27 @@ final class SwiftTermEngine: NSObject, TerminalEngine {
         return line.translateToString(trimRight: true)
     }
 
+    func currentScrollLine() -> Int {
+        terminalView.getTerminal().buffer.yDisp
+    }
+
+    func scrollToLine(_ line: Int) async {
+        guard terminalView.canScroll else { return }
+        let sp = terminalView.scrollPosition
+        let yDisp = terminalView.getTerminal().buffer.yDisp
+        let fraction: Double
+        if sp > 0 {
+            // Derive maxScrollback from current (yDisp, scrollPosition) pair.
+            // scrollPosition = yDisp / maxScrollback, so maxScrollback = yDisp / scrollPosition.
+            let maxScrollback = Double(yDisp) / sp
+            fraction = min(max(Double(line) / maxScrollback, 0), 1.0)
+        } else {
+            // yDisp <= 0: buffer is at or near top; scroll to bottom as best effort.
+            fraction = 1.0
+        }
+        terminalView.scroll(toPosition: fraction)
+    }
+
     func linesNearCursor(above count: Int) -> [String] {
         let terminal = terminalView.getTerminal()
         let cursorRow = terminal.getCursorLocation().y
