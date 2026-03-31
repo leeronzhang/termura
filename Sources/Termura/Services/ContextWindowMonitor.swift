@@ -23,6 +23,11 @@ struct ContextWindowAlert: Identifiable, Sendable {
 /// Uses a per-session cooldown to avoid spamming notifications.
 actor ContextWindowMonitor {
     private var lastAlertTimes: [SessionID: Date] = [:]
+    private let clock: any AppClock
+
+    init(clock: any AppClock = LiveClock()) {
+        self.clock = clock
+    }
 
     /// Evaluates an agent state and returns an alert if a threshold is crossed
     /// and the cooldown period has elapsed.
@@ -30,13 +35,13 @@ actor ContextWindowMonitor {
         guard state.isContextWarning else { return nil }
 
         if let lastTime = lastAlertTimes[state.sessionID] {
-            let elapsed = Date().timeIntervalSince(lastTime)
+            let elapsed = clock.now().timeIntervalSince(lastTime)
             guard elapsed >= AppConfig.ContextWindow.notificationCooldownSeconds else {
                 return nil
             }
         }
 
-        lastAlertTimes[state.sessionID] = Date()
+        lastAlertTimes[state.sessionID] = clock.now()
         let level: ContextWindowAlert.Level = state.isContextCritical ? .critical : .warning
 
         logger.info(

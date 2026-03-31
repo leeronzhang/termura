@@ -183,11 +183,11 @@ extension TerminalViewModel {
     /// window. Additional calls while a deferred refresh is pending are no-ops.
     func scheduleMetadataRefresh(workingDirectory: String? = nil) {
         guard pendingMetadataRefreshTask == nil else { return }
-        let elapsed = Date().timeIntervalSince(lastMetadataRefreshDate)
+        let elapsed = clock.now().timeIntervalSince(lastMetadataRefreshDate)
         let throttle = AppConfig.Runtime.metadataRefreshThrottleSeconds
         let delay = max(0.0, throttle - elapsed)
         let dir = workingDirectory
-        pendingMetadataRefreshTask = Task { [weak self] in
+        pendingMetadataRefreshTask = Task { [weak self, clock] in
             defer { self?.pendingMetadataRefreshTask = nil }
             if delay > 0 {
                 do {
@@ -201,7 +201,7 @@ extension TerminalViewModel {
                 }
                 guard !Task.isCancelled else { return }
             }
-            self?.lastMetadataRefreshDate = Date()
+            self?.lastMetadataRefreshDate = clock.now()
             await self?.refreshMetadata(workingDirectory: dir)
         }
     }
