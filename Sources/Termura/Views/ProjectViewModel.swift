@@ -36,9 +36,7 @@ final class ProjectViewModel {
     /// Cached flat list of visible tree items (rebuilt on tree/expansion/filter changes).
     private(set) var flatVisibleItems: [FlatTreeItem] = []
 
-    /// True when there are uncommitted changes — drives the tab badge dot.
-    var hasUncommittedChanges: Bool { !gitResult.files.isEmpty }
-    /// Full project root for tooltip.
+    var hasUncommittedChanges: Bool { !gitResult.files.isEmpty } // drives tab badge dot
     var projectRootPath: String { projectRoot }
     /// Shortened display path: replaces home directory with `~`.
     var displayPath: String {
@@ -56,10 +54,8 @@ final class ProjectViewModel {
     @ObservationIgnored private var appActiveObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
     @ObservationIgnored private var persistTask: Task<Void, Never>?
-    /// Tracks whether we've already handled initial expansion (persisted or auto).
-    private var hasRestoredExpandState = false
-    /// Cached unfiltered flat list. Avoids tree traversal when only `hideIgnoredFiles` toggles.
-    @ObservationIgnored private var _unfilteredFlatItems: [FlatTreeItem] = []
+    private var hasRestoredExpandState = false // true after first expand-state restore
+    @ObservationIgnored private var _unfilteredFlatItems: [FlatTreeItem] = [] // cached unfiltered list
     @ObservationIgnored private var _unfilteredDirty = true // marked dirty by toggleExpand
 
     init(
@@ -132,8 +128,10 @@ final class ProjectViewModel {
     }
 
     private func performRefresh() async {
-        // Scan file tree, git status, and tracked files in parallel
-        async let scannedTree = fileTreeService.scan(at: projectRoot)
+        // File tree scan is skipped off the project tab — expensive (contentsOfDirectory,
+        // maxDepth=10), only needed for the tree view. Git status always refreshes (badge dot).
+        let shouldScanTree = commandRouter?.selectedSidebarTab == .project
+
         async let gitStatus = {
             do {
                 return try await self.gitService.status(at: self.projectRoot)
@@ -150,26 +148,33 @@ final class ProjectViewModel {
                 return Set<String>()
             }
         }()
+        async let scannedTree: [FileTreeNode] = { // parallel with git queries; skipped off-tab
+            guard shouldScanTree else { return [] }
+            return await fileTreeService.scan(at: projectRoot)
+        }()
 
         let rawTree = await scannedTree
         let status = await gitStatus
         let trackedFiles = await tracked
         guard !Task.isCancelled else { return }
 
-        // Annotate tree with git status and ignored file detection
-        let annotated = await fileTreeService.annotate(
-            tree: rawTree, with: status, trackedFiles: trackedFiles
-        )
-        guard !Task.isCancelled else { return }
+        // Only update the tree when we actually scanned — preserves existing tree on other tabs.
+        if shouldScanTree {
+            let annotated = await fileTreeService.annotate(
+                tree: rawTree, with: status, trackedFiles: trackedFiles
+            )
+            guard !Task.isCancelled else { return }
 
-        // Auto-expand roots on first scan. Set expandedNodeIDs BEFORE tree so tree.didSet
-        // fires once with the correct expansion state (expandedNodeIDs.didSet only persists).
-        if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
-            hasRestoredExpandState = true
-            expandedNodeIDs = Set(annotated.lazy.filter(\.isDirectory).map(\.id))
+            // Auto-expand roots on first scan. Set expandedNodeIDs BEFORE tree so tree.didSet
+            // fires once with the correct expansion state (expandedNodeIDs.didSet only persists).
+            if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
+                hasRestoredExpandState = true
+                expandedNodeIDs = Set(annotated.lazy.filter(\.isDirectory).map(\.id))
+            }
+
+            tree = annotated      // tree.didSet → rebuildFlatVisibleItems() with correct IDs
         }
 
-        tree = annotated      // tree.didSet → rebuildFlatVisibleItems() with correct IDs
         gitResult = status
         isLoading = false
         errorMessage = nil
@@ -240,16 +245,12 @@ final class ProjectViewModel {
         applyIgnoreFilter()
     }
 
-    /// Re-applies the ignore filter to the cached unfiltered list. O(n) filter, no tree traversal.
-    private func applyIgnoreFilter() {
-        flatVisibleItems = hideIgnoredFiles
-            ? _unfilteredFlatItems.filter { !$0.node.isGitIgnored }
-            : _unfilteredFlatItems
+    private func applyIgnoreFilter() { // O(n) filter, no tree traversal
+        flatVisibleItems = hideIgnoredFiles ? _unfilteredFlatItems.filter { !$0.node.isGitIgnored } : _unfilteredFlatItems
     }
 
     // MARK: - Incremental flat-list mutations (expand/collapse hot path)
 
-    /// Splices visible children of `node` into `flatVisibleItems` after the node's row.
     /// O(inserted items + elements shifted after insertion point).
     private func insertVisibleChildren(of node: FileTreeNode) {
         guard let idx = flatVisibleItems.firstIndex(where: { $0.id == node.id }),
@@ -260,8 +261,7 @@ final class ProjectViewModel {
         flatVisibleItems.insert(contentsOf: toInsert, at: idx + 1)
     }
 
-    /// Removes rows made invisible by collapsing `node`. O(removed + shifted elements).
-    private func removeVisibleDescendants(of node: FileTreeNode) {
+    private func removeVisibleDescendants(of node: FileTreeNode) { // O(removed + shifted elements)
         guard let idx = flatVisibleItems.firstIndex(where: { $0.id == node.id }) else { return }
         let depth = flatVisibleItems[idx].depth
         let start = idx + 1

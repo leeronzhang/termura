@@ -63,7 +63,11 @@ actor FileTreeService: FileTreeServiceProtocol {
         relativeTo rootURL: URL,
         depth: Int
     ) -> [FileTreeNode] {
-        guard depth < AppConfig.FileTree.maxDepth else { return [] }
+        // Check cancellation before each directory listing so that cancelling the outer
+        // refreshTask stops the recursive scan promptly. Without this check, the actor
+        // continues executing to completion even after Task cancellation — on large projects
+        // with maxDepth=10 this produced 18400/18410 profiler samples in contentsOfDirectory.
+        guard depth < AppConfig.FileTree.maxDepth, !Task.isCancelled else { return [] }
 
         let contents: [URL]
         do {
@@ -79,7 +83,8 @@ actor FileTreeService: FileTreeServiceProtocol {
 
         let (dirURLs, fileURLs) = classifyEntries(contents, relativeTo: rootURL)
         var dirs = dirURLs.map { entry in
-            let children = buildChildren(at: entry.url, relativeTo: rootURL, depth: depth + 1)
+            // Short-circuit recursion on cancellation — avoids spawning O(subdirs) worthless calls.
+            let children = Task.isCancelled ? [] : buildChildren(at: entry.url, relativeTo: rootURL, depth: depth + 1)
             return FileTreeNode(name: entry.name, relativePath: entry.relativePath, isDirectory: true, children: children)
         }
         var files = fileURLs.map { entry in
