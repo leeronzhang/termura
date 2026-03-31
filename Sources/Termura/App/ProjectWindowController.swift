@@ -8,15 +8,18 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
     let projectContext: ProjectContext
     private let themeManager: ThemeManager
     private let fontSettings: FontSettings
+    private let userDefaults: any UserDefaultsStoring
 
     init(
         projectContext: ProjectContext,
         themeManager: ThemeManager,
-        fontSettings: FontSettings
+        fontSettings: FontSettings,
+        userDefaults: any UserDefaultsStoring = UserDefaults.standard
     ) {
         self.projectContext = projectContext
         self.themeManager = themeManager
         self.fontSettings = fontSettings
+        self.userDefaults = userDefaults
 
         let window = Self.makeWindow(title: projectContext.displayName)
         super.init(window: window)
@@ -57,7 +60,7 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func restoreWindowedFrame() {
-        guard let frameStr = UserDefaults.standard.string(forKey: windowedFrameKey) else { return }
+        guard let frameStr = userDefaults.string(forKey: windowedFrameKey) else { return }
         let frame = NSRectFromString(frameStr)
         guard frame.width > 0, frame.height > 0 else { return }
         // Reject frames that would land entirely off all connected screens.
@@ -67,13 +70,13 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
 
     private func saveWindowedFrame() {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
-        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: windowedFrameKey)
+        userDefaults.set(NSStringFromRect(window.frame), forKey: windowedFrameKey)
     }
 
     /// Restore full-screen state after the window is on screen.
     /// Call from the opener after showWindow + makeKeyAndOrderFront.
     func restoreFullScreenIfNeeded() {
-        guard UserDefaults.standard.bool(forKey: fullScreenStateKey),
+        guard userDefaults.bool(forKey: fullScreenStateKey),
               let window else { return }
         Task { @MainActor [weak window] in
             do {
@@ -119,11 +122,11 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidEnterFullScreen(_ notification: Notification) {
-        UserDefaults.standard.set(true, forKey: fullScreenStateKey)
+        userDefaults.set(true, forKey: fullScreenStateKey)
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
-        UserDefaults.standard.set(false, forKey: fullScreenStateKey)
+        userDefaults.set(false, forKey: fullScreenStateKey)
         saveWindowedFrame()
     }
 

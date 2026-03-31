@@ -7,8 +7,10 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ProjectMigr
 /// One-time migration that splits the global `~/.termura/termura.db` into
 /// per-project databases at `<project>/.termura/termura.db`.
 enum ProjectMigrationService {
-    static var needsMigration: Bool {
-        guard !UserDefaults.standard.bool(forKey: AppConfig.UserDefaultsKeys.projectMigrationCompleted) else { return false }
+    static var needsMigration: Bool { checkNeedsMigration(using: UserDefaults.standard) }
+
+    static func checkNeedsMigration(using userDefaults: any UserDefaultsStoring) -> Bool {
+        guard !userDefaults.bool(forKey: AppConfig.UserDefaultsKeys.projectMigrationCompleted) else { return false }
         let home = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
         let legacyDB = home
             .appendingPathComponent(AppConfig.Persistence.directoryName)
@@ -18,8 +20,10 @@ enum ProjectMigrationService {
 
     /// Reads all sessions from the legacy DB, groups by `workingDirectory`,
     /// and copies each group's data into a per-project database.
-    static func migrateIfNeeded() async {
-        guard needsMigration else { return }
+    static func migrateIfNeeded(
+        using userDefaults: any UserDefaultsStoring = UserDefaults.standard
+    ) async {
+        guard checkNeedsMigration(using: userDefaults) else { return }
         let home = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
         let legacyDir = home.appendingPathComponent(AppConfig.Persistence.directoryName)
         let legacyPath = legacyDir.appendingPathComponent(AppConfig.Persistence.databaseFileName)
@@ -42,7 +46,7 @@ enum ProjectMigrationService {
             let backupPath = legacyDir.appendingPathComponent("termura.db.migrated")
             try FileManager.default.moveItem(at: legacyPath, to: backupPath)
 
-            UserDefaults.standard.set(true, forKey: AppConfig.UserDefaultsKeys.projectMigrationCompleted)
+            userDefaults.set(true, forKey: AppConfig.UserDefaultsKeys.projectMigrationCompleted)
             logger.info("Migration complete — \(projects.count) projects migrated")
         } catch {
             logger.error("Project migration failed: \(error)")

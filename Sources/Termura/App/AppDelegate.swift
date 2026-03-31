@@ -30,6 +30,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.registerBundledFonts()
 
         let collector = MetricsCollector()
+        // UI-testing: swap in a mock shell installer so tests never write to ~/.zshrc.
+        let shellInstaller: any ShellHookInstallerProtocol
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["UI_TESTING_MOCK_SHELL_INSTALLER"] != nil {
+            shellInstaller = MockShellHookInstaller()
+        } else {
+            shellInstaller = ShellHookInstaller()
+        }
+        #else
+        shellInstaller = ShellHookInstaller()
+        #endif
         services = AppServices(
             engineFactory: LiveTerminalEngineFactory(),
             themeManager: ThemeManager(),
@@ -41,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recentProjects: RecentProjectsService(),
             metricsCollector: collector,
             metricsPersistenceService: MetricsPersistenceService(metrics: collector),
-            shellHookInstaller: ShellHookInstaller()
+            shellHookInstaller: shellInstaller
         )
         projectCoordinator = ProjectCoordinator()
 
@@ -52,6 +63,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let launchStart = ContinuousClock.now
+
+        // UI-testing: apply env-var overrides before any persistent state is read.
+        let env = ProcessInfo.processInfo.environment
+        if env["UI_TESTING_SKIP_SHELL_ONBOARDING"] != nil {
+            UserDefaults.standard.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
+        }
+        let launchProjectURL = env["UI_TESTING_PROJECT_PATH"].map { URL(fileURLWithPath: $0) }
 
         // Check for prior crash context
         if let priorCrash = CrashContext.loadPriorCrashContext() {
@@ -68,7 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appServices: services,
             windowChromeConfigurator: { [weak self] window in
                 self?.configureProjectWindow(window)
-            }
+            },
+            userDefaults: UserDefaults.standard,
+            openOnLaunchURL: launchProjectURL
         ))
         logger.info("Termura launched")
 

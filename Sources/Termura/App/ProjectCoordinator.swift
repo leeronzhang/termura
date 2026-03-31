@@ -19,6 +19,10 @@ final class ProjectCoordinator {
     struct Dependencies {
         let appServices: AppServices
         let windowChromeConfigurator: (NSWindow) -> Void
+        let userDefaults: any UserDefaultsStoring
+        /// When set, opens this URL on launch (skips picker + history). NOT added to recents.
+        /// Use cases: UI tests with temp dirs, URL-scheme "open project" deep links.
+        var openOnLaunchURL: URL?  // Optional: UI testing / URL-scheme deep link
     }
 
     private var deps: Dependencies?
@@ -45,63 +49,61 @@ final class ProjectCoordinator {
             logger.error("ProjectCoordinator not started before openProject call")
             return
         }
-
-        // If already open, bring existing window to front
         if let existing = projectWindows[url] {
             existing.window?.makeKeyAndOrderFront(nil)
             return
         }
+        // Task inherits @MainActor — DB migration in DatabaseService.init runs off main thread.
+        Task { [weak self] in await self?.performOpenProjectAsync(url: url) }
+    }
 
-        // Open asynchronously so DB migration (inside DatabaseService.init) runs off the main thread.
-        // Task inherits @MainActor from the surrounding @MainActor context — no explicit annotation needed.
-        Task { [weak self] in
-            guard let self, let deps = self.deps else { return }
-            // Re-check inside task — a concurrent open for the same URL may have completed.
-            if let existing = self.projectWindows[url] {
-                existing.window?.makeKeyAndOrderFront(nil)
-                return
+    private func performOpenProjectAsync(url: URL, persist: Bool = true) async {
+        guard let deps else { return }
+        // Re-check inside task — a concurrent open for the same URL may have completed.
+        if let existing = projectWindows[url] {
+            existing.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+        do {
+            let context = try await ProjectContext.open(
+                at: url,
+                engineFactory: deps.appServices.engineFactory,
+                tokenCountingService: deps.appServices.tokenCountingService,
+                metricsCollector: deps.appServices.metricsCollector
+            )
+            let controller = ProjectWindowController(
+                projectContext: context,
+                themeManager: deps.appServices.themeManager,
+                fontSettings: deps.appServices.fontSettings
+            )
+            projectWindows[url] = controller
+            activeContext = context
+            controller.onWindowClose = { [weak self] in self?.closeProject(at: url) }
+            // Fire the launch-time callback exactly once after the first window opens.
+            if projectWindows.count == 1 {
+                onFirstProjectOpened?(context.commandRouter)
+                onFirstProjectOpened = nil
             }
-            do {
-                let context = try await ProjectContext.open(
-                    at: url,
-                    engineFactory: deps.appServices.engineFactory,
-                    tokenCountingService: deps.appServices.tokenCountingService,
-                    metricsCollector: deps.appServices.metricsCollector
-                )
-                let controller = ProjectWindowController(
-                    projectContext: context,
-                    themeManager: deps.appServices.themeManager,
-                    fontSettings: deps.appServices.fontSettings
-                )
-                self.projectWindows[url] = controller
-                self.activeContext = context
-                controller.onWindowClose = { [weak self] in self?.closeProject(at: url) }
-                // Fire the launch-time callback exactly once after the first window opens.
-                if self.projectWindows.count == 1 {
-                    self.onFirstProjectOpened?(context.commandRouter)
-                    self.onFirstProjectOpened = nil
-                }
-                deps.appServices.recentProjects.addRecent(url)
-                self.chunkHandlerTokens[url] = self.setupChunkHandler(for: context)
-                self.persistOpenProjects()
-                controller.showWindow(nil)
-                if let window = controller.window {
-                    window.makeKeyAndOrderFront(nil)
-                    NSApp.activate(ignoringOtherApps: true)
-                    deps.windowChromeConfigurator(window)
-                }
-                controller.restoreFullScreenIfNeeded()
-                await context.sessionScope.store.loadPersistedSessions()
-                logger.info("Opened project window: \(url.path)")
-            } catch {
-                logger.error("Failed to open project at \(url.path): \(error)")
-                let alert = NSAlert()
-                alert.messageText = "Failed to open project"
-                alert.informativeText = "Could not open \(url.lastPathComponent): \(error.localizedDescription)"
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "OK")
-                alert.runModal()
+            if persist { deps.appServices.recentProjects.addRecent(url) }
+            chunkHandlerTokens[url] = setupChunkHandler(for: context)
+            if persist { persistOpenProjects() }
+            controller.showWindow(nil)
+            if let window = controller.window {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                deps.windowChromeConfigurator(window)
             }
+            controller.restoreFullScreenIfNeeded()
+            await context.sessionScope.store.loadPersistedSessions()
+            logger.info("Opened project window: \(url.path)")
+        } catch {
+            logger.error("Failed to open project at \(url.path): \(error)")
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Failed to open project")
+            alert.informativeText = String(localized: "Could not open \"\(url.lastPathComponent)\": \(error.localizedDescription)")
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: String(localized: "OK"))
+            alert.runModal()
         }
     }
 
@@ -124,8 +126,8 @@ final class ProjectCoordinator {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "Open Project"
-        panel.message = "Choose a project directory to open in Termura"
+        panel.prompt = String(localized: "Open Project")
+        panel.message = String(localized: "Choose a project directory to open in Termura")
 
         NSApp.activate(ignoringOtherApps: true)
 
@@ -151,6 +153,11 @@ final class ProjectCoordinator {
         // Task inherits @MainActor from the surrounding @MainActor context — no explicit annotation needed.
         Task { [weak self] in
             await ProjectMigrationService.migrateIfNeeded()
+            // openOnLaunchURL (UI tests / URL-scheme deep links): open without persisting to recents.
+            if let override = self?.deps?.openOnLaunchURL {
+                await self?.performOpenProjectAsync(url: override, persist: false)
+                return
+            }
             if let lastURL = self?.deps?.appServices.recentProjects.lastOpened() {
                 self?.openProject(at: lastURL)
             } else {
@@ -267,7 +274,7 @@ final class ProjectCoordinator {
 
     private func persistOpenProjects() {
         let paths = projectWindows.keys.map(\.path)
-        UserDefaults.standard.set(paths, forKey: AppConfig.UserDefaultsKeys.openProjectPaths)
+        deps?.userDefaults.set(paths, forKey: AppConfig.UserDefaultsKeys.openProjectPaths)
     }
 
     private func setupChunkHandler(for context: ProjectContext) -> UUID {
