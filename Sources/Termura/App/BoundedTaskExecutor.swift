@@ -1,6 +1,5 @@
 import Foundation
 import OSLog
-import os
 
 private let logger = Logger(subsystem: "com.termura.app", category: "BoundedTaskExecutor")
 
@@ -14,11 +13,14 @@ private let logger = Logger(subsystem: "com.termura.app", category: "BoundedTask
 final class BoundedTaskExecutor {
     private let semaphore: AsyncSemaphore
     private let maxConcurrent: Int
-    // OSAllocatedUnfairLock is Sendable, so it can be accessed from nonisolated
-    // deinit without unsafe annotations. All mutations happen on MainActor (no actual
-    // contention); the lock satisfies Swift 6 Sendability for deinit-access.
-    private let _tracked: OSAllocatedUnfairLock<[UUID: Task<Void, Never>]> =
-        OSAllocatedUnfairLock(initialState: [:])
+    // nonisolated(unsafe): deinit — all mutations are on @MainActor (serially safe);
+    // nonisolated(unsafe) satisfies Swift 6 Sendability for the nonisolated deinit
+    // path only. No contention at deinit: the last reference is being released.
+    nonisolated(unsafe) private var _tracked: [UUID: Task<Void, Never>] = [:]
+    /// O(1) active-task count maintained incrementally alongside `_tracked`.
+    /// Avoids calling `_tracked.count` (O(n) dictionary probe) in `activeCount`
+    /// and `isAtCapacity`, which are queried on every high-frequency spawn check.
+    private var _trackedCount = 0
 
     /// - Parameter maxConcurrent: Maximum tasks executing simultaneously.
     init(maxConcurrent: Int) {
@@ -27,17 +29,17 @@ final class BoundedTaskExecutor {
     }
 
     deinit {
-        _tracked.withLock { $0.values.forEach { $0.cancel() } }
+        _tracked.values.forEach { $0.cancel() }
     }
 
     /// Number of tasks currently tracked (pending + executing).
-    var activeCount: Int { _tracked.withLock { $0.count } }
+    var activeCount: Int { _trackedCount }
 
     /// True when the queue depth has reached the hard cap.
     /// Callers can check this before spawning non-critical work to shed load
     /// during high-throughput output bursts (e.g. large PTY floods).
     var isAtCapacity: Bool {
-        _tracked.withLock { $0.count } >= maxConcurrent * AppConfig.Runtime.taskQueueDepthMultiplier
+        _trackedCount >= maxConcurrent * AppConfig.Runtime.taskQueueDepthMultiplier
     }
 
     /// Spawns a task on the MainActor context with bounded concurrency.
@@ -58,7 +60,8 @@ final class BoundedTaskExecutor {
             }
             await sem.signal()
         }
-        _tracked.withLock { $0[id] = task }
+        _tracked[id] = task
+        _trackedCount += 1
     }
 
     /// Spawns a detached task off MainActor with bounded concurrency.
@@ -81,10 +84,13 @@ final class BoundedTaskExecutor {
             await sem.signal()
             await cleanup()
         }
-        _tracked.withLock { $0[id] = task }
+        _tracked[id] = task
+        _trackedCount += 1
     }
 
     private func removeTracked(_ id: UUID) {
-        _tracked.withLock { _ = $0.removeValue(forKey: id) }
+        if _tracked.removeValue(forKey: id) != nil {
+            _trackedCount -= 1
+        }
     }
 }
