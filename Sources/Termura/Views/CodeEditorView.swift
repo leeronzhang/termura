@@ -131,7 +131,8 @@ struct NoteEditorView: View {
                 isModified: $isModified,
                 onSave: {},
                 fontFamily: fontSettings.terminalFontFamily,
-                fontSize: fontSettings.editorFontSize
+                fontSize: fontSettings.editorFontSize,
+                autoFocus: false
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

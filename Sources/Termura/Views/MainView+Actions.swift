@@ -25,9 +25,13 @@ extension MainView {
         case .composerPrefill(let text):
             handleComposerPrefill(text)
         case .endSession(let sid):
+            // Synchronously remove the tab and update selection BEFORE the async endSession
+            // to prevent blank state: endSession calls terminateEngine synchronously (before
+            // the DB await), so the engine disappears while selectedContentTab still points
+            // to the closed tab. Moving the UI update here eliminates that window.
+            removeTerminalTab(containingSession: sid)
             Task { @MainActor in
                 await sessionStore.endSession(id: sid)
-                removeTerminalTab(containingSession: sid)
             }
         case .selectSession(let index):
             handleSelectSession(at: index)
@@ -39,7 +43,7 @@ extension MainView {
     /// Activate the session at the given 0-based index in the visible (non-ended) session list.
     /// No-op if the index exceeds the number of visible sessions.
     private func handleSelectSession(at index: Int) {
-        let visible = sessionStore.sessions.filter { !$0.isEnded }
+        let visible = sessionStore.activeSessions
         guard index < visible.count else { return }
         activateSessionFromSidebar(visible[index])
     }
@@ -117,6 +121,9 @@ extension MainView {
                       ?? AppConfig.AgentResume.autoFillDefault
         guard enabled else { return }
         guard !commandRouter.showComposer else { return }
+        // Skip auto-fill if the agent is already running in this session.
+        let sid = focusedPaneSessionID ?? sessionStore.activeSessionID
+        if let sid, sessionScope.agentStates.agents[sid] != nil { return }
         guard let editorVM = activeEditorViewModel else { return }
         guard editorVM.currentText.isEmpty else { return }
         let command = agentType.defaultLaunchCommand
@@ -179,23 +186,27 @@ extension MainView {
     func closeContentTab(_ tab: ContentTab) {
         switch tab {
         case let .terminal(sid, _):
+            // Synchronously remove the tab and update selection BEFORE the async endSession
+            // to prevent blank state: endSession calls terminateEngine synchronously (before
+            // the DB await), so the engine disappears while selectedContentTab still points
+            // to the closed tab. Moving the UI update here eliminates that window.
+            removeTerminalTab(containingSession: sid)
             Task { @MainActor in
                 await sessionStore.endSession(id: sid)
-                removeTerminalTab(containingSession: sid)
             }
         case let .split(left, right, _, _):
             // End the focused pane; dissolve the split so the surviving pane continues.
             let sid = focusedPaneSessionID ?? left
             let survivingID = sid == left ? right : left
+            removeTerminalTab(containingSession: sid)
             Task { @MainActor in
                 await sessionStore.endSession(id: sid)
-                removeTerminalTab(containingSession: sid)
                 sessionStore.activateSession(id: survivingID)
             }
         case .note, .diff, .file, .preview:
             openTabs.removeAll { $0 == tab }
             if selectedContentTab == tab {
-                selectedContentTab = nil
+                selectedContentTab = terminalItems.last ?? openTabs.first
             }
             persistOpenTabs()
         }
@@ -219,10 +230,15 @@ extension MainView {
             selectedContentTab = replacement
             sessionStore.activateSession(id: survivingID)
         } else {
+            let wasSelected = selectedContentTab?.containsSession(sid) == true
             terminalItems.remove(at: idx)
-            selectedContentTab = terminalItems.last ?? openTabs.first
-            if let next = selectedContentTab?.sessionID {
-                sessionStore.activateSession(id: next)
+            // Only update selection if the removed tab was the selected one; closing a
+            // background tab must not silently jump the user away from their current tab.
+            if wasSelected {
+                selectedContentTab = terminalItems.last ?? openTabs.first
+                if let next = selectedContentTab?.sessionID {
+                    sessionStore.activateSession(id: next)
+                }
             }
         }
     }
@@ -266,6 +282,11 @@ extension MainView {
             terminalItems.append(tab)
             selectedContentTab = tab
         }
+        // Eagerly create the engine before activateSession so the terminal renders
+        // immediately rather than showing empty state during the lazy-creation debounce
+        // (~120ms). ensureEngine is idempotent; activateSession then takes the
+        // zero-cost "engine already alive" path instead of scheduling a debounce task.
+        sessionStore.ensureEngine(for: session.id)
         sessionStore.activateSession(id: session.id)
     }
 }

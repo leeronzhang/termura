@@ -13,6 +13,12 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
     /// highlight.js language identifier (e.g. "swift", "python"). Nil = plain text.
     var language: String?
 
+    /// When true (default), the editor calls window.makeFirstResponder after a short delay
+    /// so keyboard input starts immediately. Set to false for embedded editors (e.g. note body)
+    /// where the parent view manages focus, so the auto-focus doesn't intercept paste
+    /// commands directed at a sibling text field.
+    var autoFocus: Bool = true
+
     /// Extra spacing between lines (points). Uses lineSpacing instead of
     /// lineHeightMultiple so the cursor height matches the font, not the full line.
     static let lineSpacingExtra: CGFloat = AppConfig.UI.codeEditorLineSpacing
@@ -39,7 +45,9 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
         let textView = makeTextView(coordinator: context.coordinator)
         scrollView.documentView = textView
         attachRuler(to: scrollView, textView: textView)
-        scheduleInitialFocus(for: textView)
+        if autoFocus {
+            scheduleInitialFocus(for: textView)
+        }
         return scrollView
     }
 

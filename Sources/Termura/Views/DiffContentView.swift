@@ -11,7 +11,7 @@ struct DiffContentView: View {
     let gitService: any GitServiceProtocol
     let projectRoot: String
 
-    @State private var diffText = ""
+    @State private var diffLines: [DiffLine] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
 
@@ -85,7 +85,7 @@ struct DiffContentView: View {
                     .foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if diffText.isEmpty {
+        } else if diffLines.isEmpty {
             VStack(spacing: AppUI.Spacing.md) {
                 Image(systemName: "checkmark.circle")
                     .font(AppUI.Font.hero)
@@ -115,10 +115,6 @@ struct DiffContentView: View {
 
     // MARK: - Diff line rendering
 
-    private var diffLines: [DiffLine] {
-        diffText.components(separatedBy: "\n").map { DiffLine(raw: $0) }
-    }
-
     private func diffLineView(_ line: DiffLine) -> some View {
         HStack(spacing: 0) {
             Text(line.raw)
@@ -135,6 +131,7 @@ struct DiffContentView: View {
 
     private func loadDiff() async {
         do {
+            let rawText: String
             if isUntracked {
                 // Untracked files have no diff — show full content with + prefix
                 let url = URL(fileURLWithPath: projectRoot)
@@ -142,16 +139,20 @@ struct DiffContentView: View {
                 let content: String = try await Task.detached {
                     try String(contentsOf: url, encoding: .utf8)
                 }.value
-                diffText = content.components(separatedBy: "\n")
+                rawText = content
+                    .components(separatedBy: "\n")
                     .map { "+\($0)" }
                     .joined(separator: "\n")
             } else {
-                diffText = try await gitService.diff(
+                rawText = try await gitService.diff(
                     file: filePath,
                     staged: isStaged,
                     at: projectRoot
                 )
             }
+            // Parse once; empty rawText produces a single empty-string component which we treat as no content.
+            let parsed = rawText.components(separatedBy: "\n").map { DiffLine(raw: $0) }
+            diffLines = (parsed.count == 1 && parsed[0].raw.isEmpty) ? [] : parsed
         } catch {
             logger.warning("Failed to load diff for \(filePath): \(error.localizedDescription)")
             errorMessage = "Failed to load diff"

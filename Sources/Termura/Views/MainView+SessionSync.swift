@@ -7,7 +7,7 @@ extension MainView {
         if !sessionStore.hasLoadedPersistedSessions {
             for await _ in sessionStore.sessionsLoaded.values { break }
         }
-        if sessionStore.sessions.filter({ !$0.isEnded }).isEmpty {
+        if sessionStore.activeSessions.isEmpty {
             sessionStore.createSession(title: "Terminal")
         }
         syncTerminalItems()
@@ -23,7 +23,7 @@ extension MainView {
     /// Reconciles `terminalItems` with the current session list.
     /// Adds tabs for new active sessions; removes tabs for deleted or ended sessions.
     func syncTerminalItems() {
-        let activeSessionIDs = Set(sessionStore.sessions.filter { !$0.isEnded }.map(\.id))
+        let activeSessionIDs = Set(sessionStore.activeSessions.map(\.id))
         // Remove tabs for sessions that no longer exist or have been ended.
         var updated: [ContentTab] = []
         for item in terminalItems {
@@ -55,7 +55,7 @@ extension MainView {
             }
         })
         var tabForActiveSession: ContentTab?
-        for session in sessionStore.sessions where !session.isEnded && !coveredIDs.contains(session.id) {
+        for session in sessionStore.activeSessions where !coveredIDs.contains(session.id) {
             let tab = ContentTab.terminal(sessionID: session.id, title: session.title)
             updated.append(tab)
             if session.id == sessionStore.activeSessionID {

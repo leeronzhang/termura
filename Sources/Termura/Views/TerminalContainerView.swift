@@ -120,6 +120,10 @@ final class TerminalDragContainerView: NSView {
         isPassthrough ? nil : super.hitTest(point)
     }
 
+    // Belt-and-suspenders: also block window drag on the container itself,
+    // in case a future subview change makes this the hit-tested view.
+    override var mouseDownCanMoveWindow: Bool { false }
+
     // MARK: - Scroller cache
 
     /// Called once in makeNSView after SwiftTerm has fully initialised its subview tree.

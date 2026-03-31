@@ -59,10 +59,15 @@ extension MainView {
                         }
                     }
                 ),
-                isFullScreen: isFullScreen
-            ) { tab in
-                closeContentTab(tab)
-            }
+                isFullScreen: isFullScreen,
+                showSidebarButton: !commandRouter.showSidebar,
+                onShowSidebar: {
+                    withAnimation(.easeInOut(duration: AppUI.Animation.panel)) {
+                        commandRouter.toggleSidebar()
+                    }
+                },
+                onClose: { tab in closeContentTab(tab) }
+            )
             selectedContentView
         }
     }

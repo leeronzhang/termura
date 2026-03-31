@@ -59,6 +59,10 @@ final class TerminalViewModel {
     /// TerminalAreaView sets it at view-setup time — not an implementation detail.
     @ObservationIgnored var onShellPromptReadyForResume: (() -> Void)?
     @ObservationIgnored private var hasTriggeredAgentResume = false
+    /// Local mirror of AgentCoordinator.hasDetectedAgentFromOutput.
+    /// Once true, skips the per-packet actor hop to AgentCoordinator (CLAUDE.md P2-15).
+    /// Reset to false in sync with coordinator.resetOnExecutionFinished().
+    @ObservationIgnored var agentDetectedFromOutput = false
 
     // MARK: - Init
 
@@ -242,9 +246,14 @@ extension TerminalViewModel {
         schedulePromptRecheck()
 
         // Once the agent type is confirmed from output, skip further per-packet scanning.
-        // bufferAndDetect is O(bufferLen) due to lowercased(); skipping saves that work entirely.
-        // Single actor hop: check and detect are atomic inside AgentCoordinator (no TOCTOU).
-        await coordinator.detectAgentFromOutputIfNeeded(stripped)
+        // agentDetectedFromOutput mirrors AgentCoordinator.hasDetectedAgentFromOutput — when
+        // true the actor hop is eliminated entirely (zero cost in the common case during agent
+        // runs). The coordinator returns true when detection is confirmed; we cache it here.
+        // Single actor hop on the detection path: check and detect are atomic inside
+        // AgentCoordinator (no TOCTOU). Reset in sync with resetOnExecutionFinished().
+        if !agentDetectedFromOutput {
+            agentDetectedFromOutput = await coordinator.detectAgentFromOutputIfNeeded(stripped)
+        }
 
         // Backpressure: during PTY floods (e.g. thousands of permission-error lines),
         // the task queue can accumulate faster than tasks complete. When at capacity,

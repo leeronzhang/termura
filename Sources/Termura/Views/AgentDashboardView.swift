@@ -43,32 +43,12 @@ struct AgentDashboardView: View {
 
     private var agentList: some View {
         LazyVStack(spacing: AppUI.Spacing.xs) {
-            ForEach(sortedAgents) { agent in
+            ForEach(agentStore.sortedAgents) { agent in
                 agentRow(agent)
             }
         }
         .padding(.vertical, AppUI.Spacing.smMd)
         .padding(.horizontal, AppUI.Spacing.lg)
-    }
-
-    private var sortedAgents: [AgentState] {
-        agentStore.agents.values.sorted { lhs, rhs in
-            let lhsPri = Self.sortPriority(lhs)
-            let rhsPri = Self.sortPriority(rhs)
-            if lhsPri != rhsPri { return lhsPri < rhsPri }
-            return lhs.startedAt > rhs.startedAt
-        }
-    }
-
-    private static func sortPriority(_ agent: AgentState) -> Int {
-        switch agent.status {
-        case .waitingInput: 0
-        case .error: 1
-        case .thinking: 2
-        case .toolRunning: 3
-        case .idle: 4
-        case .completed: 5
-        }
     }
 
     private func agentRow(_ agent: AgentState) -> some View {
@@ -123,7 +103,7 @@ struct AgentDashboardView: View {
     }
 
     private func elapsedLabel(_ agent: AgentState) -> some View {
-        let elapsed = Date().timeIntervalSince(agent.startedAt)
+        let elapsed = agentStore.now.timeIntervalSince(agent.startedAt)
         return Text(MetadataFormatter.formatDuration(elapsed))
             .font(AppUI.Font.captionMono)
             .foregroundColor(.secondary)

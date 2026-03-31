@@ -56,6 +56,19 @@ struct TerminalAreaView: View {
 
     var body: some View {
         mainLayout
+            .overlay(alignment: .bottom) {
+                if let message = notesViewModel.toastMessage {
+                    Text(message)
+                        .font(AppUI.Font.bodyMedium)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, AppUI.Spacing.xxl)
+                        .padding(.vertical, AppUI.Spacing.md)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AppUI.Spacing.md))
+                        .padding(.bottom, AppUI.Spacing.xxl)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: notesViewModel.toastMessage != nil)
             .onAppear { onViewAppear() }
             .onDisappear { removeKeyRouter() }
             .modifier(TerminalAreaSheets(
@@ -121,13 +134,23 @@ struct TerminalAreaView: View {
         wireTerminalContextActions()
     }
 
-    /// Connects the terminal view's right-click context actions to the CommandRouter.
+    /// Connects the terminal view's right-click context actions to the CommandRouter and NotesViewModel.
     /// Only wires when the engine exposes a TermuraTerminalView; no-ops for mocks.
     private func wireTerminalContextActions() {
         guard let tv = engine.terminalNSView as? TermuraTerminalView else { return }
         let router = commandRouter
         tv.onContextAction = { text in
             router.prefillComposer(text: text)
+        }
+        let notes = notesViewModel
+        let store = sessionScope.store
+        let sid = sessionID
+        tv.onSendToNotes = { text in
+            let title = store.session(id: sid)?.title ?? "Terminal"
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = "```\n\(trimmed)\n```"
+            notes.silentlyCreateNote(title: title, body: body)
+            notes.showToast("Saved to Notes")
         }
     }
 
@@ -198,19 +221,24 @@ struct TerminalAreaView: View {
                 router.dismissComposer()
                 return nil
             }
+            // Defense-in-depth: when Composer is open and the user pastes (Cmd+V),
+            // ensure EditorTextView has first responder before the event is dispatched.
+            // This MUST run before the generic Cmd early-exit below — otherwise Cmd+V
+            // exits early and the event lands in whatever view currently holds focus
+            // (often the terminal PTY after a submit), silently discarding the image.
+            // Reproduces on first auto-resume: focusEditor() delay hasn't finished yet
+            // when the user pastes, so the terminal still owns first responder.
+            if router.showComposer,
+               flags == .command,
+               event.charactersIgnoringModifiers == "v",
+               let textView = handle.textView,
+               window.firstResponder !== textView {
+                window.makeFirstResponder(textView)
+            }
             // Let other Cmd-key shortcuts pass through to the menu system.
             if flags.contains(.command) { return event }
             // When Composer is open, let all events flow to the Composer's views.
-            // Defense-in-depth: if the user clicked the notes list or any non-editor
-            // view and EditorTextView lost first responder, reclaim it on Cmd+V so
-            // paste always lands in the composer editor and never in the terminal PTY.
             if router.showComposer {
-                if flags == .command,
-                   event.charactersIgnoringModifiers == "v",
-                   let textView = handle.textView,
-                   window.firstResponder !== textView {
-                    window.makeFirstResponder(textView)
-                }
                 return event
             }
             // In passthrough mode route keys to the terminal.
@@ -252,7 +280,11 @@ struct TerminalAreaView: View {
     }
 
     private func removeKeyRouter() {
-        editorViewModel.onSubmit = nil
+        // Do NOT nil editorViewModel.onSubmit here.
+        // onSubmit is wired at session-view level (stable across Composer cycles)
+        // and uses [weak router] — no retain cycle, no stale-dismiss risk.
+        // Clearing it here causes the composer to stay open if TerminalAreaView
+        // briefly disappears and reappears while the composer is in use.
         if let monitor = keyEventMonitor {
             NSEvent.removeMonitor(monitor)
             keyEventMonitor = nil

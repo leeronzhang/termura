@@ -8,27 +8,32 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ProjectView
 @Observable
 @MainActor
 final class ProjectViewModel {
-    private(set) var tree: [FileTreeNode] = []
+    private(set) var tree: [FileTreeNode] = [] {
+        didSet { rebuildFlatVisibleItems() }
+    }
     private(set) var gitResult: GitStatusResult = .notARepo
     private(set) var isLoading = false
     /// User-visible error from the last refresh; nil when healthy.
     var errorMessage: String?
     /// IDs of expanded folder nodes. Persisted per project via UserDefaults.
     var expandedNodeIDs: Set<String> = [] {
-        didSet { persistExpandedIDs() }
+        didSet {
+            persistExpandedIDs()
+            rebuildFlatVisibleItems()
+        }
     }
 
     /// When true, files/directories marked as gitignored are hidden from the tree.
     var hideIgnoredFiles: Bool = true {
-        didSet { UserDefaults.standard.set(hideIgnoredFiles, forKey: hideIgnoredKey) }
+        didSet {
+            UserDefaults.standard.set(hideIgnoredFiles, forKey: hideIgnoredKey)
+            rebuildFlatVisibleItems()
+        }
     }
 
     /// Flattened list of visible tree items based on expansion and ignore filter.
-    var flatVisibleItems: [FlatTreeItem] {
-        let items = tree.flattenVisible(expandedIDs: expandedNodeIDs)
-        guard hideIgnoredFiles else { return items }
-        return items.filter { !$0.node.isGitIgnored }
-    }
+    /// Cached: rebuilt whenever tree, expandedNodeIDs, or hideIgnoredFiles changes.
+    private(set) var flatVisibleItems: [FlatTreeItem] = []
 
     /// True when there are uncommitted changes — drives the tab badge dot.
     var hasUncommittedChanges: Bool { !gitResult.files.isEmpty }
@@ -160,12 +165,11 @@ final class ProjectViewModel {
         isLoading = false
         errorMessage = nil
 
-        // Auto-expand root directories only on very first scan (no persisted state)
+        // Auto-expand root directories only on very first scan (no persisted state).
+        // Single assignment avoids N didSet triggers (one persist debounce + one rebuild).
         if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
             hasRestoredExpandState = true
-            for node in annotated where node.isDirectory {
-                expandedNodeIDs.insert(node.id)
-            }
+            expandedNodeIDs = Set(annotated.lazy.filter(\.isDirectory).map(\.id))
         }
 
         commandRouter?.hasUncommittedChanges = !status.files.isEmpty
@@ -226,6 +230,11 @@ final class ProjectViewModel {
         if UserDefaults.standard.object(forKey: hideIgnoredKey) != nil {
             hideIgnoredFiles = UserDefaults.standard.bool(forKey: hideIgnoredKey)
         }
+    }
+
+    private func rebuildFlatVisibleItems() {
+        let items = tree.flattenVisible(expandedIDs: expandedNodeIDs)
+        flatVisibleItems = hideIgnoredFiles ? items.filter { !$0.node.isGitIgnored } : items
     }
 
     private func debouncedRefresh() {

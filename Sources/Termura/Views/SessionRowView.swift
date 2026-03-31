@@ -80,6 +80,10 @@ struct SessionRowView: View {
                 .fill(colorForLabel(session.colorLabel))
                 .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
                 .padding(.top, AppUI.Spacing.xxs)
+        } else if let type = agentType {
+            // .unknown: show generic terminal placeholder until detection fires.
+            AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
+                .padding(.top, AppUI.Spacing.xxs)
         }
     }
 
@@ -150,8 +154,8 @@ struct SessionRowView: View {
                 }
                 .monospacedDigit()
             }
-        } else if session.agentType != .unknown {
-            // Previous agent session -- show persisted type
+        } else {
+            // Show persisted type (or "Terminal" for .unknown) as placeholder.
             Text(session.agentType.displayName)
                 .font(AppUI.Font.captionMono)
                 .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))

@@ -18,6 +18,9 @@ final class TermuraTerminalView: LocalProcessTerminalView {
     /// Called when the user triggers a context action (Quote / Ask) from the right-click menu.
     /// Receives the pre-formatted composer prefill string. Always invoked on the main actor.
     var onContextAction: (@MainActor (String) -> Void)?
+    /// Called when the user chooses "Send to Notes" from the right-click menu.
+    /// Receives the raw selected text. Always invoked on the main actor.
+    var onSendToNotes: (@MainActor (String) -> Void)?
 
     // MARK: - Force-selection state
 
@@ -46,6 +49,11 @@ final class TermuraTerminalView: LocalProcessTerminalView {
     // monitor fires before the responder chain, giving us the same intercept
     // point without subclass overrides.
     private var mouseEventMonitor: Any?
+
+    // Prevent isMovableByWindowBackground from intercepting mouse drags inside
+    // the terminal — without this, clicking and dragging in non-fullscreen mode
+    // moves the window instead of selecting text.
+    override var mouseDownCanMoveWindow: Bool { false }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -132,7 +140,7 @@ final class TermuraTerminalView: LocalProcessTerminalView {
         switch item.action {
         case #selector(performClearScreen):
             return true
-        case #selector(performQuote), #selector(performAsk):
+        case #selector(performQuote), #selector(performAsk), #selector(performSendToNotes):
             return !menuCachedSelection.isEmpty
         default:
             return super.validateUserInterfaceItem(item)
@@ -193,6 +201,13 @@ final class TermuraTerminalView: LocalProcessTerminalView {
                 keyEquivalent: ""
             )
             askItem.target = self
+
+            let sendToNotesItem = menu.addItem(
+                withTitle: "Send to Notes",
+                action: #selector(performSendToNotes),
+                keyEquivalent: ""
+            )
+            sendToNotesItem.target = self
         }
 
         return menu
@@ -214,12 +229,17 @@ final class TermuraTerminalView: LocalProcessTerminalView {
         onContextAction?(text)
     }
 
+    @objc private func performSendToNotes() {
+        guard !menuCachedSelection.isEmpty else { return }
+        onSendToNotes?(menuCachedSelection)
+    }
+
     /// Prefixes each line of `text` with "> " and appends two newlines.
     /// Trims leading/trailing whitespace so the quote block is clean.
     private func formatAsQuote(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
-        let quoted = trimmed.components(separatedBy: "\n")
+        let quoted = trimmed.split(separator: "\n", omittingEmptySubsequences: false)
             .map { "> \($0)" }
             .joined(separator: "\n")
         return quoted + "\n\n"

@@ -27,30 +27,17 @@ extension SidebarView {
         .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
-    private var pinnedSessions: [SessionRecord] {
-        sessionStore.sessions.filter { $0.isPinned && !$0.isEnded }
-    }
-
-    private var treeNodes: [SessionTreeNode] {
-        let activeSessions = sessionStore.sessions.filter { !$0.isEnded && !$0.isPinned }
-        return SessionTreeNode.buildForest(from: activeSessions)
-    }
-
-    private var endedSessions: [SessionRecord] {
-        sessionStore.sessions.filter(\.isEnded)
-    }
-
     var sessionList: some View {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: AppUI.Spacing.sm) {
-                if !pinnedSessions.isEmpty {
+                if !sessionStore.pinnedSessions.isEmpty {
                     sectionLabel("Pinned")
-                    ForEach(pinnedSessions) { session in
+                    ForEach(sessionStore.pinnedSessions) { session in
                         sessionRow(session)
                     }
                     sectionLabel("Sessions")
                 }
-                ForEach(treeNodes) { node in
+                ForEach(sessionStore.sessionTreeNodes) { node in
                     SidebarTreeNodeView(
                         node: node,
                         sessionStore: sessionStore,
@@ -60,7 +47,7 @@ extension SidebarView {
                     )
                 }
                 // Ended sessions — no section header, visually dimmed via SessionRowView.
-                ForEach(endedSessions) { session in
+                ForEach(sessionStore.endedSessions) { session in
                     sessionRow(session)
                 }
             }
@@ -101,7 +88,7 @@ extension SidebarView {
         }()
         let duration: String? = {
             guard let started = agentState?.startedAt else { return nil }
-            let elapsed = Date().timeIntervalSince(started)
+            let elapsed = sessionScope.agentStates.now.timeIntervalSince(started)
             guard elapsed > 0 else { return nil }
             return MetadataFormatter.formatDuration(elapsed)
         }()
@@ -216,12 +203,9 @@ extension SidebarView {
 extension SidebarView {
     @ViewBuilder
     var agentsContent: some View {
-        let titles = Dictionary(
-            uniqueKeysWithValues: sessionStore.sessions.map { ($0.id, $0.title) }
-        )
         AgentDashboardView(
             agentStore: sessionScope.agentStates,
-            sessionTitles: titles
+            sessionTitles: sessionStore.sessionTitles
         ) { sid in
             sessionStore.activateSession(id: sid)
         }

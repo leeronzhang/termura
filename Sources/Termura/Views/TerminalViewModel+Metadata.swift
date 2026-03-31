@@ -12,7 +12,7 @@ extension TerminalViewModel {
         let cmdCount = outputProcessor.outputStore.chunks.count
         let dir = workingDirectory ?? currentMetadata.workingDirectory
         let agentDet = agentCoordinator.agentDetector
-        let agentState = await agentDet.buildState()
+        let agentState = await agentDet.buildState(tokenCount: tokens)
 
         let ctxLimit = agentState?.contextWindowLimit ?? 0
         let ctxFraction = agentState?.contextUsageFraction ?? 0

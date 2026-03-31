@@ -21,6 +21,13 @@ extension TerminalViewModel {
             // Reset agent state so badges stop animating after the agent process exits.
             // Without this, repeatForever animations keep running, consuming ~80% CPU when idle.
             await agentCoordinator.resetOnExecutionFinished()
+            // Keep local detection cache in sync with coordinator reset so the next agent
+            // run re-enters the detection path from the first packet (CLAUDE.md P2-15).
+            agentDetectedFromOutput = false
+            // Reset token counts so the next agent run (e.g. after /clear) starts from 0
+            // rather than accumulating across runs. The context window section is already
+            // hidden after resetOnExecutionFinished() clears agentDetector.detectedType.
+            await outputProcessor.tokenCountingService.reset(for: sessionID)
         case .executionStarted:
             isInteractivePrompt = false
             modeController.switchToPassthrough()
