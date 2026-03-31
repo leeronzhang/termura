@@ -13,7 +13,6 @@ struct LocalUIState {
 // MARK: - Sheet modifiers
 
 struct TerminalAreaSheets: ViewModifier {
-    @Binding var contextWindowAlert: ContextWindowAlert?
     @Binding var showExportSheet: Bool
     @Binding var showContextSheet: Bool
     let sessionID: SessionID
@@ -23,11 +22,6 @@ struct TerminalAreaSheets: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $contextWindowAlert) { alert in
-                ContextWindowAlertView(alert: alert) {
-                    contextWindowAlert = nil
-                }
-            }
             .sheet(isPresented: $showExportSheet) {
                 if let session = sessionStore.sessions
                     .first(where: { $0.id == sessionID }) {

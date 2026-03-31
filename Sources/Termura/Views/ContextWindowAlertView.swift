@@ -1,51 +1,68 @@
 import SwiftUI
 
-/// Sheet displayed when an agent's context window usage crosses a warning threshold.
+/// Non-blocking bottom-edge banner shown when an agent's context window usage crosses a warning threshold.
 struct ContextWindowAlertView: View {
     let alert: ContextWindowAlert
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: AppUI.Spacing.lgXl) {
+        HStack(spacing: AppUI.Spacing.lg) {
             icon
-            titleText
-            TokenProgressView(
-                estimatedTokens: alert.estimatedTokens,
-                contextLimit: alert.contextLimit
-            )
-            .frame(maxWidth: 240)
-            descriptionText
+            VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
+                Text(alert.level == .critical ? "Context Nearly Full" : "Context Getting Full")
+                    .font(AppUI.Font.bodyMedium)
+                    .foregroundStyle(.primary)
+                Text(descriptionMessage)
+                    .font(AppUI.Font.label)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer()
             dismissButton
         }
-        .padding(AppUI.Spacing.xxl)
-        .frame(width: AppConfig.UI.contextWindowAlertWidth)
+        .padding(.horizontal, AppUI.Spacing.xl)
+        .padding(.vertical, AppUI.Spacing.md)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) { accentLine }
+        .clipShape(RoundedRectangle(cornerRadius: AppUI.Spacing.xs))
+        .frame(maxWidth: AppConfig.Agent.bannerMaxWidth)
+        .padding(.horizontal, AppUI.Spacing.xxl)
+        .padding(.bottom, AppUI.Spacing.xxl)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - Subviews
 
     private var icon: some View {
         Image(systemName: alert.level == .critical ? "exclamationmark.triangle.fill" : "exclamationmark.circle.fill")
-            .font(AppUI.Font.alertIcon)
+            .font(AppUI.Font.title2)
             .foregroundColor(alert.level == .critical ? .red : .orange)
+            .accessibilityHidden(true)
     }
 
-    private var titleText: some View {
-        Text(alert.level == .critical ? "Context Nearly Full" : "Context Getting Full")
-            .font(AppUI.Font.title3Medium)
-    }
-
-    private var descriptionText: some View {
-        let msg = "\(alert.agentType.rawValue) has used \(percentageText) of its context window "
-            + "(\(formattedLimit) tokens). Consider starting a new session to avoid degraded performance."
-        return Text(msg)
-            .font(AppUI.Font.label)
-            .foregroundColor(.secondary)
-            .multilineTextAlignment(.center)
+    private var accentLine: some View {
+        Rectangle()
+            .fill(alert.level == .critical ? Color.red : Color.orange)
+            .frame(height: 2)
+            .accessibilityHidden(true)
     }
 
     private var dismissButton: some View {
-        Button("Dismiss", action: onDismiss)
-            .keyboardShortcut(.defaultAction)
+        Text("Dismiss")
+            .font(AppUI.Font.bodyMedium)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, AppUI.Spacing.md)
+            .padding(.vertical, AppUI.Spacing.sm)
+            .background(Color(nsColor: .controlColor), in: RoundedRectangle(cornerRadius: AppUI.Spacing.xs))
+            .overlay(AppKitClickableOverlay(action: onDismiss))
+            .accessibilityLabel("Dismiss")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default) { onDismiss() }
+    }
+
+    private var descriptionMessage: String {
+        "\(alert.agentType.rawValue) has used \(percentageText) of its context window (\(formattedLimit) tokens)"
     }
 
     // MARK: - Formatting
@@ -60,3 +77,33 @@ struct ContextWindowAlertView: View {
             : "\(alert.contextLimit)"
     }
 }
+
+#if DEBUG
+#Preview("Context Window Alert — Warning") {
+    ContextWindowAlertView(
+        alert: ContextWindowAlert(
+            sessionID: SessionID(),
+            agentType: .claudeCode,
+            level: .warning,
+            usageFraction: 0.82,
+            estimatedTokens: 164_000,
+            contextLimit: 200_000
+        ),
+        onDismiss: {}
+    )
+}
+
+#Preview("Context Window Alert — Critical") {
+    ContextWindowAlertView(
+        alert: ContextWindowAlert(
+            sessionID: SessionID(),
+            agentType: .gemini,
+            level: .critical,
+            usageFraction: 0.96,
+            estimatedTokens: 960_000,
+            contextLimit: 1_000_000
+        ),
+        onDismiss: {}
+    )
+}
+#endif

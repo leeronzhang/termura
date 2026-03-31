@@ -7,8 +7,9 @@ extension TerminalViewModel {
         let service = outputProcessor.tokenCountingService
         let sid = sessionID
         let breakdown = await service.tokenBreakdown(for: sid)
-        let tokens = breakdown.totalTokens
-        let elapsed = Date().timeIntervalSince(sessionStartTime)
+        // Context window usage = input + cache_read; output tokens are not in the context window.
+        let tokens = breakdown.inputTokens + breakdown.cachedTokens
+        let elapsed = clock.now().timeIntervalSince(sessionStartTime)
         let cmdCount = outputProcessor.outputStore.chunks.count
         let dir = workingDirectory ?? currentMetadata.workingDirectory
         let agentDet = agentCoordinator.agentDetector
@@ -16,9 +17,7 @@ extension TerminalViewModel {
 
         let ctxLimit = agentState?.contextWindowLimit ?? 0
         let ctxFraction = agentState?.contextUsageFraction ?? 0
-        let agentElapsed = agentState.map {
-            Date().timeIntervalSince($0.startedAt)
-        } ?? 0
+        let agentElapsed = agentState.map { clock.now().timeIntervalSince($0.startedAt) } ?? 0
         let cost = agentState?.estimatedCostUSD ?? 0
 
         currentMetadata = SessionMetadata(

@@ -83,10 +83,17 @@ struct TerminalAreaView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: state.viewModel.pendingRiskAlert != nil)
+            .overlay(alignment: .bottom) {
+                if let alert = state.viewModel.contextWindowAlert {
+                    ContextWindowAlertView(alert: alert) {
+                        state.viewModel.contextWindowAlert = nil
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: state.viewModel.contextWindowAlert != nil)
             .onAppear { onViewAppear() }
             .onDisappear { removeKeyRouter() }
             .modifier(TerminalAreaSheets(
-                contextWindowAlert: $state.viewModel.contextWindowAlert,
                 showExportSheet: $localUI.showExportSheet,
                 showContextSheet: $localUI.showContextSheet,
                 sessionID: sessionID,
