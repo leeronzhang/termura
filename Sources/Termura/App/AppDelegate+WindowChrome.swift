@@ -80,6 +80,20 @@ extension AppDelegate {
             }
         }
 
+        // Reposition traffic lights after every resize (live resize included).
+        // didResizeNotification fires synchronously within the resize event, after
+        // AppKit has completed its titlebar layout pass — so our repositioning wins.
+        let didResizeToken = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification,
+            object: window,
+            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
+        ) { [weak self, weak window] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window, !window.styleMask.contains(.fullScreen) else { return }
+                self.adjustTrafficLights(in: window)
+            }
+        }
+
         // After exit animation finishes, reposition traffic lights and fade in.
         let didExitToken = NotificationCenter.default.addObserver(
             forName: NSWindow.didExitFullScreenNotification,
@@ -106,7 +120,7 @@ extension AppDelegate {
             }
         }
 
-        fullScreenObserverTokens[key] = [enterToken, willExitToken, didExitToken]
+        fullScreenObserverTokens[key] = [didResizeToken, enterToken, willExitToken, didExitToken]
         scheduleFullScreenObserverCleanup(window: window, key: key)
     }
 
@@ -195,6 +209,9 @@ extension AppDelegate {
         frame.origin.x = AppConfig.UI.trafficLightX
         frame.origin.y = parent.frame.height - frame.height - AppConfig.UI.trafficLightTopInset
         container.frame = frame
+        // Capture the real container height so SwiftUI can center the sidebar toggle
+        // at trafficLightCenterY without relying on a guessed constant.
+        AppConfig.UI.trafficLightContainerHeight = frame.height
     }
 }
 
@@ -226,6 +243,7 @@ final class TrafficLightAdjuster: NSView {
         frame.origin.x = AppConfig.UI.trafficLightX
         frame.origin.y = parent.frame.height - frame.height - AppConfig.UI.trafficLightTopInset
         container.frame = frame
+        AppConfig.UI.trafficLightContainerHeight = frame.height
     }
 }
 

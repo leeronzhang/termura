@@ -52,7 +52,9 @@ struct SidebarTabBar: View {
     var diagnosticErrorCount: Int = 0
 
     /// Extra leading space to clear the traffic-light buttons in non-fullscreen.
-    private var trafficLightLeading: CGFloat { isFullScreen ? 0 : 80 }
+    /// Derived from the measured container position and width so it stays correct
+    /// across macOS versions without hardcoding.
+    private var trafficLightLeading: CGFloat { isFullScreen ? 0 : AppConfig.UI.trafficLightSafeLeading }
 
     var body: some View {
         HStack(spacing: 0) {

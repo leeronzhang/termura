@@ -8,6 +8,16 @@ extension AppConfig.UI {
     static let trafficLightX: CGFloat = 12
     /// Traffic-light button vertical offset from window top.
     static let trafficLightTopInset: CGFloat = 8
+    /// Height of the traffic-light button container, measured from the live window in
+    /// `adjustTrafficLights`. Written once at startup; read when the sidebar toggle renders.
+    /// Default 16pt is a fallback for the brief window before measurement fires.
+    @MainActor static var trafficLightContainerHeight: CGFloat = 16
+    /// Derived vertical center of the traffic-light group from the top of the window.
+    /// Recomputed each access so it reflects the latest measured container height.
+    @MainActor static var trafficLightCenterY: CGFloat { trafficLightTopInset + trafficLightContainerHeight / 2 }
+    /// Minimum leading padding to clear the traffic-light group.
+    /// Based on trafficLightX(12) + 3 buttons(~52pt) + 32pt gap = 96pt.
+    static let trafficLightSafeLeading: CGFloat = 96
     /// Fullscreen project-name label horizontal offset from zoom button.
     static let fullScreenLabelSpacing: CGFloat = 12
     /// Fullscreen project label font size.

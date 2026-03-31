@@ -62,6 +62,8 @@ enum AppConfig {
         static let visorAnimationSeconds: Double = 0.2
         /// Delay before dismissing onboarding sheet after install.
         static let onboardingDismissDelay: Duration = .seconds(1)
+        /// Auto-dismiss duration for transient toast banners (e.g. "Saved to Notes").
+        static let toastAutoDismiss: Duration = .seconds(2)
         /// Minimum interval between SessionMetadata UI refreshes during streaming output.
         /// Prevents per-packet SwiftUI redraws during high-throughput terminal output.
         static let metadataRefreshThrottleSeconds: Double = 0.5
@@ -69,6 +71,9 @@ enum AppConfig {
         /// Prevents a PTY fork storm when the user rapidly clicks through the session list:
         /// only the session the user actually settles on creates a shell process.
         static let engineCreationDebounce: Duration = .milliseconds(120)
+        /// Tick interval for AgentStateStore.now, which drives elapsed-duration display in sidebar
+        /// and agent dashboard. 1s granularity matches the coarsest unit MetadataFormatter emits.
+        static let agentDurationTickSeconds: Double = 1.0
     }
 
     enum SLO {
@@ -141,6 +146,8 @@ enum AppConfig {
         static let sidebarMinWidth: Double = 220
         static let sidebarMaxWidth: Double = 480
         static let sidebarDefaultWidth: Double = 360
+        /// Width below which dragging the divider collapses the sidebar (same effect as Cmd+B).
+        static let sidebarCollapseThreshold: Double = 220
         static let metadataBarHeight: Double = 28
         static let metadataPanelWidth: Double = 280
         static let metadataPanelMinWidth: Double = 120

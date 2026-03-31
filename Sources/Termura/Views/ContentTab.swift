@@ -121,22 +121,55 @@ struct ContentTabBar: View {
     let tabs: [ContentTab]
     @Binding var selectedTab: ContentTab?
     var isFullScreen: Bool = false
+    /// When true, renders a sidebar reveal button at the leading edge (sidebar is hidden).
+    var showSidebarButton: Bool = false
+    var onShowSidebar: (() -> Void)?
     let onClose: (ContentTab) -> Void
 
     /// Extra top space so the tab content aligns with the sidebar icons,
     /// sitting just below the traffic-light buttons in non-fullscreen.
     private var titleBarTop: CGFloat { isFullScreen ? 0 : AppUI.Spacing.smMd }
+    private var tabsLeadingPadding: CGFloat {
+        isFullScreen ? AppUI.Spacing.xxxxl : AppConfig.UI.trafficLightSafeLeading + AppUI.Spacing.xxxxl
+    }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs) { tab in
-                tabButton(tab)
+        ZStack(alignment: .topLeading) {
+            HStack(spacing: 0) {
+                ForEach(tabs) { tab in
+                    tabButton(tab)
+                }
+                Spacer()
             }
-            Spacer()
+            .padding(.top, titleBarTop)
+            // Reserve space for the sidebar reveal button (safeLeading + button width)
+            // so tab buttons do not slide under the toggle overlay.
+            .padding(.leading, showSidebarButton ? tabsLeadingPadding : 0)
+
+            if showSidebarButton {
+                sidebarRevealButton
+            }
         }
-        .padding(.top, titleBarTop)
         .frame(height: AppConfig.UI.contentTabBarHeight + titleBarTop)
         .background(Color.black.opacity(AppUI.Opacity.tabBar))
+    }
+
+    private var sidebarRevealButton: some View {
+        Button {
+            onShowSidebar?()
+        } label: {
+            Image(systemName: "inset.filled.lefthalf.rectangle")
+                .font(AppUI.Font.tabBarIcon)
+                .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .frame(width: AppUI.Spacing.xxxxl, height: AppConfig.UI.trafficLightContainerHeight)
+        // Non-fullscreen: align with traffic-light group (safeLeading + topInset).
+        // Fullscreen: no traffic lights, sit at leading edge with standard top padding.
+        .padding(.leading, isFullScreen ? 0 : AppConfig.UI.trafficLightSafeLeading)
+        .padding(.top, isFullScreen ? AppUI.Spacing.smMd : AppConfig.UI.trafficLightTopInset)
+        .help("Show Sidebar (Cmd+B)")
     }
 
     @ViewBuilder
@@ -170,6 +203,7 @@ struct ContentTabBar: View {
         }
         .foregroundColor(isSelected ? .primary : .secondary)
         .padding(.horizontal, 18)
+        .offset(y: isFullScreen ? 0 : -4)
         .frame(maxWidth: 200, maxHeight: .infinity)
         .background(isSelected ? Color(nsColor: .windowBackgroundColor) : Color.clear)
         .contentShape(Rectangle())

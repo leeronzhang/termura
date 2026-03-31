@@ -158,12 +158,21 @@ struct MainView: View {
                 onOpenFile: { path, mode in openProjectFile(relativePath: path, mode: mode) }
             )
             .frame(width: sidebarWidth)
+            .transition(.move(edge: .leading).combined(with: .opacity))
 
             ResizableDivider(
                 width: $sidebarWidth,
                 minWidth: AppConfig.UI.sidebarMinWidth,
-                maxWidth: AppConfig.UI.sidebarMaxWidth
+                maxWidth: AppConfig.UI.sidebarMaxWidth,
+                collapseThreshold: AppConfig.UI.sidebarCollapseThreshold,
+                onCollapse: {
+                    withAnimation(.easeInOut(duration: AppUI.Animation.panel)) {
+                        sidebarWidth = AppConfig.UI.sidebarDefaultWidth
+                        commandRouter.showSidebar = false
+                    }
+                }
             )
+            .transition(.move(edge: .leading))
         }
     }
 
