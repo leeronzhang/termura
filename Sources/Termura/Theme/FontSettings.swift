@@ -41,10 +41,13 @@ final class FontSettings {
         static let editorSize = "font.editorSize"
     }
 
+    private let userDefaults: any UserDefaultsStoring
+
     // MARK: - Init
 
-    init() {
-        let ud = UserDefaults.standard
+    init(userDefaults: any UserDefaultsStoring = UserDefaults.standard) {
+        self.userDefaults = userDefaults
+        let ud = userDefaults
 
         // Family
         let savedFamily = ud.string(forKey: Keys.family)
@@ -129,9 +132,8 @@ final class FontSettings {
     // MARK: - Persistence
 
     private func persist() {
-        let ud = UserDefaults.standard
-        ud.set(terminalFontFamily, forKey: Keys.family)
-        ud.set(Double(terminalFontSize), forKey: Keys.terminalSize)
-        ud.set(Double(editorFontSize), forKey: Keys.editorSize)
+        userDefaults.set(terminalFontFamily, forKey: Keys.family)
+        userDefaults.set(Double(terminalFontSize), forKey: Keys.terminalSize)
+        userDefaults.set(Double(editorFontSize), forKey: Keys.editorSize)
     }
 }

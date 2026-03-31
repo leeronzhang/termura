@@ -34,6 +34,9 @@ struct GeneralSettingsView: View {
     @AppStorage(AppConfig.AgentResume.autoFillEnabledKey)
     private var autoFillEnabled: Bool = AppConfig.AgentResume.autoFillDefault
 
+    @AppStorage(AppConfig.CostEstimation.subscriptionModeKey)
+    private var subscriptionMode: Bool = false
+
     var body: some View {
         Form {
             Section {
@@ -46,8 +49,22 @@ struct GeneralSettingsView: View {
                     + " session\u{2019}s agent command (e.g. \u{201C}claude\u{201D})."
                     + " Press Enter to launch or edit before confirming."
                 )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+
+            Section {
+                Toggle("Using subscription billing", isOn: $subscriptionMode)
+            } header: {
+                Text("Cost Display")
+            } footer: {
+                Text(
+                    "Enable when using Claude Max or another subscription plan."
+                    + " Hides the cost row in the Inspector \u{2014} token counts"
+                    + " (Input, Output, Cache) are still shown for context window monitoring."
+                )
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -98,6 +115,8 @@ struct ShellIntegrationSettingsView: View {
                     .font(.callout)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(shell.rawValue) shell integration: \(installed ? "Installed" : "Not installed")")
     }
 
     private var installSection: some View {
@@ -142,8 +161,10 @@ struct ShellIntegrationSettingsView: View {
         case .idle:
             Button("Install Hook") { performInstall() }
                 .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Install shell integration hook for \(selectedShell.rawValue)")
         case .installing:
             ProgressView().controlSize(.small)
+                .accessibilityLabel("Installing shell hook")
         case .done:
             Label("Installed", systemImage: "checkmark.circle.fill")
                 .foregroundColor(.green)
@@ -156,6 +177,7 @@ struct ShellIntegrationSettingsView: View {
             Image(systemName: icon)
                 .foregroundColor(.accentColor)
                 .frame(width: AppUI.Size.iconFrameLarge)
+                .accessibilityHidden(true)
             Text(text).font(.callout)
         }
     }
@@ -187,93 +209,13 @@ struct ShellIntegrationSettingsView: View {
     private enum InstallState { case idle, installing, done }
 }
 
-// MARK: - Font Settings Tab
-
-struct FontSettingsView: View {
-    @Bindable var fontSettings: FontSettings
-
-    @State private var monoFamilies: [String] = []
-
-    var body: some View {
-        Form {
-            terminalSection
-            editorSection
-            Section("Preview") {
-                fontPreview
-            }
-        }
-        .formStyle(.grouped)
-        .padding(AppUI.Spacing.xxl)
-        .onAppear {
-            monoFamilies = FontSettings.availableMonospacedFamilies
-        }
-    }
-
-    private var terminalSection: some View {
-        Section("Terminal") {
-            Picker("Font Family", selection: $fontSettings.terminalFontFamily) {
-                Text(FontSettings.defaultFamily).tag(FontSettings.defaultFamily)
-                ForEach(monoFamilies.filter { $0 != FontSettings.defaultFamily }, id: \.self) { family in
-                    Text(family).tag(family)
-                }
-            }
-
-            HStack {
-                Text("Font Size")
-                Spacer()
-                Button("-") { fontSettings.zoomOut() }
-                    .disabled(fontSettings.terminalFontSize <= FontSettings.minSize)
-                Text("\(Int(fontSettings.terminalFontSize)) pt")
-                    .frame(width: AppConfig.UI.settingsFontSizeFieldWidth, alignment: .center)
-                    .monospacedDigit()
-                Button("+") { fontSettings.zoomIn() }
-                    .disabled(fontSettings.terminalFontSize >= FontSettings.maxSize)
-                Button("Reset") { fontSettings.resetZoom() }
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-
-    private var editorSection: some View {
-        Section("Editor / Notes") {
-            HStack {
-                Text("Font Size")
-                Spacer()
-                Button("-") {
-                    fontSettings.editorFontSize = max(
-                        fontSettings.editorFontSize - FontSettings.zoomStep,
-                        FontSettings.minSize
-                    )
-                }
-                .disabled(fontSettings.editorFontSize <= FontSettings.minSize)
-                Text("\(Int(fontSettings.editorFontSize)) pt")
-                    .frame(width: AppConfig.UI.settingsFontSizeFieldWidth, alignment: .center)
-                    .monospacedDigit()
-                Button("+") {
-                    fontSettings.editorFontSize = min(
-                        fontSettings.editorFontSize + FontSettings.zoomStep,
-                        FontSettings.maxSize
-                    )
-                }
-                .disabled(fontSettings.editorFontSize >= FontSettings.maxSize)
-            }
-        }
-    }
-
-    private var fontPreview: some View {
-        VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
-            Text("Terminal: \(fontSettings.terminalFontFamily) \(Int(fontSettings.terminalFontSize))pt")
-                .font(fontSettings.terminalSwiftUIFont())
-                .foregroundColor(.primary)
-            Text("Editor: \(fontSettings.terminalFontFamily) \(Int(fontSettings.editorFontSize))pt")
-                .font(fontSettings.editorSwiftUIFont())
-                .foregroundColor(.primary)
-            Text("$ echo \"The quick brown fox jumps over the lazy dog\"")
-                .font(fontSettings.terminalSwiftUIFont())
-                .foregroundColor(.green)
-        }
-        .padding(AppUI.Spacing.lg)
-        .background(Color.black.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
-    }
+#if DEBUG
+#Preview("Settings") {
+    SettingsView(
+        themeManager: ThemeManager(),
+        fontSettings: FontSettings(),
+        themeImportService: MockThemeImportService(),
+        shellHookInstaller: MockShellHookInstaller()
+    )
 }
+#endif

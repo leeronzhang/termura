@@ -118,12 +118,32 @@ enum AppConfig {
     }
 
     /// Per-million-token pricing for heuristic cost estimation.
+    /// Prices are approximate as of early 2026; update when models change.
+    /// Note: Aider derives cost directly from its output — these are fallbacks only.
     enum CostEstimation {
+        // Anthropic Claude (claude-sonnet-4 / claude-haiku-4)
         static let claudeInputPerMillion: Double = 3.0
         static let claudeOutputPerMillion: Double = 15.0
         static let claudeCacheReadPerMillion: Double = 0.30
+
+        // OpenAI Codex / GPT-4o
+        static let codexInputPerMillion: Double = 2.50
+        static let codexOutputPerMillion: Double = 10.0
+
+        // Google Gemini 2.0 Flash (most common Gemini CLI model, paid tier)
+        static let geminiInputPerMillion: Double = 0.075
+        static let geminiOutputPerMillion: Double = 0.30
+
+        // Aider uses the underlying model — default to GPT-4o rates as a heuristic
+        static let aiderDefaultInputPerMillion: Double = 2.50
+        static let aiderDefaultOutputPerMillion: Double = 10.0
+
+        // Generic fallback
         static let defaultInputPerMillion: Double = 3.0
         static let defaultOutputPerMillion: Double = 15.0
+
+        /// UserDefaults key: when true, cost row is hidden in Inspector (subscription billing).
+        static let subscriptionModeKey = "costDisplay.subscriptionMode"
     }
 
     enum ContextWindow {

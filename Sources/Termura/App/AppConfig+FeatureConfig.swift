@@ -64,6 +64,8 @@ extension AppConfig {
         static let riskDetectionSuffixLength = 2000
         /// Maximum character length of the command snippet shown in the risk alert banner.
         static let riskSnippetMaxLength = 120
+        /// Maximum width of the risk alert banner (pts). Wider screens center the banner.
+        static let bannerMaxWidth: CGFloat = 720
     }
 
     enum Harness {
