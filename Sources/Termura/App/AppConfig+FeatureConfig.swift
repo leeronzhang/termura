@@ -57,6 +57,13 @@ extension AppConfig {
         static let outputAnalysisSuffixLength = 2000
         /// Minimum seconds between status transitions (suppresses noisy false positives).
         static let statusChangeCooldown: TimeInterval = 0.5
+        /// Suffix character count scanned by InterventionService.detectRisk.
+        /// Risk commands (rm -rf, git push --force, etc.) appear near the end of
+        /// the agent's current output burst; scanning only the suffix avoids a full
+        /// O(n) lowercased() allocation on every PTY packet.
+        static let riskDetectionSuffixLength = 2000
+        /// Maximum character length of the command snippet shown in the risk alert banner.
+        static let riskSnippetMaxLength = 120
     }
 
     enum Harness {
