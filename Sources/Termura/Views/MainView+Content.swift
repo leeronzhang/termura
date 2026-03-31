@@ -117,9 +117,13 @@ extension MainView {
             return best.map { .tab($0) } ?? .empty
         }
 
-        // Notes sidebar with no note tab selected and the Composer overlay not active:
-        // the editor pane has nothing to show.
+        // Notes sidebar with no note tab selected and the Composer overlay not active.
+        // Tab navigation takes priority for window display: if a terminal/split tab is
+        // explicitly selected in the tab bar, honour it rather than showing notesEmpty.
         if sidebar == .notes, !commandRouter.isComposerNotesActive, !selectedTab.isNote {
+            if selectedTab.isTerminal || selectedTab.isSplit {
+                return .tab(selectedTab)
+            }
             return .notesEmpty
         }
 

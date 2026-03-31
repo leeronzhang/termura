@@ -37,6 +37,8 @@ extension MainView {
             handleSelectSession(at: index)
         case .cycleContentTab(let forward):
             handleCycleContentTab(forward: forward)
+        case .focusDualPane(let slot):
+            handleFocusDualPane(slot)
         }
     }
 

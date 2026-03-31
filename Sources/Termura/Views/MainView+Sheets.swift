@@ -104,6 +104,7 @@ extension MainView {
             .buttonStyle(.plain)
             .keyboardShortcut("t", modifiers: .command)
             .padding(.top, AppUI.Spacing.xxl)
+            .accessibilityIdentifier("emptyStateNewSessionButton")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(themeManager.current.background)

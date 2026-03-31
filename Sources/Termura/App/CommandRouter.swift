@@ -27,6 +27,10 @@ final class CommandRouter {
     var selectedSidebarTab: SidebarTab = .sessions
     /// The sidebar tab to restore when composer notes mode is deactivated.
     private var tabBeforeComposer: SidebarTab?
+    /// True when the sidebar was auto-revealed for composer notes mode and should
+    /// be re-hidden when notes mode exits. Cleared if the user manually toggles
+    /// the sidebar while notes mode is active.
+    private var sidebarWasHiddenForNotes = false
 
     // MARK: - Commands (consumed by MainView via a single reduce step)
 
@@ -53,6 +57,8 @@ final class CommandRouter {
         case selectSession(index: Int)
         /// Cycle the selected ContentTab forward or backward by one position.
         case cycleContentTab(forward: Bool)
+        /// Focus the specified pane in dual-pane mode. No-op in single-pane mode.
+        case focusDualPane(PaneSlot)
     }
 
     // MARK: - Dual pane
@@ -125,6 +131,8 @@ final class CommandRouter {
     func requestCloseTab() { pendingCommand = .closeTab }
 
     func toggleSidebar() {
+        // User-initiated toggle overrides any pending auto-restore.
+        sidebarWasHiddenForNotes = false
         showSidebar.toggle()
     }
 
@@ -138,6 +146,10 @@ final class CommandRouter {
 
     func toggleDualPane() {
         pendingCommand = .toggleDualPane
+    }
+
+    func focusDualPane(_ slot: PaneSlot) {
+        pendingCommand = .focusDualPane(slot)
     }
 
     func toggleComposer() {
@@ -163,8 +175,12 @@ final class CommandRouter {
             tabBeforeComposer = nil
         }
         isComposerNotesActive = false
+        // Restore sidebar visibility if it was auto-revealed for notes mode.
+        let shouldHideSidebar = sidebarWasHiddenForNotes
+        sidebarWasHiddenForNotes = false
         withAnimation(.easeOut(duration: AppConfig.UI.composerDismissDuration)) {
             showComposer = false
+            if shouldHideSidebar { showSidebar = false }
         }
     }
 
@@ -175,8 +191,12 @@ final class CommandRouter {
         if !isComposerNotesActive {
             isComposerNotesActive = true
             tabBeforeComposer = selectedSidebarTab
+            // Auto-reveal sidebar if hidden, mirroring toggleComposerWithNotes() behaviour.
+            let needsReveal = !showSidebar
+            if needsReveal { sidebarWasHiddenForNotes = true }
             withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
                 selectedSidebarTab = .notes
+                if needsReveal { showSidebar = true }
             }
         } else if let previous = tabBeforeComposer {
             // Close: both state changes inside one animation block so SwiftUI
@@ -184,9 +204,12 @@ final class CommandRouter {
             // when selectedSidebarTab is still .notes but isComposerNotesActive
             // has already flipped to false.
             tabBeforeComposer = nil
+            let shouldHideSidebar = sidebarWasHiddenForNotes
+            sidebarWasHiddenForNotes = false
             withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
                 isComposerNotesActive = false
                 selectedSidebarTab = previous
+                if shouldHideSidebar { showSidebar = false }
             }
         }
     }
@@ -194,6 +217,7 @@ final class CommandRouter {
     /// Opens the Composer and activates the Notes sidebar simultaneously (Shift+Cmd+K).
     /// If the Composer is already open with notes active, dismisses it.
     /// If the Composer is open without notes, activates notes mode without closing.
+    /// If the sidebar is hidden, auto-reveals it and restores the hidden state on dismiss.
     func toggleComposerWithNotes() {
         if showComposer, isComposerNotesActive {
             dismissComposer()
@@ -203,7 +227,10 @@ final class CommandRouter {
         if !isComposerNotesActive {
             tabBeforeComposer = selectedSidebarTab
         }
-        // Open composer and switch sidebar to notes in a single render pass.
+        // Auto-reveal sidebar if hidden so the notes list is immediately visible.
+        let needsReveal = !showSidebar
+        if needsReveal { sidebarWasHiddenForNotes = true }
+        // Open composer, reveal sidebar, and switch to notes in a single render pass.
         isComposerNotesActive = true
         withAnimation(.spring(
             response: AppConfig.UI.composerSpringResponse,
@@ -211,6 +238,7 @@ final class CommandRouter {
         )) {
             showComposer = true
             selectedSidebarTab = .notes
+            if needsReveal { showSidebar = true }
         }
     }
 }

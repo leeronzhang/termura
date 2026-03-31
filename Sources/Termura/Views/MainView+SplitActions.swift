@@ -68,6 +68,22 @@ extension MainView {
     }
 }
 
+// MARK: - Keyboard focus switch
+
+extension MainView {
+    /// Focus a specific pane in dual-pane mode via keyboard shortcut (Ctrl+left/right arrow).
+    /// Mirrors the composer invariant from the mouse monitor: focus must not shift
+    /// while the composer is open in the currently active pane.
+    func handleFocusDualPane(_ slot: PaneSlot) {
+        guard commandRouter.isDualPaneActive, !commandRouter.showComposer else { return }
+        guard case let .split(leftID, rightID, _, _) = resolvedSelectedTab else { return }
+        let targetID = slot == .left ? leftID : rightID
+        focusedSlot = slot
+        commandRouter.focusedDualPaneID = targetID
+        sessionStore.activateSession(id: targetID)
+    }
+}
+
 // MARK: - Secondary session selection
 
 extension MainView {
