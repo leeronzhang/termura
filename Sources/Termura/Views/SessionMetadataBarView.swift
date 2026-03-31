@@ -3,6 +3,7 @@ import SwiftUI
 /// Right-side panel combining session metadata (top) and optional command timeline (bottom).
 struct SessionMetadataBarView: View {
     let metadata: SessionMetadata
+    var sessionTitle: String = "Session"
     var timeline: SessionTimeline?
     var onSelectChunkID: ((UUID) -> Void)?
 
@@ -12,7 +13,6 @@ struct SessionMetadataBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             panelHeader
-            Divider()
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: AppUI.Spacing.xxl) {
                     agentCard
@@ -33,11 +33,13 @@ struct SessionMetadataBarView: View {
     // MARK: - Header
 
     private var panelHeader: some View {
-        Text("Session")
+        Text("Inspector")
             .panelHeaderStyle()
+            .frame(height: AppConfig.UI.projectPathBarHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, AppUI.Spacing.xxxl)
-            .padding(.vertical, AppUI.Spacing.mdLg)
+            .padding(.top, AppUI.Spacing.md)
+            .padding(.bottom, AppUI.Spacing.smMd)
     }
 
     // MARK: - Agent Card
@@ -181,17 +183,31 @@ struct SessionMetadataBarView: View {
                 }
                 let visible = showAllTurns ? Array(tl.turns) : Array(tl.turns.suffix(3))
                 ForEach(visible) { turn in
-                    Button { onSelectChunkID?(turn.chunkID) } label: {
-                        HStack(spacing: AppUI.Spacing.smMd) {
-                            Circle().fill(exitCodeColor(turn.exitCode))
-                                .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
-                            Text(turnLabel(turn)).font(AppUI.Font.captionMono)
-                                .lineLimit(1).foregroundColor(.primary)
-                            Spacer()
-                            Text(formattedTime(turn.startedAt)).font(AppUI.Font.micro)
-                                .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
-                        }.padding(.vertical, AppUI.Spacing.xs)
-                    }.buttonStyle(.plain)
+                    if isClearCommand(turn.command) {
+                        clearDividerRow(at: turn.startedAt)
+                    } else {
+                        Button { onSelectChunkID?(turn.chunkID) } label: {
+                            HStack(spacing: AppUI.Spacing.smMd) {
+                                Circle().fill(exitCodeColor(turn.exitCode))
+                                    .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
+                                Image(systemName: contentTypeIcon(turn.contentType))
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.secondary)
+                                Text(turnLabel(turn)).font(AppUI.Font.captionMono)
+                                    .lineLimit(1).foregroundColor(.primary)
+                                Spacer()
+                                if let dur = turn.duration {
+                                    Text(formattedDuration(dur)).font(AppUI.Font.micro)
+                                        .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
+                                        .monospacedDigit()
+                                }
+                                Text(formattedTime(turn.startedAt)).font(AppUI.Font.micro)
+                                    .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
+                            }.padding(.vertical, AppUI.Spacing.xs)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(turn.startLine == nil)
+                    }
                 }
                 if tl.turns.count > 3, !showAllTurns {
                     Button {

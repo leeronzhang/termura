@@ -8,6 +8,13 @@ struct TimelineTurn: Identifiable, Sendable {
     let command: String
     let startedAt: Date
     let exitCode: Int?
+    /// Wall-clock duration of the command; nil if the chunk finished time was not recorded.
+    let duration: TimeInterval?
+    /// Semantic classification of the output block (commandOutput, toolCall, diff, etc.).
+    let contentType: OutputContentType
+    /// Scrollback depth (totalLines - visibleRows) captured at append time.
+    /// Used by Activity click-to-scroll to restore the terminal view position.
+    let startLine: Int?
     var branchPoints: [BranchPointMarker] = []
 }
 
@@ -26,13 +33,17 @@ struct BranchPointMarker: Identifiable, Sendable {
 final class SessionTimeline {
     private(set) var turns: Deque<TimelineTurn> = []
 
-    func append(_ chunk: OutputChunk) {
+    func append(_ chunk: OutputChunk, startLine: Int? = nil) {
+        let duration = chunk.finishedAt.map { $0.timeIntervalSince(chunk.startedAt) }
         let turn = TimelineTurn(
             id: UUID(),
             chunkID: chunk.id,
             command: chunk.commandText,
             startedAt: chunk.startedAt,
-            exitCode: chunk.exitCode
+            exitCode: chunk.exitCode,
+            duration: duration,
+            contentType: chunk.contentType,
+            startLine: startLine
         )
         turns.append(turn)
         if turns.count > AppConfig.Timeline.maxTurns {

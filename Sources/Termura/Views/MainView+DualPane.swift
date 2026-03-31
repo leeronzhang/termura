@@ -89,8 +89,13 @@ extension MainView {
             )
             SessionMetadataBarView(
                 metadata: state.viewModel.currentMetadata,
+                sessionTitle: sessionScope.store.sessionTitles[focusedID] ?? "Session",
                 timeline: state.timeline,
-                onSelectChunkID: { _ in }
+                onSelectChunkID: { chunkID in
+                    guard let turn = state.timeline.turns.first(where: { $0.chunkID == chunkID }),
+                          let line = turn.startLine else { return }
+                    Task { await engine.scrollToLine(line) }
+                }
             )
             .frame(width: AppConfig.UI.metadataPanelWidth)
         }
