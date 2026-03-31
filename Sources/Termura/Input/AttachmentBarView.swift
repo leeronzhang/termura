@@ -191,7 +191,7 @@ private enum AttachmentFilePicker {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.png, .jpeg, .gif, .webP, .heic, .heif]
-        panel.title = "Choose Images"
+        panel.title = String(localized: "Choose Images")
         present(panel, remaining: remaining, completion: completion)
     }
 
@@ -201,7 +201,7 @@ private enum AttachmentFilePicker {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.text, .sourceCode, .plainText, .utf8PlainText, .json, .xml]
-        panel.title = "Choose Files"
+        panel.title = String(localized: "Choose Files")
         present(panel, remaining: remaining, completion: completion)
     }
 

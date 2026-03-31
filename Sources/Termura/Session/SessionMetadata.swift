@@ -41,9 +41,12 @@ struct SessionMetadata: Sendable {
         inputTokenCount > 0 || outputTokenCount > 0 || cachedTokenCount > 0
     }
 
-    /// True when real token data was parsed from agent output (not just heuristic).
+    /// True when real token data was parsed from agent output (not just heuristic PTY accumulation).
+    /// Uses inputTokenCount as the signal — it is zero until applyParsedStats fires with a
+    /// real completion summary. Works for both API-key and subscription billing (cost may be $0
+    /// on subscription, but input tokens are always non-zero after the first turn).
     var hasParsedTokenData: Bool {
-        estimatedCostUSD > 0 || cachedTokenCount > 0
+        inputTokenCount > 0 || cachedTokenCount > 0
     }
 
     // MARK: - Factory

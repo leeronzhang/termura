@@ -31,7 +31,7 @@ extension SessionStore {
     func endSession(id: SessionID) async {
         guard let preIdx = sessionIndex[id], !sessions[preIdx].isEnded else { return }
         engineStore.terminateEngine(for: id)
-        let endDate = Date()
+        let endDate = clock.now()
         // DB write first — mirrors deleteSession and reopenSession. Prevents the in-memory
         // view showing the session as ended when the DB still considers it active (e.g. on
         // next launch). Memory is mutated only after the DB confirms success.

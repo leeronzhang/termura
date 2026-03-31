@@ -15,7 +15,7 @@ extension SessionStore {
     func updateWorkingDirectory(id: SessionID, path: String) {
         guard let updated = mutateSession(id: id, {
             $0.workingDirectory = path
-            $0.lastActiveAt = Date()
+            $0.lastActiveAt = clock.now()
         }) else { return }
         scheduleDebounced(key: "workdir-\(id)") { try await $0.save(updated) }
     }

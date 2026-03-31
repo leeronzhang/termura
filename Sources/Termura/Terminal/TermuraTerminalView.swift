@@ -186,31 +186,35 @@ final class TermuraTerminalView: LocalProcessTerminalView {
         clearItem.target = self
 
         if hasSelection {
-            menu.addItem(.separator())
-
-            let quoteItem = menu.addItem(
-                withTitle: "Quote in Composer",
-                action: #selector(performQuote),
-                keyEquivalent: ""
-            )
-            quoteItem.target = self
-
-            let askItem = menu.addItem(
-                withTitle: "Ask About This",
-                action: #selector(performAsk),
-                keyEquivalent: ""
-            )
-            askItem.target = self
-
-            let sendToNotesItem = menu.addItem(
-                withTitle: "Send to Notes",
-                action: #selector(performSendToNotes),
-                keyEquivalent: ""
-            )
-            sendToNotesItem.target = self
+            addSelectionMenuItems(to: menu)
         }
 
         return menu
+    }
+
+    private func addSelectionMenuItems(to menu: NSMenu) {
+        menu.addItem(.separator())
+
+        let quoteItem = menu.addItem(
+            withTitle: "Quote in Composer",
+            action: #selector(performQuote),
+            keyEquivalent: ""
+        )
+        quoteItem.target = self
+
+        let askItem = menu.addItem(
+            withTitle: "Ask About This",
+            action: #selector(performAsk),
+            keyEquivalent: ""
+        )
+        askItem.target = self
+
+        let sendToNotesItem = menu.addItem(
+            withTitle: "Send to Notes",
+            action: #selector(performSendToNotes),
+            keyEquivalent: ""
+        )
+        sendToNotesItem.target = self
     }
 
     @objc private func performClearScreen() {

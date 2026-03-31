@@ -3,6 +3,8 @@ import SwiftUI
 struct NotesSplitView: View {
     @Bindable var viewModel: NotesViewModel
 
+    @FocusState private var isTitleFocused: Bool
+
     var body: some View {
         HSplitView {
             noteList
@@ -29,7 +31,12 @@ struct NotesSplitView: View {
             }
             .listStyle(.sidebar)
             .onChange(of: viewModel.selectedNoteID) { _, newID in
-                if let id = newID { viewModel.selectNote(id: id) }
+                if let id = newID {
+                    viewModel.selectNote(id: id)
+                    if viewModel.editingTitle == "Untitled" {
+                        isTitleFocused = true
+                    }
+                }
             }
         }
     }
@@ -60,6 +67,7 @@ struct NotesSplitView: View {
                     TextField("Title", text: $viewModel.editingTitle)
                         .font(AppUI.Font.title1Semibold)
                         .textFieldStyle(.plain)
+                        .focused($isTitleFocused)
                     Spacer()
                     splitFavoriteButton(noteID: noteID)
                 }

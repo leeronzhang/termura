@@ -24,6 +24,7 @@ final class NotesViewModel {
     var errorMessage: String?
 
     private let repository: any NoteRepositoryProtocol
+    private let clock: any AppClock
     @ObservationIgnored private var autoSaveTask: Task<Void, Never>?
     /// True while `selectNote` is loading content into `editingTitle`/`editingBody`
     /// to suppress the spurious auto-save triggered by those assignments.
@@ -39,8 +40,9 @@ final class NotesViewModel {
     var toastMessage: String?
     @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
 
-    init(repository: any NoteRepositoryProtocol) {
+    init(repository: any NoteRepositoryProtocol, clock: any AppClock = LiveClock()) {
         self.repository = repository
+        self.clock = clock
     }
 
     deinit {
@@ -190,7 +192,7 @@ final class NotesViewModel {
               let idx = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[idx].title = title
         notes[idx].body = body
-        notes[idx].updatedAt = Date()
+        notes[idx].updatedAt = clock.now()
         let updated = notes[idx]
         // Cancel any prior in-flight note save before registering a fresh one so
         // rapid edits do not stack up duplicate writes in pendingWrites.
@@ -248,7 +250,7 @@ final class NotesViewModel {
            let idx = notes.firstIndex(where: { $0.id == id }) {
             notes[idx].title = editingTitle
             notes[idx].body = editingBody
-            notes[idx].updatedAt = Date()
+            notes[idx].updatedAt = clock.now()
             do {
                 try await repository.save(notes[idx])
             } catch {

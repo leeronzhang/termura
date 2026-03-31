@@ -15,9 +15,10 @@ final class ThemeManager {
 
     /// Current terminal font size — persisted via UserDefaults.
     var terminalFontSize: CGFloat {
-        didSet { UserDefaults.standard.set(Double(terminalFontSize), forKey: AppConfig.UserDefaultsKeys.terminalFontSize) }
+        didSet { userDefaults.set(Double(terminalFontSize), forKey: AppConfig.UserDefaultsKeys.terminalFontSize) }
     }
 
+    private let userDefaults: any UserDefaultsStoring
     private var extendedColors: [ThemeToken: SwiftUI.Color] = [:]
     private var appearanceObservation: NSKeyValueObservation?
 
@@ -35,15 +36,16 @@ final class ThemeManager {
         terminalFontSize = AppConfig.Fonts.terminalSize
     }
 
-    init() {
+    init(userDefaults: any UserDefaultsStoring = UserDefaults.standard) {
+        self.userDefaults = userDefaults
         // Restore user-customized font size. Migrate stale old default (15) to new default (16).
-        let saved = UserDefaults.standard.double(forKey: AppConfig.UserDefaultsKeys.terminalFontSize)
-        let didMigrateFontSize = UserDefaults.standard.bool(forKey: AppConfig.UserDefaultsKeys.terminalFontSizeMigratedV1)
+        let saved = userDefaults.double(forKey: AppConfig.UserDefaultsKeys.terminalFontSize)
+        let didMigrateFontSize = userDefaults.bool(forKey: AppConfig.UserDefaultsKeys.terminalFontSizeMigratedV1)
         if !didMigrateFontSize && saved == 15.0 {
             // User had the old default (15) — upgrade to new default.
             terminalFontSize = AppConfig.Fonts.terminalSize
-            UserDefaults.standard.removeObject(forKey: AppConfig.UserDefaultsKeys.terminalFontSize)
-            UserDefaults.standard.set(true, forKey: AppConfig.UserDefaultsKeys.terminalFontSizeMigratedV1)
+            userDefaults.removeObject(forKey: AppConfig.UserDefaultsKeys.terminalFontSize)
+            userDefaults.set(true, forKey: AppConfig.UserDefaultsKeys.terminalFontSizeMigratedV1)
         } else if saved > 0 {
             terminalFontSize = CGFloat(saved)
         } else {
@@ -70,7 +72,7 @@ final class ThemeManager {
     func apply(definition: ThemeDefinition) {
         current = definition.toThemeColors()
         selectedThemeID = definition.id
-        UserDefaults.standard.set(definition.name, forKey: AppConfig.Theme.selectedThemeKey)
+        userDefaults.set(definition.name, forKey: AppConfig.Theme.selectedThemeKey)
         buildExtendedColors(from: definition)
     }
 
@@ -180,7 +182,7 @@ final class ThemeManager {
             Self.readCustomThemes(from: dir)
         }.value
         availableDefinitions = ThemeDefinition.builtIn + customThemes
-        if let name = UserDefaults.standard.string(forKey: AppConfig.Theme.selectedThemeKey),
+        if let name = userDefaults.string(forKey: AppConfig.Theme.selectedThemeKey),
            let definition = availableDefinitions.first(where: { $0.name == name }) {
             apply(definition: definition)
         }
