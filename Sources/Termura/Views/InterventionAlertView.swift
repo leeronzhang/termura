@@ -29,6 +29,7 @@ struct InterventionAlertView: View {
         Image(systemName: alert.severity == .critical ? "exclamationmark.triangle.fill" : "exclamationmark.circle.fill")
             .font(AppUI.Font.alertIcon)
             .foregroundColor(alert.severity == .critical ? .red : .orange)
+            .accessibilityHidden(true)
     }
 
     private var title: some View {
@@ -47,3 +48,31 @@ struct InterventionAlertView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Intervention Alert — Critical") {
+    InterventionAlertView(
+        alert: RiskAlert(
+            trigger: "rm -rf",
+            description: "Recursive force delete",
+            severity: .critical,
+            commandSnippet: "rm -rf /tmp/project/build"
+        ),
+        onProceed: {},
+        onCancel: {}
+    )
+}
+
+#Preview("Intervention Alert — High") {
+    InterventionAlertView(
+        alert: RiskAlert(
+            trigger: "git reset --hard",
+            description: "Hard reset (discards changes)",
+            severity: .high,
+            commandSnippet: "git reset --hard HEAD~3"
+        ),
+        onProceed: {},
+        onCancel: {}
+    )
+}
+#endif

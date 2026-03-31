@@ -31,6 +31,22 @@ struct SessionRowView: View {
 
     private var isWaiting: Bool { agentStatus == .waitingInput }
 
+    private var accessibilityStatusValue: String {
+        var parts: [String] = []
+        if isActive {
+            parts.append("Active")
+        } else if isInSplit {
+            parts.append("In split view")
+        } else if session.isEnded {
+            parts.append("Ended")
+        }
+        if let type = agentType, type != .unknown { parts.append(type.displayName) }
+        if let status = agentStatus { parts.append(status.rawValue) }
+        if let tokens = tokenSummary { parts.append("\(tokens) tokens") }
+        if let duration = durationText { parts.append(duration) }
+        return parts.joined(separator: ", ")
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: AppUI.Spacing.smMd) {
             leadingIcons
@@ -50,8 +66,9 @@ struct SessionRowView: View {
         .draggable(session.id.rawValue.uuidString)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Session: \(session.title)")
-        .accessibilityValue(isActive ? "Active" : session.isEnded ? "Ended" : "")
-        .accessibilityAddTraits(isActive ? .isSelected : [])
+        .accessibilityValue(accessibilityStatusValue)
+        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
+        .accessibilityIdentifier("sessionRow")
         .onChange(of: renameTrigger) { _, _ in beginEditing() }
         .animation(.easeOut(duration: AppUI.Animation.quick), value: isHovered)
         .onChange(of: isWaiting) { _, waiting in
@@ -107,6 +124,7 @@ struct SessionRowView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isExpanded ? "Collapse branches" : "Expand branches")
             }
         }
     }
@@ -230,3 +248,53 @@ struct SessionRowView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Session Rows") {
+    VStack(spacing: 4) {
+        SessionRowView(
+            session: SessionRecord(title: "feat: add preview support", workingDirectory: "~/termura"),
+            isActive: true,
+            hasUnreadFailure: false,
+            agentStatus: .thinking,
+            agentType: .claudeCode,
+            tokenSummary: "42.1k",
+            durationText: "4m 23s",
+            currentTaskSnippet: "Writing preview macros",
+            onActivate: {},
+            onRename: { _ in }
+        )
+        SessionRowView(
+            session: SessionRecord(title: "fix: cursor positioning", workingDirectory: "~/project"),
+            isActive: false,
+            hasUnreadFailure: false,
+            agentStatus: .toolRunning,
+            agentType: .codex,
+            tokenSummary: "12.3k",
+            durationText: "1m 05s",
+            onActivate: {},
+            onRename: { _ in }
+        )
+        SessionRowView(
+            session: SessionRecord(title: "Terminal Session"),
+            isActive: false,
+            hasUnreadFailure: true,
+            onActivate: {},
+            onRename: { _ in }
+        )
+        SessionRowView(
+            session: SessionRecord(title: "Archived session", endedAt: Date()),
+            isActive: false,
+            hasUnreadFailure: false,
+            agentStatus: .completed,
+            agentType: .gemini,
+            tokenSummary: "88.0k",
+            durationText: "12m 41s",
+            onActivate: {},
+            onRename: { _ in }
+        )
+    }
+    .frame(width: 260)
+    .padding()
+}
+#endif

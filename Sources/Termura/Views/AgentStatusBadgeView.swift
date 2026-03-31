@@ -66,3 +66,19 @@ struct AgentStatusBadgeView: View {
         "\(agentType.displayName) — \(status.rawValue)"
     }
 }
+
+#if DEBUG
+#Preview("Agent Status Badges") {
+    VStack(alignment: .leading, spacing: 16) {
+        ForEach(AgentStatus.allCases, id: \.self) { status in
+            HStack(spacing: 12) {
+                AgentStatusBadgeView(status: status, agentType: .claudeCode)
+                Text(status.rawValue)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    .padding()
+}
+#endif

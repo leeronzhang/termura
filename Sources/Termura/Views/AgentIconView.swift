@@ -11,6 +11,12 @@ struct AgentIconView: View {
     private var inactiveColor: Color { .secondary }
 
     var body: some View {
+        icon
+            .accessibilityLabel(agentType.displayName)
+    }
+
+    @ViewBuilder
+    private var icon: some View {
         switch agentType {
         case .claudeCode:
             ClaudeIconShape()
@@ -43,3 +49,20 @@ struct AgentIconView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Agent Icons") {
+    VStack(alignment: .leading, spacing: 20) {
+        ForEach(AgentType.allCases, id: \.self) { type in
+            HStack(spacing: 16) {
+                AgentIconView(agentType: type, size: 20, isActive: true)
+                AgentIconView(agentType: type, size: 20, isActive: false)
+                Text(type.displayName)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    .padding()
+}
+#endif

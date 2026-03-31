@@ -21,6 +21,7 @@ struct TokenProgressView: View {
                 .progressViewStyle(.linear)
                 .tint(progressColor)
                 .clipShape(Rectangle())
+                .accessibilityHidden(true)
 
             HStack {
                 Text(formattedTokens)
@@ -31,7 +32,11 @@ struct TokenProgressView: View {
                     .font(AppUI.Font.captionMono)
                     .foregroundColor(isWarning ? .orange : .secondary)
             }
+            .accessibilityHidden(true)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Context window usage")
+        .accessibilityValue("\(formattedTokens) tokens, \(percentageText)")
     }
 
     private var progressColor: Color {
@@ -51,3 +56,18 @@ struct TokenProgressView: View {
         String(format: "%.0f%%", fraction * 100)
     }
 }
+
+#if DEBUG
+#Preview("Token Progress") {
+    VStack(spacing: 24) {
+        Group {
+            TokenProgressView(estimatedTokens: 0, contextLimit: 200_000)
+            TokenProgressView(estimatedTokens: 50_000, contextLimit: 200_000)
+            TokenProgressView(estimatedTokens: 160_000, contextLimit: 200_000)
+            TokenProgressView(estimatedTokens: 195_000, contextLimit: 200_000)
+        }
+        .frame(width: 240)
+    }
+    .padding()
+}
+#endif

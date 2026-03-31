@@ -23,5 +23,24 @@ struct BranchIndicatorView: View {
             }
         }
         .frame(maxHeight: .infinity)
+        .accessibilityHidden(true)
     }
 }
+
+#if DEBUG
+#Preview("Branch Indicators") {
+    VStack(alignment: .leading, spacing: 0) {
+        ForEach(0 ..< 4, id: \.self) { depth in
+            ZStack {
+                BranchIndicatorView(depth: depth, branchType: .main, hasChildren: depth < 3)
+                Text("Depth \(depth)")
+                    .font(.caption)
+                    .padding(.leading, 8 + CGFloat(depth) * BranchIndicatorView.indentPerLevel)
+            }
+            .frame(height: 32)
+        }
+    }
+    .frame(width: 200)
+    .padding()
+}
+#endif

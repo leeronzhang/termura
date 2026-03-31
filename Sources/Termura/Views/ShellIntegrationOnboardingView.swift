@@ -55,6 +55,7 @@ struct ShellIntegrationOnboardingView: View {
             Image(systemName: icon)
                 .foregroundColor(.accentColor)
                 .frame(width: AppUI.Size.iconFrameLarge)
+                .accessibilityHidden(true)
             Text(text)
                 .font(.callout)
         }
@@ -70,6 +71,8 @@ struct ShellIntegrationOnboardingView: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
+        .accessibilityIdentifier("shellTypePicker")
+        .accessibilityLabel("Shell type")
     }
 
     // MARK: - Action
@@ -89,6 +92,8 @@ struct ShellIntegrationOnboardingView: View {
             }
             .buttonStyle(.plain)
             .foregroundColor(.secondary)
+            .accessibilityIdentifier("skipOnboardingButton")
+            .accessibilityLabel("Skip shell integration setup")
 
             Spacer()
 
@@ -104,15 +109,19 @@ struct ShellIntegrationOnboardingView: View {
                 performInstall()
             }
             .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("installHookButton")
+            .accessibilityLabel("Install shell integration hook")
 
         case .installing:
             ProgressView()
                 .controlSize(.small)
+                .accessibilityLabel("Installing shell hook")
 
         case .done:
             Label("Installed", systemImage: "checkmark.circle.fill")
                 .foregroundColor(.green)
                 .font(.callout.bold())
+                .accessibilityIdentifier("onboardingInstalledLabel")
         }
     }
 
@@ -143,3 +152,12 @@ struct ShellIntegrationOnboardingView: View {
         case idle, installing, done
     }
 }
+
+#if DEBUG
+#Preview("Shell Integration Onboarding") {
+    ShellIntegrationOnboardingView(
+        isPresented: .constant(true),
+        installer: MockShellHookInstaller()
+    )
+}
+#endif

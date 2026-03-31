@@ -20,6 +20,7 @@ struct SearchResultRowView: View {
             Image(systemName: iconName)
                 .frame(width: AppUI.Size.iconFrame)
                 .foregroundColor(.secondary)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
                 Text(title)
                     .font(AppUI.Font.title3)
@@ -31,6 +32,16 @@ struct SearchResultRowView: View {
             }
         }
         .padding(.vertical, AppUI.Spacing.sm)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(resultTypeLabel + title)
+        .accessibilityValue(subtitle)
+    }
+
+    private var resultTypeLabel: String {
+        switch result {
+        case .session: "Session: "
+        case .note: "Note: "
+        }
     }
 
     private var iconName: String {
@@ -57,3 +68,23 @@ struct SearchResultRowView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Search Result Rows") {
+    List {
+        SearchResultRowView(result: .session(
+            SessionRecord(title: "feat: SwiftUI previews", workingDirectory: "~/termura")
+        ))
+        SearchResultRowView(result: .session(
+            SessionRecord(title: "Terminal Session")
+        ))
+        SearchResultRowView(result: .note(
+            NoteRecord(title: "Architecture Notes", body: "The app uses a clean architecture pattern with ViewModels and Services...")
+        ))
+        SearchResultRowView(result: .note(
+            NoteRecord(title: "", body: "")
+        ))
+    }
+    .frame(width: 360, height: 200)
+}
+#endif
