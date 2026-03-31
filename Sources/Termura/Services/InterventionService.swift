@@ -50,15 +50,64 @@ enum InterventionService {
     // MARK: - Snippet extraction
 
     /// Returns the first line of `sample` that contains `trigger` (case-insensitive),
-    /// trimmed and truncated to `AppConfig.Agent.riskSnippetMaxLength` chars.
+    /// trimmed, stripped of ANSI/VT escape sequences, and truncated to
+    /// `AppConfig.Agent.riskSnippetMaxLength` chars.
     /// Falls back to the trigger keyword itself if no matching line can be isolated.
     private static func extractSnippet(from sample: Substring, trigger: String) -> String {
         let lines = sample.split(separator: "\n", omittingEmptySubsequences: true)
         for line in lines where line.lowercased().contains(trigger) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            return String(trimmed.prefix(AppConfig.Agent.riskSnippetMaxLength))
+            let clean = stripControlSequences(trimmed)
+            return String(clean.prefix(AppConfig.Agent.riskSnippetMaxLength))
         }
         return trigger
+    }
+
+    /// Strips ANSI/VT100 escape sequences and C0 control characters from a string.
+    /// Handles CSI (`ESC [`), OSC (`ESC ]`), and bare `ESC + char` sequences.
+    private static func stripControlSequences(_ string: String) -> String {
+        let scalars = string.unicodeScalars
+        guard scalars.contains(where: { $0.value < 32 }) else { return string }
+        var result = ""
+        result.reserveCapacity(string.count)
+        var i = scalars.startIndex
+        while i < scalars.endIndex {
+            let sv = scalars[i].value
+            if sv == 0x1B {
+                i = scalars.index(after: i)
+                guard i < scalars.endIndex else { break }
+                switch scalars[i].value {
+                case 0x5B:  // '[' — CSI: skip until final byte 0x40-0x7E
+                    i = scalars.index(after: i)
+                    while i < scalars.endIndex, !(0x40...0x7E).contains(scalars[i].value) {
+                        i = scalars.index(after: i)
+                    }
+                    if i < scalars.endIndex { i = scalars.index(after: i) }
+                case 0x5D:  // ']' — OSC: skip until BEL or ESC '\'
+                    i = scalars.index(after: i)
+                    while i < scalars.endIndex {
+                        let scalar = scalars[i].value
+                        if scalar == 0x07 { i = scalars.index(after: i); break }
+                        if scalar == 0x1B {
+                            i = scalars.index(after: i)
+                            if i < scalars.endIndex, scalars[i].value == 0x5C {
+                                i = scalars.index(after: i)
+                            }
+                            break
+                        }
+                        i = scalars.index(after: i)
+                    }
+                default:  // bare ESC + single char
+                    i = scalars.index(after: i)
+                }
+            } else if sv < 32 || sv == 127 {
+                i = scalars.index(after: i)
+            } else {
+                result.unicodeScalars.append(scalars[i])
+                i = scalars.index(after: i)
+            }
+        }
+        return result
     }
 
     // MARK: - Risk Patterns

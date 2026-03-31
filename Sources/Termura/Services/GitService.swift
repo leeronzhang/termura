@@ -182,7 +182,39 @@ actor GitService: GitServiceProtocol {
         // Swift Task is cancelled (e.g. when the timeout task wins the race in `run(_:at:)`).
         // Without this, cancelling the Task only stops Swift execution; the child git
         // process would continue running and accumulate as a zombie.
-        let exitStatus: Int32 = try await withTaskCancellationHandler(
+        let exitStatus = try await runToCompletion(
+            process,
+            stdoutHandle: stdoutHandle,
+            stderrHandle: stderrHandle,
+            cmdString: cmdString
+        )
+
+        // Pipe reads complete once the child closes its file descriptors (on exit).
+        let stdoutData = await stdoutTask.value
+        let stderrData = await stderrTask.value
+
+        guard exitStatus == 0 else {
+            let stderr = Self.decodeOutput(stderrData)
+            let error = GitServiceError.commandFailed(command: cmdString, exitCode: exitStatus, stderr: stderr)
+            logger.warning("\(error.localizedDescription)")
+            throw error
+        }
+
+        return try Self.decodeStdout(stdoutData, command: cmdString)
+    }
+
+    /// Launches `process` and waits for it to exit, cancelling via SIGTERM if the Task is cancelled.
+    /// Pipe handles must be pre-attached and draining before calling this method.
+    private func runToCompletion(
+        _ process: Process,
+        stdoutHandle: FileHandle,
+        stderrHandle: FileHandle,
+        cmdString: String
+    ) async throws -> Int32 {
+        // `withTaskCancellationHandler` ensures the OS process is terminated when the
+        // Swift Task is cancelled (e.g. when the timeout task wins the task-group race).
+        // Guard with isRunning: terminate() on an unlaunched Process throws NSInvalidArgumentException.
+        try await withTaskCancellationHandler(
             operation: {
                 try await withCheckedThrowingContinuation { continuation in
                     process.terminationHandler = { terminated in
@@ -207,28 +239,8 @@ actor GitService: GitServiceProtocol {
                     }
                 }
             },
-            onCancel: {
-                // Runs on Task cancellation (e.g. timeout wins the task-group race).
-                // Guard with isRunning: terminate() on an unlaunched Process throws
-                // NSInvalidArgumentException instead of being a no-op.
-                if process.isRunning {
-                    process.terminate()
-                }
-            }
+            onCancel: { if process.isRunning { process.terminate() } }
         )
-
-        // Pipe reads complete once the child closes its file descriptors (on exit).
-        let stdoutData = await stdoutTask.value
-        let stderrData = await stderrTask.value
-
-        guard exitStatus == 0 else {
-            let stderr = Self.decodeOutput(stderrData)
-            let error = GitServiceError.commandFailed(command: cmdString, exitCode: exitStatus, stderr: stderr)
-            logger.warning("\(error.localizedDescription)")
-            throw error
-        }
-
-        return try Self.decodeStdout(stdoutData, command: cmdString)
     }
 
     /// Decodes process output, preferring UTF-8 and falling back to Latin-1.

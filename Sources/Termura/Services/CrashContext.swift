@@ -27,6 +27,7 @@ actor CrashContext {
     private let metrics: any MetricsCollectorProtocol
     private var ringBuffer: [CrashEvent] = []
     private let bufferCapacity: Int
+    private let userDefaults: any UserDefaultsStoring
 
     private static let eventsKey = "com.termura.crashEvents"
     private static let snapshotKey = "com.termura.crashContext"
@@ -35,10 +36,12 @@ actor CrashContext {
 
     init(
         metrics: any MetricsCollectorProtocol,
-        bufferCapacity: Int = AppConfig.CrashDiagnostics.ringBufferCapacity
+        bufferCapacity: Int = AppConfig.CrashDiagnostics.ringBufferCapacity,
+        userDefaults: any UserDefaultsStoring = UserDefaults.standard
     ) {
         self.metrics = metrics
         self.bufferCapacity = bufferCapacity
+        self.userDefaults = userDefaults
     }
 
     // MARK: - Event recording
@@ -78,7 +81,7 @@ actor CrashContext {
         do {
             let data = try JSONEncoder().encode(snapshot)
             // Primary: UserDefaults (crash-safe, survives hard kills)
-            UserDefaults.standard.set(data, forKey: Self.snapshotKey)
+            userDefaults.set(data, forKey: Self.snapshotKey)
             // Secondary: file backup (survives UserDefaults corruption)
             do {
                 try Self.writeSnapshotToFile(data)
@@ -94,9 +97,11 @@ actor CrashContext {
 
     /// Retrieve crash context from a prior run. Checks UserDefaults first, file as fallback.
     /// Call at launch before clearing.
-    static func loadPriorCrashContext() -> CrashSnapshot? {
+    static func loadPriorCrashContext(
+        userDefaults: any UserDefaultsStoring = UserDefaults.standard
+    ) -> CrashSnapshot? {
         // Primary: UserDefaults
-        if let data = UserDefaults.standard.data(forKey: snapshotKey) {
+        if let data = userDefaults.data(forKey: snapshotKey) {
             return decodeCrashSnapshot(data)
         }
         // Fallback: file backup (UserDefaults may have been cleared by the OS)
@@ -110,9 +115,11 @@ actor CrashContext {
     }
 
     /// Clear persisted crash data (call after successful launch).
-    static func clearPersistedData() {
-        UserDefaults.standard.removeObject(forKey: eventsKey)
-        UserDefaults.standard.removeObject(forKey: snapshotKey)
+    static func clearPersistedData(
+        userDefaults: any UserDefaultsStoring = UserDefaults.standard
+    ) {
+        userDefaults.removeObject(forKey: eventsKey)
+        userDefaults.removeObject(forKey: snapshotKey)
         do {
             try FileManager.default.removeItem(at: crashContextFileURL)
         } catch {
@@ -125,7 +132,7 @@ actor CrashContext {
     private func persistEvents() {
         do {
             let data = try JSONEncoder().encode(ringBuffer)
-            UserDefaults.standard.set(data, forKey: Self.eventsKey)
+            userDefaults.set(data, forKey: Self.eventsKey)
         } catch {
             logger.error("Failed to persist crash events: \(error)")
         }
