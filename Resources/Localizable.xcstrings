@@ -1,0 +1,1853 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+
+    "1:1" : {
+      "comment" : "Image zoom: reset to 100% scale",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1:1"
+          }
+        }
+      }
+    },
+
+    "Accurate token counting" : {
+      "comment" : "Shell integration feature bullet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accurate token counting"
+          }
+        }
+      }
+    },
+
+    "Actual Size" : {
+      "comment" : "Menu item: reset zoom to 100%",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actual Size"
+          }
+        }
+      }
+    },
+
+    "Active" : {
+      "comment" : "Accessibility value: session is currently active",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active"
+          }
+        }
+      }
+    },
+
+    "Agent Resume" : {
+      "comment" : "Settings toggle: auto-fill launch command on session restore",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent Resume"
+          }
+        }
+      }
+    },
+
+    "Agents" : {
+      "comment" : "Sidebar tab label for the agents panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agents"
+          }
+        }
+      }
+    },
+
+    "Allow" : {
+      "comment" : "Approve a high-risk agent operation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow"
+          }
+        }
+      }
+    },
+
+    "Append Rule" : {
+      "comment" : "Confirm button: append codified rule to rule file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Append Rule"
+          }
+        }
+      }
+    },
+
+    "Auto-fill launch command on session restore" : {
+      "comment" : "Settings toggle label for Agent Resume feature",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-fill launch command on session restore"
+          }
+        }
+      }
+    },
+
+    "Back to Parent" : {
+      "comment" : "Navigate back to the parent session in a branch hierarchy",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to Parent"
+          }
+        }
+      }
+    },
+
+    "Browse and version-track AGENTS.md and CLAUDE.md across all your projects." : {
+      "comment" : "Harness upsell: Rule File Management feature description",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browse and version-track AGENTS.md and CLAUDE.md across all your projects."
+          }
+        }
+      }
+    },
+
+    "Cancel" : {
+      "comment" : "Dismiss a dialog or sheet without performing the action",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+
+    "Choose a project directory to open in Termura" : {
+      "comment" : "NSOpenPanel message when picking a project directory",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a project directory to open in Termura"
+          }
+        }
+      }
+    },
+
+    "Choose Files" : {
+      "comment" : "NSOpenPanel title for picking text/source file attachments",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Files"
+          }
+        }
+      }
+    },
+
+    "Choose Images" : {
+      "comment" : "NSOpenPanel title for picking image attachments",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Images"
+          }
+        }
+      }
+    },
+
+    "Choose Project Directory" : {
+      "comment" : "NSOpenPanel title for switching the terminal working directory",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Project Directory"
+          }
+        }
+      }
+    },
+
+    "Clear all problems" : {
+      "comment" : "Tooltip on the Problems panel clear button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear all problems"
+          }
+        }
+      }
+    },
+
+    "Codify Rule from Error" : {
+      "comment" : "Sheet title for turning an agent error into a Harness rule",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codify Rule from Error"
+          }
+        }
+      }
+    },
+
+    "Color Label" : {
+      "comment" : "Context menu submenu: assign a color label to a session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color Label"
+          }
+        }
+      }
+    },
+
+    "Composer (Cmd+K)" : {
+      "comment" : "Tooltip on the toolbar button that opens the Composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Composer (Cmd+K)"
+          }
+        }
+      }
+    },
+
+    "Corruption Detection" : {
+      "comment" : "Harness upsell: feature name for rule-file corruption scanning",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corruption Detection"
+          }
+        }
+      }
+    },
+
+    "Could not open \"%@\": %@" : {
+      "comment" : "NSAlert informative text when a project fails to open. First %@ = filename, second %@ = error description.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not open \"%@\": %@"
+          }
+        }
+      }
+    },
+
+    "Custom Themes" : {
+      "comment" : "Section header in the Themes settings panel for user-imported themes",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom Themes"
+          }
+        }
+      }
+    },
+
+    "Delete" : {
+      "comment" : "Permanently remove an item (session, note, etc.)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+
+    "Delete Session?" : {
+      "comment" : "Alert title asking the user to confirm permanent session deletion",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Session?"
+          }
+        }
+      }
+    },
+
+    "Diff" : {
+      "comment" : "Button label: show a version diff between two rule file versions",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diff"
+          }
+        }
+      }
+    },
+
+    "Dismiss" : {
+      "comment" : "Close an informational view or panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+
+    "Editor / Notes" : {
+      "comment" : "Font settings section header for the editor and notes font",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editor / Notes"
+          }
+        }
+      }
+    },
+
+    "Empty directory" : {
+      "comment" : "Empty-state label shown in the file tree when a directory has no files",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empty directory"
+          }
+        }
+      }
+    },
+
+    "Enable smart output chunking and accurate command tracking." : {
+      "comment" : "Shell integration onboarding subtitle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable smart output chunking and accurate command tracking."
+          }
+        }
+      }
+    },
+
+    "End Session" : {
+      "comment" : "Context menu item: mark the active session as ended",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End Session"
+          }
+        }
+      }
+    },
+
+    "Ended" : {
+      "comment" : "Accessibility value: session has been ended",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ended"
+          }
+        }
+      }
+    },
+
+    "Error" : {
+      "comment" : "Section label for the error text in the Codify Rule sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error"
+          }
+        }
+      }
+    },
+
+    "Execution time and exit code per command" : {
+      "comment" : "Shell integration feature bullet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Execution time and exit code per command"
+          }
+        }
+      }
+    },
+
+    "Experience Codification" : {
+      "comment" : "Harness upsell: feature name for turning errors into rules",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experience Codification"
+          }
+        }
+      }
+    },
+
+    "Export" : {
+      "comment" : "Confirm button in the Export Session sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export"
+          }
+        }
+      }
+    },
+
+    "Export Session" : {
+      "comment" : "Sheet title for the session export options panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Session"
+          }
+        }
+      }
+    },
+
+    "Export Session\u2026" : {
+      "comment" : "Menu item: open the session export sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Session\u2026"
+          }
+        }
+      }
+    },
+
+    "Export\u2026" : {
+      "comment" : "Context menu item: open the export sheet for this session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export\u2026"
+          }
+        }
+      }
+    },
+
+    "Failed to open project" : {
+      "comment" : "NSAlert title when a project directory cannot be opened",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to open project"
+          }
+        }
+      }
+    },
+
+    "File" : {
+      "comment" : "Attachment picker menu item: attach a text or source file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File"
+          }
+        }
+      }
+    },
+
+    "Font Family" : {
+      "comment" : "Settings picker label for choosing the terminal font family",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Font Family"
+          }
+        }
+      }
+    },
+
+    "Font Size" : {
+      "comment" : "Settings label for the font size stepper",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Font Size"
+          }
+        }
+      }
+    },
+
+    "Fonts" : {
+      "comment" : "Settings tab label for font configuration",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fonts"
+          }
+        }
+      }
+    },
+
+    "Format" : {
+      "comment" : "Picker label for selecting export format (Markdown, JSON, etc.)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Format"
+          }
+        }
+      }
+    },
+
+    "General" : {
+      "comment" : "Settings tab label for general/miscellaneous preferences",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "General"
+          }
+        }
+      }
+    },
+
+    "Harness" : {
+      "comment" : "Sidebar tab label for the Harness rules panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Harness"
+          }
+        }
+      }
+    },
+
+    "Harness Rules" : {
+      "comment" : "Title label at the top of the Harness sidebar panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Harness Rules"
+          }
+        }
+      }
+    },
+
+    "Harness Rules\u2026" : {
+      "comment" : "Menu item: open the Harness rules panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Harness Rules\u2026"
+          }
+        }
+      }
+    },
+
+    "Harness turns hard-won prompt engineering into permanent, versioned rules \u2014 so every agent session starts smarter." : {
+      "comment" : "Harness upsell: marketing subtitle below the PRO badge",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Harness turns hard-won prompt engineering into permanent, versioned rules \u2014 so every agent session starts smarter."
+          }
+        }
+      }
+    },
+
+    "High-Risk Operation Detected" : {
+      "comment" : "Alert title when an AI agent attempts a potentially destructive action",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "High-Risk Operation Detected"
+          }
+        }
+      }
+    },
+
+    "Hide Inspector (Cmd+Shift+I)" : {
+      "comment" : "Tooltip on the toolbar Inspector button when the panel is visible",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide Inspector (Cmd+Shift+I)"
+          }
+        }
+      }
+    },
+
+    "Image" : {
+      "comment" : "Attachment picker menu item: attach an image file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image"
+          }
+        }
+      }
+    },
+
+    "Import Theme\u2026" : {
+      "comment" : "Button label: open the file picker to import a custom .json or .itermcolors theme",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import Theme\u2026"
+          }
+        }
+      }
+    },
+
+    "Inspector" : {
+      "comment" : "Sidebar panel label for the session inspector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inspector"
+          }
+        }
+      }
+    },
+
+    "Install Hook" : {
+      "comment" : "Button / section label: install the OSC 133 shell integration hook",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install Hook"
+          }
+        }
+      }
+    },
+
+    "Installed" : {
+      "comment" : "Status label shown when the shell integration hook is installed",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installed"
+          }
+        }
+      }
+    },
+
+    "Insert into Composer" : {
+      "comment" : "Tooltip: insert the selected note content into the Composer input",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Insert into Composer"
+          }
+        }
+      }
+    },
+
+    "Jump to Next Alert" : {
+      "comment" : "Menu item: scroll to the next unacknowledged agent alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jump to Next Alert"
+          }
+        }
+      }
+    },
+
+    "Keep your AI agents on track." : {
+      "comment" : "Harness upsell: headline above the feature list",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep your AI agents on track."
+          }
+        }
+      }
+    },
+
+    "Keyword" : {
+      "comment" : "Search mode picker option: keyword-based search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keyword"
+          }
+        }
+      }
+    },
+
+    "Merge Branch Summary" : {
+      "comment" : "Sheet title for summarising and merging a branch back to the parent",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merge Branch Summary"
+          }
+        }
+      }
+    },
+
+    "Merge Branch Summary\u2026" : {
+      "comment" : "Menu item: open the branch merge summary sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merge Branch Summary\u2026"
+          }
+        }
+      }
+    },
+
+    "Merge to Parent" : {
+      "comment" : "Confirm button: merge current branch summary back into the parent session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merge to Parent"
+          }
+        }
+      }
+    },
+
+    "New Branch" : {
+      "comment" : "Menu item / button: create a new session branch from the current one",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Branch"
+          }
+        }
+      }
+    },
+
+    "New Note" : {
+      "comment" : "Menu item / button: create a new note",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Note"
+          }
+        }
+      }
+    },
+
+    "New Session" : {
+      "comment" : "Menu item / button: create a new terminal session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Session"
+          }
+        }
+      }
+    },
+
+    "Next Tab" : {
+      "comment" : "Menu item: switch focus to the next tab",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next Tab"
+          }
+        }
+      }
+    },
+
+    "No Active Session" : {
+      "comment" : "Empty-state heading shown when no session tab is open",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Active Session"
+          }
+        }
+      }
+    },
+
+    "No agents detected" : {
+      "comment" : "Empty-state label in the Agents panel when no agents are running",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No agents detected"
+          }
+        }
+      }
+    },
+
+    "No changes" : {
+      "comment" : "Empty-state label in the diff view when there are no file changes",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No changes"
+          }
+        }
+      }
+    },
+
+    "No Note Open" : {
+      "comment" : "Empty-state heading shown when no note is open in the content area",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Note Open"
+          }
+        }
+      }
+    },
+
+    "No results for \"%@\"" : {
+      "comment" : "Empty-state message in keyword search. %@ = user query",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No results for \"%@\""
+          }
+        }
+      }
+    },
+
+    "No semantic matches for \"%@\"" : {
+      "comment" : "Empty-state message in semantic search. %@ = user query",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No semantic matches for \"%@\""
+          }
+        }
+      }
+    },
+
+    "Not installed" : {
+      "comment" : "Status label shown when the shell integration hook is not yet installed",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not installed"
+          }
+        }
+      }
+    },
+
+    "Notes" : {
+      "comment" : "Sidebar tab label for the notes panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notes"
+          }
+        }
+      }
+    },
+
+    "OK" : {
+      "comment" : "Dismiss an informational alert",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+
+    "Open in Finder" : {
+      "comment" : "Button: reveal the file in Finder",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in Finder"
+          }
+        }
+      }
+    },
+
+    "Open Project" : {
+      "comment" : "NSOpenPanel prompt (action button label) for opening a project directory",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Project"
+          }
+        }
+      }
+    },
+
+    "Open Project\u2026" : {
+      "comment" : "Menu item: open the project directory picker",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Project\u2026"
+          }
+        }
+      }
+    },
+
+    "Paste from Clipboard" : {
+      "comment" : "Attachment picker menu item: paste image from clipboard",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste from Clipboard"
+          }
+        }
+      }
+    },
+
+    "Pin" : {
+      "comment" : "Context menu item: pin a session tab so it persists after closing",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin"
+          }
+        }
+      }
+    },
+
+    "PRO" : {
+      "comment" : "Badge label indicating a Harness paid feature",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PRO"
+          }
+        }
+      }
+    },
+
+    "Preview" : {
+      "comment" : "Font settings section header for the live preview area",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview"
+          }
+        }
+      }
+    },
+
+    "Press \u2318T to create a new session" : {
+      "comment" : "Empty-state body text under 'No Active Session' heading. \u2318 is the Command key symbol.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Press \u2318T to create a new session"
+          }
+        }
+      }
+    },
+
+    "Previous Tab" : {
+      "comment" : "Menu item: switch focus to the previous tab",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous Tab"
+          }
+        }
+      }
+    },
+
+    "Problems" : {
+      "comment" : "Sidebar tab label for the diagnostics / problems panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Problems"
+          }
+        }
+      }
+    },
+
+    "Proceed" : {
+      "comment" : "Confirm button in an intervention alert: allow the high-risk operation to continue",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proceed"
+          }
+        }
+      }
+    },
+
+    "Project" : {
+      "comment" : "Sidebar tab label for the project file tree panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Project"
+          }
+        }
+      }
+    },
+
+    "Refresh" : {
+      "comment" : "Tooltip on the refresh button in the Project file tree",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh"
+          }
+        }
+      }
+    },
+
+    "Rename" : {
+      "comment" : "Context menu item: rename a session tab",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename"
+          }
+        }
+      }
+    },
+
+    "Reopen" : {
+      "comment" : "Context menu item: reopen a previously closed session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reopen"
+          }
+        }
+      }
+    },
+
+    "Reset" : {
+      "comment" : "Button: reset the font size to its default value",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reset"
+          }
+        }
+      }
+    },
+
+    "Rule (editable)" : {
+      "comment" : "Text editor section header in the Codify Rule sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rule (editable)"
+          }
+        }
+      }
+    },
+
+    "Rule File Management" : {
+      "comment" : "Harness upsell: feature name for browsing and versioning rule files",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rule File Management"
+          }
+        }
+      }
+    },
+
+    "Save" : {
+      "comment" : "Confirm button: save changes (e.g. in the context file or code editor)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        }
+      }
+    },
+
+    "Scan" : {
+      "comment" : "Button: scan rule files for corruption issues in Harness",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan"
+          }
+        }
+      }
+    },
+
+    "Scan for issues" : {
+      "comment" : "Tooltip on the Harness scan button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan for issues"
+          }
+        }
+      }
+    },
+
+    "Scan rule files for structural issues and conflicting directives before they mislead your AI agent." : {
+      "comment" : "Harness upsell: Corruption Detection feature description",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scan rule files for structural issues and conflicting directives before they mislead your AI agent."
+          }
+        }
+      }
+    },
+
+    "Search\u2026" : {
+      "comment" : "Menu item: open the full-text search panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search\u2026"
+          }
+        }
+      }
+    },
+
+    "Search sessions and notes\u2026" : {
+      "comment" : "Placeholder text in the main search field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search sessions and notes\u2026"
+          }
+        }
+      }
+    },
+
+    "See every change to a rule file, diff between versions, and roll back instantly." : {
+      "comment" : "Harness upsell: Version History feature description",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See every change to a rule file, diff between versions, and roll back instantly."
+          }
+        }
+      }
+    },
+
+    "Select" : {
+      "comment" : "NSOpenPanel prompt (action button label) for choosing a directory",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select"
+          }
+        }
+      }
+    },
+
+    "Select a .json or .itermcolors theme file" : {
+      "comment" : "NSOpenPanel message when picking a theme file to import",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a .json or .itermcolors theme file"
+          }
+        }
+      }
+    },
+
+    "Select a directory to switch the terminal working directory" : {
+      "comment" : "NSOpenPanel message for the working-directory picker",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a directory to switch the terminal working directory"
+          }
+        }
+      }
+    },
+
+    "Select a note from the sidebar or create a new one" : {
+      "comment" : "Empty-state body text under 'No Note Open' heading",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a note from the sidebar or create a new one"
+          }
+        }
+      }
+    },
+
+    "Select or create a note" : {
+      "comment" : "Empty-state label in the notes split view when no note is selected",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select or create a note"
+          }
+        }
+      }
+    },
+
+    "Semantic" : {
+      "comment" : "Search mode picker option: AI-powered semantic search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semantic"
+          }
+        }
+      }
+    },
+
+    "Semantic search\u2026" : {
+      "comment" : "Placeholder text in the semantic search field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semantic search\u2026"
+          }
+        }
+      }
+    },
+
+    "Session context (context.md)" : {
+      "comment" : "Tooltip on the context file button in the terminal path bar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session context (context.md)"
+          }
+        }
+      }
+    },
+
+    "Session name" : {
+      "comment" : "Placeholder text in the session rename text field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session name"
+          }
+        }
+      }
+    },
+
+    "Session output" : {
+      "comment" : "Label for the session output section in semantic search results",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session output"
+          }
+        }
+      }
+    },
+
+    "Sessions" : {
+      "comment" : "Sidebar tab label for the session list panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sessions"
+          }
+        }
+      }
+    },
+
+    "Shell" : {
+      "comment" : "Settings tab label for shell integration, and picker label for shell type",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell"
+          }
+        }
+      }
+    },
+
+    "Shell Integration" : {
+      "comment" : "Title of the shell integration onboarding view",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell Integration"
+          }
+        }
+      }
+    },
+
+    "Show all" : {
+      "comment" : "Button: expand a collapsed list to show all items",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show all"
+          }
+        }
+      }
+    },
+
+    "Show Inspector (Cmd+Shift+I)" : {
+      "comment" : "Tooltip on the toolbar Inspector button when the panel is hidden",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Inspector (Cmd+Shift+I)"
+          }
+        }
+      }
+    },
+
+    "Show Sidebar (Cmd+B)" : {
+      "comment" : "Tooltip on the collapsed sidebar reveal button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Sidebar (Cmd+B)"
+          }
+        }
+      }
+    },
+
+    "Skip for now" : {
+      "comment" : "Button: dismiss the shell integration onboarding without installing",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip for now"
+          }
+        }
+      }
+    },
+
+    "Status" : {
+      "comment" : "Settings section header showing the shell integration status",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        }
+      }
+    },
+
+    "Stop Agent" : {
+      "comment" : "Button in the risk alert banner: terminate the AI agent immediately",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop Agent"
+          }
+        }
+      }
+    },
+
+    "Structured output blocks per command" : {
+      "comment" : "Shell integration feature bullet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Structured output blocks per command"
+          }
+        }
+      }
+    },
+
+    "Summary (editable)" : {
+      "comment" : "Text editor section header in the Merge Branch Summary sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Summary (editable)"
+          }
+        }
+      }
+    },
+
+    "Target File" : {
+      "comment" : "Picker label for selecting which rule file to append the codified rule to",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Target File"
+          }
+        }
+      }
+    },
+
+    "Terminal" : {
+      "comment" : "Font settings section header for terminal font configuration",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminal"
+          }
+        }
+      }
+    },
+
+    "Themes" : {
+      "comment" : "Settings tab label and panel title for theme selection",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Themes"
+          }
+        }
+      }
+    },
+
+    "This session and all its history will be permanently removed." : {
+      "comment" : "Alert message body confirming permanent session deletion",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This session and all its history will be permanently removed."
+          }
+        }
+      }
+    },
+
+    "Timeline" : {
+      "comment" : "Sidebar tab label for the session timeline panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timeline"
+          }
+        }
+      }
+    },
+
+    "Title" : {
+      "comment" : "Placeholder text in a note title text field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Title"
+          }
+        }
+      }
+    },
+
+    "Toggle Agent Dashboard" : {
+      "comment" : "Menu item: show or hide the agent dashboard panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Agent Dashboard"
+          }
+        }
+      }
+    },
+
+    "Toggle Composer" : {
+      "comment" : "Menu item: show or hide the Composer input panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Composer"
+          }
+        }
+      }
+    },
+
+    "Toggle Composer with Notes" : {
+      "comment" : "Menu item: show or hide the Composer with the notes panel open",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Composer with Notes"
+          }
+        }
+      }
+    },
+
+    "Toggle Dual Pane" : {
+      "comment" : "Menu item: enable or disable the dual-pane terminal layout",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Dual Pane"
+          }
+        }
+      }
+    },
+
+    "Toggle Inspector" : {
+      "comment" : "Menu item: show or hide the session inspector",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Inspector"
+          }
+        }
+      }
+    },
+
+    "Toggle Sidebar" : {
+      "comment" : "Menu item: collapse or expand the sidebar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toggle Sidebar"
+          }
+        }
+      }
+    },
+
+    "Total" : {
+      "comment" : "Label for the total token count row in the agent dashboard",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total"
+          }
+        }
+      }
+    },
+
+    "Turn agent errors and successful patterns into durable rules with one click." : {
+      "comment" : "Harness upsell: Experience Codification feature description",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn agent errors and successful patterns into durable rules with one click."
+          }
+        }
+      }
+    },
+
+    "Unpin" : {
+      "comment" : "Context menu item: remove the pin from a pinned session tab",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unpin"
+          }
+        }
+      }
+    },
+
+    "Version History" : {
+      "comment" : "Sheet title for viewing rule file version history",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version History"
+          }
+        }
+      }
+    },
+
+    "When enabled, reopening a project pre-fills the Composer with the last AI launch command." : {
+      "comment" : "Footer text below the Agent Resume toggle in Settings",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When enabled, reopening a project pre-fills the Composer with the last AI launch command."
+          }
+        }
+      }
+    },
+
+    "Zoom In" : {
+      "comment" : "Menu item: increase the terminal font size",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom In"
+          }
+        }
+      }
+    },
+
+    "Zoom Out" : {
+      "comment" : "Menu item: decrease the terminal font size",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoom Out"
+          }
+        }
+      }
+    }
+
+  },
+  "version" : "1.0"
+}
