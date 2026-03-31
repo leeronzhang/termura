@@ -17,7 +17,7 @@ extension SidebarView {
             Text("Notes")
                 .panelHeaderStyle()
             Spacer()
-            Button { vm.createNote() } label: {
+            Button { commandRouter.pendingCommand = .createNote } label: {
                 Image(systemName: "plus")
                     .font(AppUI.Font.label)
                     .foregroundColor(.secondary)

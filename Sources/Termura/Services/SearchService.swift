@@ -30,13 +30,12 @@ actor SearchService: SearchServiceProtocol {
         guard query.count >= AppConfig.Search.minQueryLength else {
             return SearchResults.empty
         }
-        await metrics?.increment(.searchQuery)
         let start = ContinuousClock.now
         async let sessions = sessionRepository.search(query: query)
         async let notes = noteRepository.search(query: query)
         let (foundSessions, foundNotes) = try await (sessions, notes)
         let elapsed = ContinuousClock.now - start
-        await metrics?.recordDuration(.searchDuration, seconds: elapsed.totalSeconds)
+        await metrics?.recordOperation(.searchQuery, duration: .searchDuration, seconds: elapsed.totalSeconds)
         return SearchResults(sessions: foundSessions, notes: foundNotes, query: query)
     }
 }

@@ -9,17 +9,24 @@ struct ComposerAttachment: Identifiable, Sendable {
     /// True for clipboard/paste images saved to the tmp directory — must be deleted on removal
     /// or session close. False for user-selected files from the file system.
     let isTemporary: Bool
+    /// Filename truncated to pill display length.
+    /// Stored once at init — `url` is immutable so string operations are not repeated on each access.
+    let displayName: String
 
     enum Kind: Sendable {
         case image
         case textFile
     }
 
-    /// Filename truncated to pill display length.
-    var displayName: String {
+    init(id: UUID, url: URL, kind: Kind, isTemporary: Bool) {
+        self.id = id
+        self.url = url
+        self.kind = kind
+        self.isTemporary = isTemporary
         let name = url.lastPathComponent
-        guard name.count > AppConfig.Attachments.pillNameMaxLength else { return name }
-        return String(name.prefix(AppConfig.Attachments.pillNameMaxLength)) + "..."
+        self.displayName = name.count > AppConfig.Attachments.pillNameMaxLength
+            ? String(name.prefix(AppConfig.Attachments.pillNameMaxLength)) + "..."
+            : name
     }
 
     /// SF Symbol name for the attachment kind indicator.

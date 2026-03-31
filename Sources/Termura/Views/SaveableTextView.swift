@@ -125,9 +125,8 @@ final class SaveableTextView: NSTextView {
         while idx < NSMaxRange(charRange) {
             let lineRange = text.lineRange(for: NSRange(location: idx, length: 0))
             let lineStr = text.substring(with: lineRange)
-            let trimmed = lineStr.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            if trimmed.isEmpty {
+            if lineStr.allSatisfy(\.isWhitespace) {
                 idx = NSMaxRange(lineRange)
                 continue
             }

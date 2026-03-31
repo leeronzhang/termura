@@ -99,8 +99,7 @@ actor GitService: GitServiceProtocol {
         } catch GitServiceError.commandFailed(_, let code, _) where Self.isNotARepoExitCode(code) {
             throw GitServiceError.notARepo
         }
-        let paths = output.components(separatedBy: "\n").filter { !$0.isEmpty }
-        return Set(paths)
+        return Set(output.split(separator: "\n").map(String.init))
     }
 
     /// Returns the full file content for untracked files (no diff available).

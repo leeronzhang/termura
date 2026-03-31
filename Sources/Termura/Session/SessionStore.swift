@@ -138,10 +138,7 @@ extension SessionStore {
         logger.info("Deleted session \(id)")
         if let collector = metricsCollector {
             let activeCount = sessions.count
-            Task {
-                await collector.increment(.sessionClosed)
-                await collector.gauge(.activeSessions, value: Double(activeCount))
-            }
+            Task { await collector.incrementAndSetGauge(.sessionClosed, gauge: .activeSessions, value: Double(activeCount)) }
         }
     }
 
@@ -183,7 +180,7 @@ extension SessionStore {
 // without expanding the class body beyond the type_body_length limit.
 extension SessionStore {
 
-    /// Rebuilds the full position index from `sessions`, then refreshes derived state.
+    /// Rebuilds the full position index from `sessions`, then refreshes all derived state.
     /// O(n) — call only after structural mutations (bulk load, removal, reorder).
     func rebuildSessionIndex() {
         sessionIndex.removeAll(keepingCapacity: true)
@@ -191,12 +188,14 @@ extension SessionStore {
             sessionIndex[session.id] = i
         }
         rebuildDerivedState()
+        rebuildSessionTitles()
     }
 
     /// Appends a session record, updates the O(1) position index, and refreshes derived state.
     func appendSession(_ record: SessionRecord) {
         sessions.append(record)
         sessionIndex[record.id] = sessions.count - 1
+        sessionTitles[record.id] = record.title
         rebuildDerivedState()
     }
 
@@ -206,6 +205,8 @@ extension SessionStore {
     func mutateSession(id: SessionID, _ update: (inout SessionRecord) -> Void) -> SessionRecord? {
         guard let idx = sessionIndex[id] else { return nil }
         update(&sessions[idx])
+        // O(1) incremental title update — rebuildDerivedState never touches sessionTitles.
+        sessionTitles[id] = sessions[idx].title
         rebuildDerivedState()
         return sessions[idx]
     }
@@ -223,17 +224,16 @@ extension SessionStore {
         rebuildSessionIndex()
     }
 
-    /// Single O(n) pass over `sessions` that refreshes all cached derived lists.
-    /// Called by every mutation helper; Views consume the results rather than filtering inline.
+    /// Single O(n) pass over `sessions` that refreshes the filtered derived arrays.
+    /// Does NOT touch `sessionTitles` — title maintenance is a separate responsibility:
+    ///   - In-place mutations: caller writes `sessionTitles[id] = ...` directly (O(1)).
+    ///   - Structural mutations: `rebuildSessionIndex` calls `rebuildSessionTitles()` after this.
     func rebuildDerivedState() {
         var active: [SessionRecord] = []
         var pinned: [SessionRecord] = []
         var activeTree: [SessionRecord] = []
         var ended: [SessionRecord] = []
-        var titles: [SessionID: String] = [:]
-        titles.reserveCapacity(sessions.count)
         for session in sessions {
-            titles[session.id] = session.title
             if session.isEnded {
                 ended.append(session)
             } else {
@@ -245,6 +245,15 @@ extension SessionStore {
         pinnedSessions = pinned
         sessionTreeNodes = SessionTreeNode.buildForest(from: activeTree)
         endedSessions = ended
+    }
+
+    /// Full O(n) rebuild of `sessionTitles`.
+    /// Called only from `rebuildSessionIndex` (structural mutations: delete, reorder, bulk replace).
+    /// In-place mutations skip this and update the affected entry directly.
+    private func rebuildSessionTitles() {
+        var titles: [SessionID: String] = [:]
+        titles.reserveCapacity(sessions.count)
+        for session in sessions { titles[session.id] = session.title }
         sessionTitles = titles
     }
 }

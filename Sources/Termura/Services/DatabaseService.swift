@@ -37,20 +37,18 @@ actor DatabaseService: DatabaseServiceProtocol {
     }
 
     func read<T: Sendable>(_ block: @Sendable (Database) throws -> T) async throws -> T {
-        await metrics?.increment(.dbRead)
         let start = ContinuousClock.now
         let result = try await pool.read(block)
         let elapsed = ContinuousClock.now - start
-        await metrics?.recordDuration(.dbReadDuration, seconds: elapsed.totalSeconds)
+        await metrics?.recordOperation(.dbRead, duration: .dbReadDuration, seconds: elapsed.totalSeconds)
         return result
     }
 
     func write<T: Sendable>(_ block: @Sendable (Database) throws -> T) async throws -> T {
-        await metrics?.increment(.dbWrite)
         let start = ContinuousClock.now
         let result = try await pool.write(block)
         let elapsed = ContinuousClock.now - start
-        await metrics?.recordDuration(.dbWriteDuration, seconds: elapsed.totalSeconds)
+        await metrics?.recordOperation(.dbWrite, duration: .dbWriteDuration, seconds: elapsed.totalSeconds)
         return result
     }
 }

@@ -49,7 +49,7 @@ enum ProblemDetector {
         var items: [DiagnosticItem] = []
         for line in chunk.outputLines {
             guard line.count >= 10,
-                  !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+                  !line.allSatisfy(\.isWhitespace) else { continue }
             if let item = matchSwift(line, source: src, chunk: chunk, root: projectRoot) {
                 items.append(item)
             } else if let item = matchTS(line, source: src, chunk: chunk, root: projectRoot) {

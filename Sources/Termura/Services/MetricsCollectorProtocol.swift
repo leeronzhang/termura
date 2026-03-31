@@ -108,9 +108,24 @@ protocol MetricsCollectorProtocol: Actor {
     func snapshot() -> MetricsSnapshot
 }
 
-/// Default parameter convenience.
+/// Default parameter convenience and combined-operation helpers.
 extension MetricsCollectorProtocol {
     func increment(_ name: MetricName) {
         increment(name, by: 1)
+    }
+
+    /// Increment a counter and record a duration in a single actor hop.
+    /// Callers that need both (e.g. DB read/write, search) should use this instead of two
+    /// sequential `await` calls, which each incur a separate actor-boundary crossing.
+    func recordOperation(_ counter: MetricName, duration durationName: MetricName, seconds: Double) {
+        increment(counter)
+        recordDuration(durationName, seconds: seconds)
+    }
+
+    /// Increment a counter and update a gauge in a single actor hop.
+    /// Use instead of two separate `await` calls for metrics always updated together.
+    func incrementAndSetGauge(_ counter: MetricName, gauge gaugeName: MetricName, value: Double) {
+        increment(counter)
+        gauge(gaugeName, value: value)
     }
 }

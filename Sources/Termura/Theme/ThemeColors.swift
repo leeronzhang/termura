@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 18-color terminal theme definition (background + foreground + 16 ANSI).
 /// Uses SwiftUI.Color throughout; SwiftTerm conversion is in ThemeColors+SwiftTerm.swift.
-struct ThemeColors: Sendable {
+struct ThemeColors: Sendable, Equatable {
     // MARK: - Base colors
 
     var background: SwiftUI.Color

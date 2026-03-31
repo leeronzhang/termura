@@ -37,17 +37,17 @@ final class MockSessionStore: SessionStoreProtocol {
             sessionIndex[session.id] = i
         }
         rebuildDerivedState()
+        rebuildSessionTitles()
     }
 
+    /// Refreshes the filtered derived arrays. Does NOT touch `sessionTitles`.
+    /// Mirrors SessionStore.rebuildDerivedState — same ownership contract applies.
     private func rebuildDerivedState() {
         var active: [SessionRecord] = []
         var pinned: [SessionRecord] = []
         var activeTree: [SessionRecord] = []
         var ended: [SessionRecord] = []
-        var titles: [SessionID: String] = [:]
-        titles.reserveCapacity(sessions.count)
         for session in sessions {
-            titles[session.id] = session.title
             if session.isEnded {
                 ended.append(session)
             } else {
@@ -63,6 +63,12 @@ final class MockSessionStore: SessionStoreProtocol {
         pinnedSessions = pinned
         sessionTreeNodes = SessionTreeNode.buildForest(from: activeTree)
         endedSessions = ended
+    }
+
+    private func rebuildSessionTitles() {
+        var titles: [SessionID: String] = [:]
+        titles.reserveCapacity(sessions.count)
+        for session in sessions { titles[session.id] = session.title }
         sessionTitles = titles
     }
 
@@ -73,6 +79,7 @@ final class MockSessionStore: SessionStoreProtocol {
         sessions.append(record)
         sessionIndex[record.id] = sessions.count - 1
         activeSessionID = record.id
+        sessionTitles[record.id] = record.title
         rebuildDerivedState()
         return record
     }
@@ -110,6 +117,7 @@ final class MockSessionStore: SessionStoreProtocol {
     func renameSession(id: SessionID, title: String) {
         guard let idx = sessionIndex[id] else { return }
         sessions[idx].title = title
+        sessionTitles[id] = title
         rebuildDerivedState()
     }
 
@@ -173,6 +181,7 @@ final class MockSessionStore: SessionStoreProtocol {
         sessions.append(record)
         sessionIndex[record.id] = sessions.count - 1
         activeSessionID = record.id
+        sessionTitles[record.id] = record.title
         rebuildDerivedState()
     }
 

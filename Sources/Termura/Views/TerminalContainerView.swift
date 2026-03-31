@@ -33,9 +33,10 @@ struct TerminalContainerView: NSViewRepresentable {
         // traverses subviews. SwiftTerm adds the scroller during its own init and does
         // not remove/re-add it, so the reference remains valid for the view's lifetime.
         container.cacheAndHideScrollers()
-        // Seed the font cache so the first updateNSView call skips the redundant font assignment.
+        // Seed the font and theme caches so the first updateNSView call skips redundant assignments.
         container.lastAppliedFontName = fontFamily
         container.lastAppliedFontSize = fontSize
+        container.lastAppliedTheme = theme
         container.dragHandler = { [weak viewModel] paths in
             viewModel?.send(paths)
         }
@@ -45,8 +46,14 @@ struct TerminalContainerView: NSViewRepresentable {
     func updateNSView(_ container: TerminalDragContainerView, context: Context) {
         container.isPassthrough = isComposerActive
         guard let termView = container.terminalView as? LocalProcessTerminalView else { return }
-        // Colors are cheap to set — always apply so theme switches take effect immediately.
-        applyColors(theme, to: termView)
+        // installColors() triggers setNeedsDisplay(bounds) — a full-grid redraw on every call.
+        // On Intel Mac, each redraw is ~2ms × N parent re-renders/sec = continuous CPU burn.
+        // Guard identically to font assignment: only apply when the theme actually changes.
+        let themeChanged = container.lastAppliedTheme != theme
+        if themeChanged {
+            applyColors(theme, to: termView)
+            container.lastAppliedTheme = theme
+        }
         // Font assignment is expensive: SwiftTerm recalculates character dimensions for every cell.
         // Guard to avoid triggering this on every parent re-render (ViewModel observable
         // property changes cause frequent re-renders — without this guard, CPU spikes when idle).
@@ -105,6 +112,10 @@ final class TerminalDragContainerView: NSView {
     /// recalculating character dimensions on every parent view re-render.
     var lastAppliedFontName: String?
     var lastAppliedFontSize: CGFloat = 0
+    /// Last theme applied via updateNSView. Guards against installColors() triggering a
+    /// full-grid setNeedsDisplay on every parent re-render — on Intel Mac this is the
+    /// primary source of idle CPU burn (~70%+ from repeated terminal cell redraws).
+    var lastAppliedTheme: ThemeColors?
     /// Cached NSScroller subviews found at construction time. SwiftTerm adds its scroller
     /// during init and never removes it, so this reference stays valid for the view's lifetime.
     /// Populated by cacheAndHideScrollers(); used by hideCachedScrollers() on every render.

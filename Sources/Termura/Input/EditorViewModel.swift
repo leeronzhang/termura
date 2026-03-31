@@ -98,7 +98,7 @@ final class EditorViewModel {
         onCommandSubmit?(text)  // user text only — used for agent detection
         onSubmit?()
         // Lifecycle: single actor call — engine serializes internally; no cancellation needed.
-        Task { await engine.send(fullCommand + "\n") }
+        Task { await engine.send(fullCommand + "\r") }
     }
 
     /// Insert a literal newline at the cursor position.

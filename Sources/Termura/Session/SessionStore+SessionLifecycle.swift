@@ -23,10 +23,7 @@ extension SessionStore {
         logger.info("Created session \(record.id) title=\(resolvedTitle)")
         if let collector = metricsCollector {
             let activeCount = sessions.count
-            Task {
-                await collector.increment(.sessionCreated)
-                await collector.gauge(.activeSessions, value: Double(activeCount))
-            }
+            Task { await collector.incrementAndSetGauge(.sessionCreated, gauge: .activeSessions, value: Double(activeCount)) }
         }
         return record
     }

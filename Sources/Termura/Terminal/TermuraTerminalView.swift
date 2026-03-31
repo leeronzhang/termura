@@ -214,7 +214,7 @@ final class TermuraTerminalView: LocalProcessTerminalView {
     }
 
     @objc private func performClearScreen() {
-        send(txt: "clear\n")
+        send(txt: "clear\r")
     }
 
     @objc private func performQuote() {

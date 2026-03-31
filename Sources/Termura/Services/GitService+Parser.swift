@@ -4,7 +4,7 @@ import Foundation
 
 extension GitService {
     static func parse(porcelain output: String) -> GitStatusResult {
-        let lines = output.components(separatedBy: "\n").filter { !$0.isEmpty }
+        let lines = output.split(separator: "\n").map(String.init)
         guard let firstLine = lines.first, firstLine.hasPrefix("## ") else {
             return .notARepo
         }

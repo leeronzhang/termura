@@ -127,7 +127,7 @@ extension TerminalAreaView {
                 .foregroundColor(infoVisible ? .accentColor : .secondary)
         }
         .buttonStyle(.plain)
-        .help(infoVisible ? "Hide Session Info" : "Show Session Info")
+        .help(infoVisible ? "Hide Inspector (Cmd+Shift+I)" : "Show Inspector (Cmd+Shift+I)")
     }
 
     func revealInFinder() {
@@ -153,7 +153,7 @@ extension TerminalAreaView {
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
             // Silent directory switch: cd + clear so the user never sees the command.
-            let cdCommand = "cd \(url.path.shellEscaped) && clear\n"
+            let cdCommand = "cd \(url.path.shellEscaped) && clear\r"
             Task { @MainActor in await eng.send(cdCommand) }
         }
     }

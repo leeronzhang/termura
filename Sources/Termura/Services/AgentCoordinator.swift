@@ -212,7 +212,7 @@ actor AgentCoordinator {
         let detector = agentDetector
         let sid = sessionID
 
-        await detector.analyzeOutput(stripped)
+        let currentStatus = await detector.analyzeOutput(stripped)
         if let stats = await detector.parseTokenStats(stripped) {
             if let input = stats.inputTokens, let output = stats.outputTokens {
                 // Parsed stats are authoritative — override heuristic accumulation for all
@@ -230,7 +230,7 @@ actor AgentCoordinator {
                 await detector.updateCost(cost)
             }
         }
-        if let risk = InterventionService.detectRisk(in: stripped) {
+        if let risk = InterventionService.detectRisk(in: stripped, agentStatus: currentStatus) {
             riskAlertContinuation.yield(risk)
         }
     }
