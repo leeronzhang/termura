@@ -95,7 +95,14 @@ extension AppDelegate {
         }
 
         // After exit animation finishes, reposition traffic lights and fade in.
-        let didExitToken = NotificationCenter.default.addObserver(
+        let didExitToken = makeDidExitFullScreenObserver(window: window)
+
+        fullScreenObserverTokens[key] = [didResizeToken, enterToken, willExitToken, didExitToken]
+        scheduleFullScreenObserverCleanup(window: window, key: key)
+    }
+
+    private func makeDidExitFullScreenObserver(window: NSWindow) -> NSObjectProtocol {
+        NotificationCenter.default.addObserver(
             forName: NSWindow.didExitFullScreenNotification,
             object: window,
             queue: nil
@@ -119,9 +126,6 @@ extension AppDelegate {
                 }
             }
         }
-
-        fullScreenObserverTokens[key] = [didResizeToken, enterToken, willExitToken, didExitToken]
-        scheduleFullScreenObserverCleanup(window: window, key: key)
     }
 
     /// Registers a one-shot `willCloseNotification` observer that removes the fullscreen

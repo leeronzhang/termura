@@ -143,9 +143,9 @@ extension TerminalAreaView {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
         panel.treatsFilePackagesAsDirectories = true
-        panel.prompt = "Select"
-        panel.title = "Choose Project Directory"
-        panel.message = "Select a directory to switch the terminal working directory"
+        panel.prompt = String(localized: "Select")
+        panel.title = String(localized: "Choose Project Directory")
+        panel.message = String(localized: "Select a directory to switch the terminal working directory")
         panel.directoryURL = URL(fileURLWithPath: viewModel.currentMetadata.workingDirectory)
 
         guard let window = NSApp.keyWindow else { return }
