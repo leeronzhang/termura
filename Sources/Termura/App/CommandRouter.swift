@@ -190,4 +190,27 @@ final class CommandRouter {
             }
         }
     }
+
+    /// Opens the Composer and activates the Notes sidebar simultaneously (Shift+Cmd+K).
+    /// If the Composer is already open with notes active, dismisses it.
+    /// If the Composer is open without notes, activates notes mode without closing.
+    func toggleComposerWithNotes() {
+        if showComposer, isComposerNotesActive {
+            dismissComposer()
+            return
+        }
+        // Activate notes mode — capture tab before composer opens if needed.
+        if !isComposerNotesActive {
+            tabBeforeComposer = selectedSidebarTab
+        }
+        // Open composer and switch sidebar to notes in a single render pass.
+        isComposerNotesActive = true
+        withAnimation(.spring(
+            response: AppConfig.UI.composerSpringResponse,
+            dampingFraction: AppConfig.UI.composerSpringDamping
+        )) {
+            showComposer = true
+            selectedSidebarTab = .notes
+        }
+    }
 }

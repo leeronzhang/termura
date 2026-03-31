@@ -11,6 +11,7 @@ import SwiftUI
 //
 // Production code always injects real values via .environment(...).
 // This context is only reached in Xcode Previews and unit tests that omit injection.
+#if DEBUG
 @MainActor
 private enum MockPreviewContext {
     // Shared across SessionScopeKey and ViewStateManagerKey (matches makeScopes wiring).
@@ -19,6 +20,7 @@ private enum MockPreviewContext {
     static let sessionStore = SessionStore(engineStore: engineStore, repository: MockSessionRepository())
     static let commandRouter = CommandRouter()
 }
+#endif
 
 // MARK: - ThemeManager
 
@@ -66,12 +68,16 @@ extension EnvironmentValues {
 // MARK: - NotesViewModel
 
 private struct NotesViewModelKey: EnvironmentKey {
-    // Safe fallback — production code must inject via `.environment(\.notesViewModel, ...)`.
-    // SwiftUI accesses defaultValue during attribute-graph propagation before body modifiers
-    // take effect, so preconditionFailure here would crash in Release builds.
+    #if DEBUG
+    // Safe fallback for Previews/tests — production code must inject via `.environment(\.notesViewModel, ...)`.
     static let defaultValue: NotesViewModel = MainActor.assumeIsolated {
         NotesViewModel(repository: MockNoteRepository())
     }
+    #else
+    static let defaultValue: NotesViewModel = MainActor.assumeIsolated {
+        preconditionFailure("NotesViewModel must be injected via .environment(\\.notesViewModel, ...)")
+    }
+    #endif
 }
 
 extension EnvironmentValues {
@@ -84,8 +90,8 @@ extension EnvironmentValues {
 // MARK: - SessionScope
 
 private struct SessionScopeKey: EnvironmentKey {
-    // Safe fallback — production code must inject via `.environment(\.sessionScope, ...)`.
-    // See NotesViewModelKey comment for why preconditionFailure must not be used here.
+    #if DEBUG
+    // Safe fallback for Previews/tests — production code must inject via `.environment(\.sessionScope, ...)`.
     // Shared objects come from MockPreviewContext so that SessionScopeKey and
     // ViewStateManagerKey see the same SessionStore / AgentStateStore, matching
     // the single-instance wiring in ProjectContext+Factory.swift makeScopes().
@@ -96,6 +102,11 @@ private struct SessionScopeKey: EnvironmentKey {
             agentStates: MockPreviewContext.agentStateStore
         )
     }
+    #else
+    static let defaultValue: SessionScope = MainActor.assumeIsolated {
+        preconditionFailure("SessionScope must be injected via .environment(\\.sessionScope, ...)")
+    }
+    #endif
 }
 
 extension EnvironmentValues {
@@ -108,8 +119,8 @@ extension EnvironmentValues {
 // MARK: - DataScope
 
 private struct DataScopeKey: EnvironmentKey {
-    // Safe fallback — production code must inject via `.environment(\.dataScope, ...)`.
-    // See NotesViewModelKey comment for why preconditionFailure must not be used here.
+    #if DEBUG
+    // Safe fallback for Previews/tests — production code must inject via `.environment(\.dataScope, ...)`.
     static let defaultValue: DataScope = MainActor.assumeIsolated {
         DataScope(
             searchService: MockSearchService(),
@@ -118,6 +129,11 @@ private struct DataScopeKey: EnvironmentKey {
             sessionMessageRepository: MockSessionMessageRepository()
         )
     }
+    #else
+    static let defaultValue: DataScope = MainActor.assumeIsolated {
+        preconditionFailure("DataScope must be injected via .environment(\\.dataScope, ...)")
+    }
+    #endif
 }
 
 extension EnvironmentValues {
@@ -130,8 +146,8 @@ extension EnvironmentValues {
 // MARK: - ProjectScope
 
 private struct ProjectScopeKey: EnvironmentKey {
-    // Safe fallback — production code must inject via `.environment(\.projectScope, ...)`.
-    // See NotesViewModelKey comment for why preconditionFailure must not be used here.
+    #if DEBUG
+    // Safe fallback for Previews/tests — production code must inject via `.environment(\.projectScope, ...)`.
     // gitService is shared between ProjectScope and ProjectViewModel so that
     // both see the same mock state in previews and tests.
     static let defaultValue: ProjectScope = MainActor.assumeIsolated {
@@ -148,6 +164,11 @@ private struct ProjectScopeKey: EnvironmentKey {
             diagnosticsStore: DiagnosticsStore(commandRouter: router, projectRoot: "")
         )
     }
+    #else
+    static let defaultValue: ProjectScope = MainActor.assumeIsolated {
+        preconditionFailure("ProjectScope must be injected via .environment(\\.projectScope, ...)")
+    }
+    #endif
 }
 
 extension EnvironmentValues {
@@ -160,8 +181,8 @@ extension EnvironmentValues {
 // MARK: - SessionViewStateManager
 
 private struct ViewStateManagerKey: EnvironmentKey {
-    // Safe fallback — production code must inject via `.environment(\.viewStateManager, ...)`.
-    // See NotesViewModelKey comment for why preconditionFailure must not be used here.
+    #if DEBUG
+    // Safe fallback for Previews/tests — production code must inject via `.environment(\.viewStateManager, ...)`.
     // sessionStore and agentStateStore come from MockPreviewContext so they match
     // the instances in SessionScopeKey, mirroring production wiring in makeScopes().
     static let defaultValue: SessionViewStateManager = MainActor.assumeIsolated {
@@ -174,6 +195,11 @@ private struct ViewStateManagerKey: EnvironmentKey {
             sessionHandoffService: MockSessionHandoffService()
         ))
     }
+    #else
+    static let defaultValue: SessionViewStateManager = MainActor.assumeIsolated {
+        preconditionFailure("SessionViewStateManager must be injected via .environment(\\.viewStateManager, ...)")
+    }
+    #endif
 }
 
 extension EnvironmentValues {

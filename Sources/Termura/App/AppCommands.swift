@@ -98,6 +98,20 @@ struct AppCommands: Commands {
             appDelegate.activeContext?.commandRouter.toggleComposer()
         }
         .keyboardShortcut("k", modifiers: [.command])
+
+        Button("Toggle Composer with Notes") {
+            appDelegate.activeContext?.commandRouter.toggleComposerWithNotes()
+        }
+        .keyboardShortcut("k", modifiers: [.command, .shift])
+
+        Divider()
+
+        Button("Toggle Sidebar") {
+            withAnimation(.easeInOut(duration: AppUI.Animation.panel)) {
+                appDelegate.activeContext?.commandRouter.toggleSidebar()
+            }
+        }
+        .keyboardShortcut("b", modifiers: .command)
     }
 
     // MARK: - View commands (zoom, after toolbar)
