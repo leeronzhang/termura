@@ -210,6 +210,7 @@ enum AppConfig {
         static let errorDetectionPrefixLength = 3000
         /// Prefix character limit for tool-call detection heuristic.
         static let toolCallDetectionPrefixLength = 500
+        static let classifyPrefixLength = max(diffDetectionPrefixLength, errorDetectionPrefixLength, toolCallDetectionPrefixLength)
     }
 
     enum Search {

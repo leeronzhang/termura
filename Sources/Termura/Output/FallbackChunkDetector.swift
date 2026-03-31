@@ -77,9 +77,13 @@ actor FallbackChunkDetector {
         }
 
         // Use split to get zero-copy Substring views; only allocate String when storing.
+        // Fast-path: empty lines caught O(1) via first-char nil check; lines starting with
+        // non-whitespace (the common case in real command output) short-circuit before the
+        // O(n) allSatisfy scan. Only purely-whitespace non-empty lines pay the full cost.
         for line in stripped.split(separator: "\n", omittingEmptySubsequences: false) {
+            guard let first = line.first else { continue }
+            guard !first.isWhitespace || !line.allSatisfy(\.isWhitespace) else { continue }
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
 
             let nsRange = NSRange(trimmed.startIndex..., in: trimmed)
             if promptRegex.firstMatch(in: trimmed, range: nsRange) != nil {
@@ -115,8 +119,8 @@ actor FallbackChunkDetector {
         pendingLineCharCount = 0
         pendingRawANSI = ""
 
-        let joined = lines.joined(separator: "\n")
-        let classification = SemanticParser.classify(joined, command: command)
+        // Use lines-based overload: avoids materializing a joined prefix String altogether.
+        let classification = SemanticParser.classify(lines, command: command)
         let uiBlock = SemanticParser.buildUIContent(
             from: classification,
             displayLines: lines,

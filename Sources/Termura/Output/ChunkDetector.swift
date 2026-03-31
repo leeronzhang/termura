@@ -116,7 +116,7 @@ actor ChunkDetector {
         exitCode: Int?
     ) -> OutputChunk {
         let lines = output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        let classification = SemanticParser.classify(output, command: command)
+        let classification = SemanticParser.classify(lines, command: command)
         let uiBlock = SemanticParser.buildUIContent(
             from: classification,
             displayLines: lines,

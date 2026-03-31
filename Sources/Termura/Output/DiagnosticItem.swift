@@ -20,10 +20,31 @@ struct DiagnosticItem: Identifiable, Sendable {
     let source: String
     let sessionID: SessionID
     let producedAt: Date
-
     /// Display name: last path component only (e.g., "ContentView.swift").
-    var fileName: String {
-        URL(fileURLWithPath: file).lastPathComponent
+    /// Stored once at init — `file` is immutable so URL parsing is not repeated on each access.
+    let fileName: String
+
+    init(
+        id: UUID,
+        file: String,
+        line: Int?,
+        column: Int?,
+        severity: DiagnosticSeverity,
+        message: String,
+        source: String,
+        sessionID: SessionID,
+        producedAt: Date
+    ) {
+        self.id = id
+        self.file = file
+        self.line = line
+        self.column = column
+        self.severity = severity
+        self.message = message
+        self.source = source
+        self.sessionID = sessionID
+        self.producedAt = producedAt
+        self.fileName = URL(fileURLWithPath: file).lastPathComponent
     }
 
     /// One-line location string for display (e.g., "ContentView.swift:42").
