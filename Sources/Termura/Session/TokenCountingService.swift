@@ -95,6 +95,17 @@ actor TokenCountingService: TokenCountingServiceProtocol {
         )
     }
 
+    /// Override heuristic accumulation with authoritative parsed token stats.
+    /// Called when accurate input/output/cache counts are extracted from agent output
+    /// (e.g. "Input: 45.2k Output: 8.1k Cache read: 102.3k" in Claude Code summaries).
+    func applyParsedStats(for sessionID: SessionID, inputTokens: Int, outputTokens: Int, cachedTokens: Int) {
+        breakdowns[sessionID] = TokenBreakdown(
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cachedTokens: cachedTokens
+        )
+    }
+
     /// Reset accumulated counts for a session (e.g., on session close).
     func reset(for sessionID: SessionID) {
         breakdowns.removeValue(forKey: sessionID)

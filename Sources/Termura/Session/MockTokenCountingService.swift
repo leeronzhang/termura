@@ -7,6 +7,7 @@ actor MockTokenCountingService: TokenCountingServiceProtocol {
     var accumulateInputCallCount = 0
     var accumulateOutputCallCount = 0
     var accumulateCachedCallCount = 0
+    var applyParsedStatsCallCount = 0
     var resetCallCount = 0
 
     func accumulateInput(for sessionID: SessionID, text: String) {
@@ -19,6 +20,15 @@ actor MockTokenCountingService: TokenCountingServiceProtocol {
 
     func accumulateCached(for sessionID: SessionID, count: Int) {
         accumulateCachedCallCount += 1
+    }
+
+    func applyParsedStats(for sessionID: SessionID, inputTokens: Int, outputTokens: Int, cachedTokens: Int) {
+        applyParsedStatsCallCount += 1
+        stubbedBreakdowns[sessionID] = TokenEstimateBreakdown(
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cachedTokens: cachedTokens
+        )
     }
 
     func estimatedTokens(for sessionID: SessionID) -> Int {

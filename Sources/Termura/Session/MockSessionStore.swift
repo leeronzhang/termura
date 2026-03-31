@@ -9,6 +9,12 @@ import Foundation
 final class MockSessionStore: SessionStoreProtocol {
     private(set) var sessions: [SessionRecord]
     private(set) var activeSessionID: SessionID?
+    // Cached derived state — mirrors SessionStore for protocol conformance.
+    private(set) var activeSessions: [SessionRecord] = []
+    private(set) var pinnedSessions: [SessionRecord] = []
+    private(set) var sessionTreeNodes: [SessionTreeNode] = []
+    private(set) var endedSessions: [SessionRecord] = []
+    private(set) var sessionTitles: [SessionID: String] = [:]
 
     @ObservationIgnored private(set) var createCallCount = 0
     @ObservationIgnored private(set) var deleteCallCount = 0
@@ -21,6 +27,8 @@ final class MockSessionStore: SessionStoreProtocol {
         self.sessions = sessions
         activeSessionID = activeID ?? sessions.first?.id
         for (i, s) in sessions.enumerated() { sessionIndex[s.id] = i }
+        // didSet does not fire during init; populate derived state explicitly.
+        rebuildDerivedState()
     }
 
     private func rebuildSessionIndex() {
@@ -28,6 +36,34 @@ final class MockSessionStore: SessionStoreProtocol {
         for (i, session) in sessions.enumerated() {
             sessionIndex[session.id] = i
         }
+        rebuildDerivedState()
+    }
+
+    private func rebuildDerivedState() {
+        var active: [SessionRecord] = []
+        var pinned: [SessionRecord] = []
+        var activeTree: [SessionRecord] = []
+        var ended: [SessionRecord] = []
+        var titles: [SessionID: String] = [:]
+        titles.reserveCapacity(sessions.count)
+        for session in sessions {
+            titles[session.id] = session.title
+            if session.isEnded {
+                ended.append(session)
+            } else {
+                active.append(session)
+                if session.isPinned {
+                    pinned.append(session)
+                } else {
+                    activeTree.append(session)
+                }
+            }
+        }
+        activeSessions = active
+        pinnedSessions = pinned
+        sessionTreeNodes = SessionTreeNode.buildForest(from: activeTree)
+        endedSessions = ended
+        sessionTitles = titles
     }
 
     @discardableResult
@@ -37,6 +73,7 @@ final class MockSessionStore: SessionStoreProtocol {
         sessions.append(record)
         sessionIndex[record.id] = sessions.count - 1
         activeSessionID = record.id
+        rebuildDerivedState()
         return record
     }
 
@@ -46,12 +83,14 @@ final class MockSessionStore: SessionStoreProtocol {
         if activeSessionID == id {
             activeSessionID = sessions.last(where: { !$0.isEnded })?.id
         }
+        rebuildDerivedState()
     }
 
     func reopenSession(id: SessionID) async {
         guard let idx = sessionIndex[id], sessions[idx].isEnded else { return }
         sessions[idx].endedAt = nil
         activeSessionID = id
+        rebuildDerivedState()
     }
 
     func deleteSession(id: SessionID) async {
@@ -71,6 +110,7 @@ final class MockSessionStore: SessionStoreProtocol {
     func renameSession(id: SessionID, title: String) {
         guard let idx = sessionIndex[id] else { return }
         sessions[idx].title = title
+        rebuildDerivedState()
     }
 
     func updateWorkingDirectory(id: SessionID, path: String) {
@@ -81,11 +121,13 @@ final class MockSessionStore: SessionStoreProtocol {
     func pinSession(id: SessionID) {
         guard let idx = sessionIndex[id] else { return }
         sessions[idx].isPinned = true
+        rebuildDerivedState()
     }
 
     func unpinSession(id: SessionID) {
         guard let idx = sessionIndex[id] else { return }
         sessions[idx].isPinned = false
+        rebuildDerivedState()
     }
 
     func setColorLabel(id: SessionID, label: SessionColorLabel) {
@@ -131,6 +173,7 @@ final class MockSessionStore: SessionStoreProtocol {
         sessions.append(record)
         sessionIndex[record.id] = sessions.count - 1
         activeSessionID = record.id
+        rebuildDerivedState()
     }
 
     func navigateToParent(of sessionID: SessionID) {

@@ -5,6 +5,11 @@ private let logger = Logger(subsystem: "com.termura.app", category: "TerminalEng
 
 /// Maps SessionID → TerminalEngine. Owns engine lifecycle.
 /// Kept separate from SessionStore to respect single-responsibility.
+///
+/// `@Observable` is required: `terminalView(for:)` reads `engines` during SwiftUI body
+/// evaluation. Without observation tracking, engine creation after the debounce never
+/// triggers a re-render, leaving the content area stuck on the empty state.
+@Observable
 @MainActor
 final class TerminalEngineStore {
     private var engines: [SessionID: any TerminalEngine] = [:]

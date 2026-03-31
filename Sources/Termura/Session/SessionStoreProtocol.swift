@@ -6,6 +6,12 @@ import Foundation
 protocol SessionStoreProtocol: AnyObject, Sendable {
     var sessions: [SessionRecord] { get }
     var activeSessionID: SessionID? { get }
+    /// Cached derived lists — rebuilt in one O(n) pass on every sessions mutation.
+    var activeSessions: [SessionRecord] { get }
+    var pinnedSessions: [SessionRecord] { get }
+    var sessionTreeNodes: [SessionTreeNode] { get }
+    var endedSessions: [SessionRecord] { get }
+    var sessionTitles: [SessionID: String] { get }
     /// Fires once when persisted sessions have finished loading. Use to gate
     /// startup logic that requires the session list to be populated.
     var sessionsLoaded: AnyPublisher<Void, Never> { get }

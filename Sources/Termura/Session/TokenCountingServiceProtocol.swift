@@ -12,6 +12,9 @@ protocol TokenCountingServiceProtocol: Actor {
     func estimatedTokens(for sessionID: SessionID) -> Int
     /// Breakdown of estimated tokens by category.
     func tokenBreakdown(for sessionID: SessionID) -> TokenEstimateBreakdown
+    /// Override heuristic accumulation with authoritative parsed token stats.
+    /// Called when accurate input/output/cache counts are extracted from agent output.
+    func applyParsedStats(for sessionID: SessionID, inputTokens: Int, outputTokens: Int, cachedTokens: Int)
     /// Reset accumulated counts for a session.
     func reset(for sessionID: SessionID)
 }
