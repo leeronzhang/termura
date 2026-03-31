@@ -46,8 +46,8 @@ struct TerminalAreaView: View {
     @State var localUI = LocalUIState()
     /// Token returned by NSEvent.addLocalMonitorForEvents; retained for removal on disappear.
     /// Apple's API returns `Any?` — no stronger type available.
-    @State private var keyEventMonitor: NSEventMonitorToken?
-    @State private var mouseEventMonitor: NSEventMonitorToken?
+    @State var keyEventMonitor: NSEventMonitorToken?
+    @State var mouseEventMonitor: NSEventMonitorToken?
 
     /// Shared handle — lives in SessionViewState so MainView can access it for the Composer.
     var editorHandle: EditorViewHandle { state.editorHandle }
@@ -69,14 +69,26 @@ struct TerminalAreaView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: notesViewModel.toastMessage != nil)
+            .overlay(alignment: .bottom) {
+                if let risk = state.viewModel.pendingRiskAlert {
+                    RiskAlertBannerView(
+                        alert: risk,
+                        onStopAgent: {
+                            state.viewModel.dismissRiskAlert()
+                            let eng = engine
+                            Task { await eng.send("\u{03}") }
+                        },
+                        onAllow: { state.viewModel.dismissRiskAlert() }
+                    )
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: state.viewModel.pendingRiskAlert != nil)
             .onAppear { onViewAppear() }
             .onDisappear { removeKeyRouter() }
             .modifier(TerminalAreaSheets(
-                riskAlert: $state.viewModel.pendingRiskAlert,
                 contextWindowAlert: $state.viewModel.contextWindowAlert,
                 showExportSheet: $localUI.showExportSheet,
                 showContextSheet: $localUI.showContextSheet,
-                engine: engine,
                 sessionID: sessionID,
                 sessionStore: sessionScope.store,
                 outputStore: outputStore,
@@ -84,10 +96,25 @@ struct TerminalAreaView: View {
             ))
             .onChange(of: outputStore.chunks.count) { old, new in
                 guard new > old, let latest = outputStore.chunks.last else { return }
-                timeline.append(latest)
+                timeline.append(latest, startLine: engine.currentScrollLine())
             }
             .onChange(of: viewModel.currentMetadata.workingDirectory) { _, _ in
                 checkContextFileExists()
+            }
+            .onChange(of: sessionScope.store.sessions.count) { old, new in
+                guard new > old else { return }
+                let sid = sessionID
+                let tl = timeline
+                let added = sessionScope.store.sessions.suffix(new - old)
+                for session in added {
+                    guard session.parentID == sid else { continue }
+                    let marker = BranchPointMarker(
+                        branchID: session.id,
+                        branchType: session.branchType,
+                        createdAt: session.createdAt
+                    )
+                    tl.addBranchMarker(at: tl.turns.indices.last ?? 0, marker: marker)
+                }
             }
     }
 
@@ -107,8 +134,9 @@ struct TerminalAreaView: View {
                     )
                     SessionMetadataBarView(
                         metadata: viewModel.currentMetadata,
+                        sessionTitle: sessionScope.store.sessionTitles[sessionID] ?? "Session",
                         timeline: timeline,
-                        onSelectChunkID: { _ in }
+                        onSelectChunkID: scrollToChunk
                     )
                     .frame(width: localUI.metadataPanelWidth)
                 }
@@ -170,6 +198,14 @@ struct TerminalAreaView: View {
         }
     }
 
+    /// Scrolls the terminal to the position where the chunk with the given ID starts.
+    /// No-op if the turn has no recorded startLine (e.g., captured before this feature existed).
+    func scrollToChunk(_ chunkID: UUID) {
+        guard let turn = timeline.turns.first(where: { $0.chunkID == chunkID }),
+              let line = turn.startLine else { return }
+        Task { await engine.scrollToLine(line) }
+    }
+
     private func checkContextFileExists() {
         let dir = viewModel.currentMetadata.workingDirectory
         guard !dir.isEmpty else {
@@ -187,111 +223,4 @@ struct TerminalAreaView: View {
         }
     }
 
-    // MARK: - Key routing
-
-    /// Ensures focus always lands on EditorTextView when a key is pressed.
-    /// Ctrl+letter and Escape are handled by EditorTextView.keyDown → PTY directly.
-    ///
-    /// `NSEvent.addLocalMonitorForEvents` monitors the *current thread's* run loop.
-    /// Since we install from the main thread, the callback always fires on main.
-    /// `dispatchPrecondition` asserts this at runtime in DEBUG builds.
-    private func installKeyRouter() {
-        let modeCtrl = modeController
-        let termEngine = engine
-        let router = commandRouter
-        let sid = sessionID
-        let handle = editorHandle
-        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            dispatchPrecondition(condition: .onQueue(.main))
-
-            // In dual-pane mode, only the focused pane handles key events.
-            if router.isDualPaneActive, router.focusedDualPaneID != sid {
-                return event
-            }
-
-            guard let window = NSApp.keyWindow else { return event }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            // Intercept Cmd+K directly to toggle composer.
-            if flags == .command, event.charactersIgnoringModifiers == "k" {
-                router.toggleComposer()
-                return nil
-            }
-            // Escape closes composer (without clearing text).
-            if router.showComposer, event.keyCode == 53 {
-                router.dismissComposer()
-                return nil
-            }
-            // Defense-in-depth: when Composer is open and the user pastes (Cmd+V),
-            // ensure EditorTextView has first responder before the event is dispatched.
-            // This MUST run before the generic Cmd early-exit below — otherwise Cmd+V
-            // exits early and the event lands in whatever view currently holds focus
-            // (often the terminal PTY after a submit), silently discarding the image.
-            // Reproduces on first auto-resume: focusEditor() delay hasn't finished yet
-            // when the user pastes, so the terminal still owns first responder.
-            if router.showComposer,
-               flags == .command,
-               event.charactersIgnoringModifiers == "v",
-               let textView = handle.textView,
-               window.firstResponder !== textView {
-                window.makeFirstResponder(textView)
-            }
-            // Let other Cmd-key shortcuts pass through to the menu system.
-            if flags.contains(.command) { return event }
-            // When Composer is open, let all events flow to the Composer's views.
-            if router.showComposer {
-                return event
-            }
-            // In passthrough mode route keys to the terminal.
-            if modeCtrl.mode == .passthrough {
-                let termView = termEngine.terminalNSView
-                if window.firstResponder !== termView {
-                    window.makeFirstResponder(termView)
-                }
-                termView.keyDown(with: event)
-                return nil
-            }
-            return event
-        }
-        // Mouse monitor: dual-pane focus tracking only.
-        // Composer backdrop dismissal is handled by AppKitClickableOverlay (TerminalAreaView+Subviews).
-        //
-        // Invariant: while showComposer == true, focusedDualPaneID must not change.
-        // Shifting focus to another pane would (a) visually move the composer to that
-        // pane and (b) give the terminal NSView first responder, causing Cmd+V paste
-        // to land in the PTY instead of the composer editor.
-        mouseEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-            if router.isDualPaneActive {
-                let termView = termEngine.terminalNSView
-                let loc = termView.convert(event.locationInWindow, from: nil)
-                if termView.bounds.contains(loc) {
-                    // Don't shift pane focus or give the terminal first responder while
-                    // the composer is open in the currently focused pane.
-                    if router.showComposer && router.focusedDualPaneID != sid {
-                        return event
-                    }
-                    router.focusedDualPaneID = sid
-                    if let window = termView.window, window.firstResponder !== termView {
-                        window.makeFirstResponder(termView)
-                    }
-                }
-            }
-            return event
-        }
-    }
-
-    private func removeKeyRouter() {
-        // Do NOT nil editorViewModel.onSubmit here.
-        // onSubmit is wired at session-view level (stable across Composer cycles)
-        // and uses [weak router] — no retain cycle, no stale-dismiss risk.
-        // Clearing it here causes the composer to stay open if TerminalAreaView
-        // briefly disappears and reappears while the composer is in use.
-        if let monitor = keyEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            keyEventMonitor = nil
-        }
-        if let monitor = mouseEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            mouseEventMonitor = nil
-        }
-    }
 }
