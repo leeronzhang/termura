@@ -4,7 +4,7 @@ import SwiftUI
 struct AppCommands: Commands {
     // Injected directly from TermuraApp to avoid NSApp.delegate as? AppDelegate,
     // which returns nil when SwiftUI wraps the adaptor in an internal type.
-    let appDelegate: AppDelegate
+    let dispatcher: any AppCommandDispatcher
 
     var body: some Commands {
         sessionCommands
@@ -19,7 +19,7 @@ struct AppCommands: Commands {
     private var sessionCommands: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Session") {
-                appDelegate.activeContext?.sessionScope.store.createSession(title: "Terminal")
+                dispatcher.createNewSession()
             }
             .keyboardShortcut("t", modifiers: .command)
 
@@ -34,27 +34,26 @@ struct AppCommands: Commands {
     private var toolCommands: some Commands {
         CommandGroup(after: .newItem) {
             Button("Open Project\u{2026}") {
-                appDelegate.showProjectPicker()
+                dispatcher.showProjectPicker()
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])
 
             Divider()
 
             Button("Search\u{2026}") {
-                appDelegate.activeContext?.commandRouter.requestSearch()
+                dispatcher.requestSearch()
             }
             .keyboardShortcut("f", modifiers: [.command, .shift])
 
             Button("New Note") {
-                appDelegate.activeContext?.commandRouter.pendingCommand = .createNote
+                dispatcher.createNote()
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
 
             Divider()
 
             Button("Export Session\u{2026}") {
-                guard let id = appDelegate.activeContext?.sessionScope.store.activeSessionID else { return }
-                appDelegate.activeContext?.commandRouter.requestExport(sessionID: id)
+                dispatcher.exportActiveSession()
             }
             .keyboardShortcut("e", modifiers: [.command, .shift])
 
@@ -65,7 +64,7 @@ struct AppCommands: Commands {
             Divider()
 
             Button("Harness Rules\u{2026}") {
-                appDelegate.activeContext?.commandRouter.requestHarness()
+                dispatcher.requestHarness()
             }
             .keyboardShortcut("h", modifiers: [.command, .shift])
 
@@ -78,29 +77,39 @@ struct AppCommands: Commands {
     @ViewBuilder
     private var splitAndToggleButtons: some View {
         Button("Toggle Dual Pane") {
-            appDelegate.activeContext?.commandRouter.toggleDualPane()
+            dispatcher.toggleDualPane()
         }
         .keyboardShortcut("d", modifiers: .command)
+
+        Button("Focus Left Pane") {
+            dispatcher.focusDualPane(slot: .left)
+        }
+        .keyboardShortcut(.leftArrow, modifiers: .control)
+
+        Button("Focus Right Pane") {
+            dispatcher.focusDualPane(slot: .right)
+        }
+        .keyboardShortcut(.rightArrow, modifiers: .control)
 
         Divider()
 
         Button("Toggle Inspector") {
-            appDelegate.activeContext?.commandRouter.toggleSessionInfo()
+            dispatcher.toggleSessionInfo()
         }
         .keyboardShortcut("i", modifiers: [.command, .shift])
 
         Button("Toggle Agent Dashboard") {
-            appDelegate.activeContext?.commandRouter.toggleAgentDashboard()
+            dispatcher.toggleAgentDashboard()
         }
         .keyboardShortcut("a", modifiers: [.command, .shift])
 
         Button("Toggle Composer") {
-            appDelegate.activeContext?.commandRouter.toggleComposer()
+            dispatcher.toggleComposer()
         }
         .keyboardShortcut("k", modifiers: [.command])
 
         Button("Toggle Composer with Notes") {
-            appDelegate.activeContext?.commandRouter.toggleComposerWithNotes()
+            dispatcher.toggleComposerWithNotes()
         }
         .keyboardShortcut("k", modifiers: [.command, .shift])
 
@@ -108,7 +117,7 @@ struct AppCommands: Commands {
 
         Button("Toggle Sidebar") {
             withAnimation(.easeInOut(duration: AppUI.Animation.panel)) {
-                appDelegate.activeContext?.commandRouter.toggleSidebar()
+                dispatcher.toggleSidebar()
             }
         }
         .keyboardShortcut("b", modifiers: .command)
@@ -119,17 +128,17 @@ struct AppCommands: Commands {
     private var viewCommands: some Commands {
         CommandGroup(after: .toolbar) {
             Button("Zoom In") {
-                appDelegate.services.fontSettings.zoomIn()
+                dispatcher.zoomIn()
             }
             .keyboardShortcut("+", modifiers: .command)
 
             Button("Zoom Out") {
-                appDelegate.services.fontSettings.zoomOut()
+                dispatcher.zoomOut()
             }
             .keyboardShortcut("-", modifiers: .command)
 
             Button("Actual Size") {
-                appDelegate.services.fontSettings.resetZoom()
+                dispatcher.resetZoom()
             }
             .keyboardShortcut("0", modifiers: .command)
         }
@@ -153,7 +162,7 @@ struct AppCommands: Commands {
     private var sidebarTabShortcuts: some View {
         ForEach(Array(SidebarTab.allCases.enumerated()), id: \.offset) { index, tab in
             Button(tab.label) {
-                appDelegate.activeContext?.commandRouter.selectedSidebarTab = tab
+                dispatcher.selectSidebarTab(tab)
             }
             .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
         }
@@ -164,7 +173,7 @@ struct AppCommands: Commands {
     private var sessionIndexShortcuts: some View {
         ForEach(0..<9, id: \.self) { index in
             Button("Switch to Session \(index + 1)") {
-                appDelegate.activeContext?.commandRouter.pendingCommand = .selectSession(index: index)
+                dispatcher.selectSession(at: index)
             }
             .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .control)
         }
@@ -174,12 +183,12 @@ struct AppCommands: Commands {
     @ViewBuilder
     private var contentTabCycleShortcuts: some View {
         Button("Previous Tab") {
-            appDelegate.activeContext?.commandRouter.pendingCommand = .cycleContentTab(forward: false)
+            dispatcher.cycleContentTab(forward: false)
         }
         .keyboardShortcut("[", modifiers: [.command, .shift])
 
         Button("Next Tab") {
-            appDelegate.activeContext?.commandRouter.pendingCommand = .cycleContentTab(forward: true)
+            dispatcher.cycleContentTab(forward: true)
         }
         .keyboardShortcut("]", modifiers: [.command, .shift])
     }
@@ -189,16 +198,14 @@ struct AppCommands: Commands {
     private var alertAndMergeCommands: some Commands {
         CommandGroup(after: .undoRedo) {
             Button("Jump to Next Alert") {
-                guard let ctx = appDelegate.activeContext,
-                      let targetID = ctx.sessionScope.agentStates.nextAttentionSessionID else { return }
-                ctx.sessionScope.store.activateSession(id: targetID)
+                dispatcher.jumpToNextAlert()
             }
             .keyboardShortcut("u", modifiers: [.command, .shift])
 
             Divider()
 
             Button("Merge Branch Summary\u{2026}") {
-                appDelegate.activeContext?.commandRouter.requestBranchMerge()
+                dispatcher.requestBranchMerge()
             }
             .keyboardShortcut("m", modifiers: [.command, .shift])
         }
@@ -209,11 +216,7 @@ struct AppCommands: Commands {
         Menu("New Branch") {
             ForEach(BranchType.allCases.filter { $0 != .main }, id: \.self) { type in
                 Button(type.rawValue.capitalized) {
-                    guard let store = appDelegate.activeContext?.sessionScope.store,
-                          let id = store.activeSessionID else { return }
-                    Task { @MainActor in
-                        await store.createBranch(from: id, type: type)
-                    }
+                    dispatcher.createBranch(type: type)
                 }
             }
         }
