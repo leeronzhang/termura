@@ -34,6 +34,10 @@ final class NotesViewModel {
     /// Tracks the pendingWrites key for the current in-flight note save so that
     /// a new save can cancel the prior one instead of stacking up duplicate writes.
     private var noteSavePendingID: UUID?
+    /// Transient message shown in a toast banner after a silent note creation (e.g. "Send to Notes").
+    /// Nil when no toast is active.
+    var toastMessage: String?
+    @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
 
     init(repository: any NoteRepositoryProtocol) {
         self.repository = repository
@@ -41,6 +45,7 @@ final class NotesViewModel {
 
     deinit {
         autoSaveTask?.cancel()
+        toastDismissTask?.cancel()
         pendingWrites.values.forEach { $0.cancel() }
     }
 
@@ -71,6 +76,33 @@ final class NotesViewModel {
             try await repository.save(note)
         }
         return note
+    }
+
+    /// Creates and persists a note without modifying the current selection or editing state.
+    /// Used when programmatically inserting notes (e.g. "Send to Notes" from terminal context menu)
+    /// so the user's active note editing session is not interrupted.
+    func silentlyCreateNote(title: String, body: String) {
+        let note = NoteRecord(title: title, body: body)
+        notes.insert(note, at: 0)
+        persistTracked { [repository] in
+            try await repository.save(note)
+        }
+    }
+
+    /// Shows a transient toast banner with `message` and auto-dismisses after the configured delay.
+    /// Cancels any in-flight dismiss task before scheduling a new one.
+    func showToast(_ message: String) {
+        toastDismissTask?.cancel()
+        toastMessage = message
+        toastDismissTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: AppConfig.Runtime.toastAutoDismiss)
+                self?.toastMessage = nil
+            } catch {
+                // Non-critical: cancellation is expected when showToast is called again
+                // before the previous toast expires; the newer task handles dismissal.
+            }
+        }
     }
 
     func selectNote(id: NoteID) {

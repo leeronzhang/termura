@@ -89,6 +89,30 @@ final class EditorTextView: NSTextView {
         return super.performDragOperation(sender)
     }
 
+    // MARK: - Paste override
+
+    /// Intercepts Cmd+V to capture clipboard images as composer attachments.
+    /// Plain-text paste falls through to NSTextView's default handler.
+    /// Without this override, isRichText=false causes NSTextView to silently
+    /// discard image data — leaving attachments empty and the path missing from submit().
+    override func paste(_ sender: Any?) {
+        let pb = NSPasteboard.general
+        let hasFileURL = pb.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        let hasImage = pb.canReadObject(forClasses: [NSImage.self], options: nil)
+        if !hasFileURL, hasImage,
+           let handler = attachmentDropHandler,
+           let image = NSImage(pasteboard: pb) {
+            do {
+                let url = try saveTemporaryAttachmentImage(image)
+                handler(url, .image, true)
+            } catch {
+                logger.error("Clipboard image paste failed: \(error.localizedDescription)")
+            }
+            return
+        }
+        super.paste(sender)
+    }
+
     // MARK: - Control sequence callback
 
     /// Called when a PTY control sequence is typed (Ctrl+C, Escape, etc.).

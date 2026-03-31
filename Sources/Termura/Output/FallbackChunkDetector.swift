@@ -76,8 +76,8 @@ actor FallbackChunkDetector {
             pendingRawANSI += String(raw.prefix(rawRemaining))
         }
 
-        let lines = stripped.components(separatedBy: "\n")
-        for line in lines {
+        // Use split to get zero-copy Substring views; only allocate String when storing.
+        for line in stripped.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
 
@@ -90,7 +90,7 @@ actor FallbackChunkDetector {
                 currentCommand = extractCommand(from: trimmed)
                 chunkStart = clock.now()
             } else {
-                appendLine(line)
+                appendLine(String(line))
             }
         }
 

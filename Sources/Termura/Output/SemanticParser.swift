@@ -59,7 +59,9 @@ enum SemanticParser {
     }
 
     private static func extractDiffPath(_ text: String) -> String? {
-        for line in text.components(separatedBy: "\n") where line.hasPrefix("+++ b/") {
+        // split returns zero-copy Substrings; no String allocated until a match is found.
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false)
+            where line.hasPrefix("+++ b/") {
             return String(line.dropFirst(6))
         }
         return nil
@@ -87,13 +89,17 @@ enum SemanticParser {
         return lang.isEmpty ? "text" : lang
     }
 
-    /// Tool-call indicator patterns.
+    /// Tool-call indicator patterns (excludes rare-scalar entries; see `isToolCall`).
     static let toolCallIndicators: [String] = [
-        "\u{23FA}", "Tool:", "tool_use"
+        "Tool:", "tool_use"
     ]
 
     private static func isToolCall(_ text: String) -> Bool {
         let sample = String(text.prefix(AppConfig.Output.toolCallDetectionPrefixLength))
+        // Check the rare record-indicator scalar (\u{23FA}) via a scalar walk rather
+        // than a standalone String.contains(), consistent with AgentStateDetector's
+        // agentRareScalars gate. The two common-string indicators follow only if needed.
+        if sample.unicodeScalars.contains("\u{23FA}") { return true }
         return toolCallIndicators.contains { sample.contains($0) }
     }
 }
