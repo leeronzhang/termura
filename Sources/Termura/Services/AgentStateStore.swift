@@ -14,35 +14,53 @@ final class AgentStateStore: AgentStateStoreProtocol {
     /// All detected agent states, keyed by session ID.
     private(set) var agents: [SessionID: AgentState] = [:]
 
-    // MARK: - Computed
+    /// Current time, ticked every `AppConfig.Runtime.agentDurationTickSeconds` while agents are
+    /// active. Views bind to this instead of calling Date() in their render bodies.
+    private(set) var now: Date = Date()
+
+    // MARK: - Tick
+
+    /// Lifecycle slot for the duration-display ticker. nonisolated(unsafe): deinit
+    @ObservationIgnored private var tickTask: Task<Void, Never>?
+
+    private func startTickIfNeeded() {
+        guard tickTask == nil else { return }
+        tickTask = Task { [weak self] in
+            while !Task.isCancelled, let store = self {
+                do {
+                    try await Task.sleep(for: .seconds(AppConfig.Runtime.agentDurationTickSeconds))
+                } catch {
+                    break
+                }
+                store.now = Date()
+            }
+        }
+    }
+
+    private func stopTickIfEmpty() {
+        guard agents.isEmpty else { return }
+        tickTask?.cancel()
+        tickTask = nil
+    }
+
+    // MARK: - Derived state (cached)
+    // All properties below are rebuilt via rebuildDerivedState() on each mutation.
+    // This keeps per-render access O(1) instead of O(n) or O(n log n).
 
     /// Number of sessions with an active agent.
-    var activeAgentCount: Int {
-        agents.values.count(where: { $0.status != .completed })
-    }
+    private(set) var activeAgentCount: Int = 0
 
-    /// Sessions that need user attention (waiting input or error).
-    var sessionsNeedingAttention: [SessionID] {
-        agents.values
-            .filter(\.needsAttention)
-            .sorted { lhs, rhs in
-                Self.attentionPriority(lhs.status) < Self.attentionPriority(rhs.status)
-            }
-            .map(\.sessionID)
-    }
+    /// Agents sorted by display priority (waitingInput > error > thinking > toolRunning > idle > completed).
+    private(set) var sortedAgents: [AgentState] = []
 
-    /// The next session to jump to via Cmd+Shift+U. O(n) — avoids triggering the full sorted chain.
-    var nextAttentionSessionID: SessionID? {
-        agents.values
-            .filter(\.needsAttention)
-            .min(by: { Self.attentionPriority($0.status) < Self.attentionPriority($1.status) })?
-            .sessionID
-    }
+    /// Sessions that need user attention (waiting input or error), sorted by attention priority.
+    private(set) var sessionsNeedingAttention: [SessionID] = []
+
+    /// The next session to jump to via Cmd+Shift+U.
+    private(set) var nextAttentionSessionID: SessionID?
 
     /// Agents approaching their context window limit.
-    var agentsNearingContextLimit: [AgentState] {
-        agents.values.filter(\.isContextWarning)
-    }
+    private(set) var agentsNearingContextLimit: [AgentState] = []
 
     /// Total estimated tokens across all active agents. O(1) — updated incrementally on each mutation.
     private(set) var totalEstimatedTokens: Int = 0
@@ -53,6 +71,8 @@ final class AgentStateStore: AgentStateStoreProtocol {
         let previous = agents[state.sessionID]
         totalEstimatedTokens += state.tokenCount - (previous?.tokenCount ?? 0)
         agents[state.sessionID] = state
+        rebuildDerivedState()
+        startTickIfNeeded()
 
         if previous?.status != state.status {
             logger.info(
@@ -64,14 +84,57 @@ final class AgentStateStore: AgentStateStoreProtocol {
     func remove(sessionID: SessionID) {
         totalEstimatedTokens -= agents[sessionID]?.tokenCount ?? 0
         agents.removeValue(forKey: sessionID)
+        rebuildDerivedState()
+        stopTickIfEmpty()
     }
 
     func clearAll() {
         agents.removeAll()
         totalEstimatedTokens = 0
+        tickTask?.cancel()
+        tickTask = nil
+        rebuildDerivedState()
+    }
+
+    // MARK: - Derived state rebuild
+
+    /// Single O(n) pass through agents that updates all cached derived properties.
+    /// Called once per mutation (update/remove/clearAll) so render-time access is O(1).
+    private func rebuildDerivedState() {
+        var activeCount = 0
+        var attentionAgents: [AgentState] = []
+        var nearingLimit: [AgentState] = []
+
+        for state in agents.values {
+            if state.status != .completed { activeCount += 1 }
+            if state.needsAttention { attentionAgents.append(state) }
+            if state.isContextWarning { nearingLimit.append(state) }
+        }
+
+        attentionAgents.sort { Self.attentionPriority($0.status) < Self.attentionPriority($1.status) }
+
+        activeAgentCount = activeCount
+        sortedAgents = agents.values.sorted { lhs, rhs in
+            let lp = Self.sortPriority(lhs), rp = Self.sortPriority(rhs)
+            return lp != rp ? lp < rp : lhs.startedAt > rhs.startedAt
+        }
+        sessionsNeedingAttention = attentionAgents.map(\.sessionID)
+        nextAttentionSessionID = attentionAgents.first?.sessionID
+        agentsNearingContextLimit = nearingLimit
     }
 
     // MARK: - Priority
+
+    private static func sortPriority(_ agent: AgentState) -> Int {
+        switch agent.status {
+        case .waitingInput: 0
+        case .error: 1
+        case .thinking: 2
+        case .toolRunning: 3
+        case .idle: 4
+        case .completed: 5
+        }
+    }
 
     private static func attentionPriority(_ status: AgentStatus) -> Int {
         switch status {

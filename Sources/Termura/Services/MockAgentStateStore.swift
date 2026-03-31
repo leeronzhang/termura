@@ -17,6 +17,10 @@ final class MockAgentStateStore: AgentStateStoreProtocol {
         agents.values.count(where: { $0.status == .thinking || $0.status == .toolRunning })
     }
 
+    var sortedAgents: [AgentState] {
+        agents.values.sorted { $0.startedAt < $1.startedAt }
+    }
+
     var sessionsNeedingAttention: [SessionID] {
         agents.values
             .filter { $0.status == .waitingInput || $0.status == .error }
@@ -36,6 +40,7 @@ final class MockAgentStateStore: AgentStateStoreProtocol {
     }
 
     private(set) var totalEstimatedTokens: Int = 0
+    var now: Date = Date()
 
     func update(state: AgentState) {
         updateCallCount += 1

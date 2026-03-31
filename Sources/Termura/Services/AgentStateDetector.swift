@@ -3,10 +3,9 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "AgentStateDetector")
 
-/// Precompiled regex patterns for parsing token stats from agent output.
-/// Hard-coded patterns are guaranteed well-formed; a compilation failure here would
-/// indicate a system-level issue (e.g. ICU library missing). Falls back to a match-nothing
-/// regex so the app degrades gracefully instead of crashing in production.
+/// Precompiled regex patterns for token stats parsing.
+/// Hard-coded patterns should never fail; falls back to a match-nothing regex so the
+/// app degrades gracefully instead of crashing in production.
 private enum TokenStatRegex {
     static let cost = compile("Total cost:\\s*\\$([\\d.]+)")
     static let input = compile("Input:\\s*([\\d,.]+)k?")
@@ -36,11 +35,11 @@ actor AgentStateDetector {
     private var lastStatusChange: Date?
     private var parsedCost: Double = 0
     private let sessionID: SessionID
+    private let clock: any AppClock
     /// Last file path detected from "Writing to <path>" output; cleared on non-toolRunning transitions.
     private var activeFilePath: String?
 
-    /// Valid state transitions — prevents impossible jumps
-    /// (e.g. idle -> completed without going through thinking first).
+    /// Valid state transitions — prevents impossible jumps between non-adjacent states.
     private static let validTransitions: [AgentStatus: Set<AgentStatus>] = [
         .idle: [.thinking, .toolRunning, .waitingInput, .error],
         .thinking: [.toolRunning, .waitingInput, .completed, .error, .idle],
@@ -50,8 +49,9 @@ actor AgentStateDetector {
         .error: [.idle, .thinking, .toolRunning, .waitingInput]
     ]
 
-    init(sessionID: SessionID) {
+    init(sessionID: SessionID, clock: any AppClock = LiveClock()) {
         self.sessionID = sessionID
+        self.clock = clock
     }
 
     // MARK: - Command Detection
@@ -89,24 +89,23 @@ actor AgentStateDetector {
 
     // MARK: - Output Analysis
 
-    /// Analyze a batch of terminal output to update agent status.
-    /// Rule table evaluated top-to-bottom (first match wins); cooldown and state-transition constraints suppress noise.
-    func analyzeOutput(_ text: String) {
-        guard detectedType != nil else { return }
+    /// Analyze a batch of terminal output; returns current status after processing.
+    @discardableResult func analyzeOutput(_ text: String) -> AgentStatus {
+        guard detectedType != nil else { return currentStatus }
         let maxLen = AppConfig.Agent.outputAnalysisSuffixLength
         let sample = text.count > maxLen ? String(text.suffix(maxLen)) : text
         let lowercasedSample = sample.lowercased()
 
         guard let matched = evaluateRules(sample, lowercased: lowercasedSample),
-              matched != currentStatus else { return }
+              matched != currentStatus else { return currentStatus }
 
         // Enforce valid state transitions.
-        guard Self.validTransitions[currentStatus]?.contains(matched) ?? false else { return }
+        guard Self.validTransitions[currentStatus]?.contains(matched) ?? false else { return currentStatus }
 
         // Enforce cooldown between transitions to avoid flip-flopping on noisy output.
-        let now = Date()
+        let now = clock.now()
         if let last = lastStatusChange,
-           now.timeIntervalSince(last) < AppConfig.Agent.statusChangeCooldown { return }
+           now.timeIntervalSince(last) < AppConfig.Agent.statusChangeCooldown { return currentStatus }
 
         currentStatus = matched
         lastStatusChange = now
@@ -118,6 +117,7 @@ actor AgentStateDetector {
         } else if matched == .idle || matched == .completed || matched == .error {
             activeFilePath = nil
         }
+        return currentStatus
     }
 
     /// Build a full AgentState snapshot.
@@ -151,6 +151,14 @@ actor AgentStateDetector {
     /// Parse token usage and cost from agent output text.
     /// Returns nil if no recognizable token stats are found.
     func parseTokenStats(_ text: String) -> ParsedTokenStats? {
+        // Fast-path: token stats are rare (agent completion only). Skip all 4 regex
+        // calls unless at least one anchor keyword is present. Uses the same
+        // case-insensitive matching as the compiled patterns below.
+        guard text.localizedCaseInsensitiveContains("Total cost:")
+            || text.localizedCaseInsensitiveContains("Cache read:") else {
+            return nil
+        }
+
         var stats = ParsedTokenStats()
         var found = false
 
@@ -233,9 +241,7 @@ actor AgentStateDetector {
         ("pi-agent", .pi)
     ]
 
-    /// Ordered rule table for status detection. Evaluated top-to-bottom;
-    /// first match wins. Higher-priority statuses appear earlier.
-    /// Each rule is independently testable via `StatusRule.matches(_:)`.
+    /// Ordered rule table — evaluated top-to-bottom, first match wins; each rule is independently testable.
     static let statusRules: [StatusRule] = [
         // -- waitingInput: highest priority (user action required) --
         StatusRule(.waitingInput, .suffix("> "), label: "prompt-suffix"),
@@ -281,11 +287,13 @@ actor AgentStateDetector {
         map[entry.key] = statusRules.filter { entry.value.contains($0.status) }
     }
 
-    /// Evaluates only the rules reachable from `currentStatus`, using a pre-lowercased sample.
+    /// Evaluates reachable rules; one scalar walk gates all rare-char rules, skipping their contains() on ~95% of packets.
     private func evaluateRules(_ text: String, lowercased lowercasedText: String) -> AgentStatus? {
         let rules = Self.reachableRules[currentStatus] ?? Self.statusRules
-        for rule in rules where rule.matchesFast(text, lowercased: lowercasedText) {
-            return rule.status
+        let hasRareScalar = text.unicodeScalars.contains(where: StatusRule.agentRareScalars.contains)
+        for rule in rules {
+            if rule.isRareUnicodeRule && !hasRareScalar { continue }
+            if rule.matchesFast(text, lowercased: lowercasedText) { return rule.status }
         }
         return nil
     }

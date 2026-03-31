@@ -30,36 +30,43 @@ actor GitService: GitServiceProtocol {
         defer { signposter.endInterval("GitStatus", state) }
         logger.debug("GitService.status dir=\(directory) trace=\(traceLabel)")
 
+        // Launch all three git commands concurrently — no data dependencies between them.
+        // If status exits 128 (not a repo), the other two async let tasks are implicitly
+        // cancelled on early return; withTaskCancellationHandler terminates child processes.
+        async let statusFuture = run(
+            ["status", "--porcelain=v1", "-b", "--no-renames"],
+            at: directory
+        )
+        async let logFuture = run(
+            ["log", "-1", "--oneline", "--no-decorate"],
+            at: directory
+        )
+        async let remoteFuture = run(
+            ["remote", "get-url", "origin"],
+            at: directory
+        )
+
         let output: String
         do {
-            output = try await run(
-                ["status", "--porcelain=v1", "-b", "--no-renames"],
-                at: directory
-            )
+            output = try await statusFuture
         } catch GitServiceError.commandFailed(_, let code, _) where Self.isNotARepoExitCode(code) {
             return .notARepo
         }
         var result = Self.parse(porcelain: output)
 
-        // Fetch last commit message (non-fatal if fails, e.g. empty repo)
+        // Collect last commit message (non-fatal if fails, e.g. empty repo)
         do {
-            let logLine = try await run(
-                ["log", "-1", "--oneline", "--no-decorate"],
-                at: directory
-            )
+            let logLine = try await logFuture
             let trimmed = logLine.trimmingCharacters(in: .whitespacesAndNewlines)
             result.lastCommit = trimmed.isEmpty ? nil : trimmed
         } catch {
             logger.debug("Could not read last commit: \(error.localizedDescription)")
         }
 
-        // Fetch remote host label
+        // Collect remote host label (non-fatal if no remote configured)
         do {
-            let url = try await run(
-                ["remote", "get-url", "origin"],
-                at: directory
-            ).trimmingCharacters(in: .whitespacesAndNewlines)
-            result.remoteHost = Self.parseRemoteHost(from: url)
+            let url = try await remoteFuture
+            result.remoteHost = Self.parseRemoteHost(from: url.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
             logger.debug("No remote origin: \(error.localizedDescription)")
         }

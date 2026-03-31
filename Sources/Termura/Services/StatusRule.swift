@@ -25,6 +25,27 @@ struct StatusRule: Sendable {
         pattern.evaluateFast(text, lowercased: lowercasedText)
     }
 
+    /// Unicode scalars that appear exclusively in agent output and never in ordinary
+    /// shell or compiler output. A single `unicodeScalars.contains(where:)` walk gates
+    /// all rules whose needle is one of these scalars, replacing N separate
+    /// `String.contains()` calls with one O(n) scalar scan.
+    static let agentRareScalars: Set<Unicode.Scalar> = [
+        "\u{23FA}", // record indicator  (toolRunning)
+        "\u{2713}", // check mark        (completed)
+        "\u{280B}", // braille spinner   (thinking)
+        "\u{2819}", // braille spinner   (thinking)
+        "\u{2839}"  // braille spinner   (thinking)
+    ]
+
+    /// True when this rule's needle is a single rare Unicode scalar that can be gated
+    /// behind the shared `agentRareScalars` pre-scan in `AgentStateDetector.evaluateRules`.
+    var isRareUnicodeRule: Bool {
+        guard case let .contains(needle) = pattern,
+              needle.unicodeScalars.count == 1,
+              let scalar = needle.unicodeScalars.first else { return false }
+        return Self.agentRareScalars.contains(scalar)
+    }
+
     /// Pattern types for flexible matching.
     enum Pattern: Sendable {
         case contains(String)

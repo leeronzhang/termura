@@ -53,10 +53,12 @@ actor AgentCoordinator {
 
     // MARK: - Agent detection state
 
+    /// Rolling detection window stored in lowercase. A single lowercased buffer replaces the
+    /// previous original-case + lowercase-mirror pair: the original-case copy was never read
+    /// for detection logic, making it a pure allocation cost on every PTY packet.
+    /// Trim is amortized: the buffer grows to 2×maxLen before being cut back to maxLen,
+    /// halving the frequency of O(n) String copies versus trimming on every overflow.
     var agentDetectionBuffer = ""
-    /// Mirrors `agentDetectionBuffer` but stored lowercased, updated incrementally.
-    /// Avoids re-lowercasing the entire accumulated buffer on every PTY packet.
-    private var agentDetectionBufferLower = ""
     var hasDetectedAgentFromOutput = false
     var lastDetectedAgentType: AgentType?
 
@@ -121,11 +123,13 @@ actor AgentCoordinator {
     /// `await detectAgentFromOutput`. Both the guard and the mutation execute inside
     /// the actor without a suspension point between them.
     ///
-    /// This is the hot path: called for every PTY packet. When the agent is already
-    /// detected the guard exits synchronously and the single actor hop is the only cost.
-    func detectAgentFromOutputIfNeeded(_ text: String) async {
-        guard !hasDetectedAgentFromOutput else { return }
+    /// Returns `true` once detection is confirmed (either already was, or just occurred),
+    /// so callers can cache the result and skip future hops (CLAUDE.md P2-15).
+    @discardableResult
+    func detectAgentFromOutputIfNeeded(_ text: String) async -> Bool {
+        guard !hasDetectedAgentFromOutput else { return true }
         await detectAgentFromOutput(text)
+        return hasDetectedAgentFromOutput
     }
 
     /// Scan terminal output for agent signatures and update session when detected.
@@ -147,27 +151,45 @@ actor AgentCoordinator {
         }
     }
 
-    /// Appends `text` to the rolling detection buffer, trims it to the configured
-    /// suffix window, then returns the first newly matched agent type.
-    /// Returns `nil` if the buffer yields no match, or if the match duplicates the
-    /// already-known agent type (dedup guard).
+    /// Appends `text` to the rolling detection buffer, trims it when the amortized
+    /// threshold is reached, then returns the first newly matched agent type.
+    /// Returns `nil` if no match is found, or the match is a duplicate of the already-known
+    /// agent type (dedup guard).
     ///
     /// This is a **synchronous** function with no suspension points. All writes to
     /// `agentDetectionBuffer`, `hasDetectedAgentFromOutput`, and `lastDetectedAgentType`
     /// happen here, atomically from the perspective of the actor executor.
+    ///
+    /// Allocation profile:
+    /// - Per packet: one O(chunk) `lowercased()` append — unavoidable.
+    /// - O(maxLen) trim copy: amortized once per maxLen bytes of input (2x threshold),
+    ///   vs. once per packet in the previous dual-buffer approach.
     private func bufferAndDetect(_ text: String) -> AgentType? {
         let maxLen = AppConfig.Agent.outputAnalysisSuffixLength
-        // Append only the new chunk to both buffers. Lowercase only the incoming text
-        // (O(new_chunk)) rather than re-lowercasing the entire accumulated buffer (O(maxLen))
-        // on every PTY packet — this is a hot path called for every byte of terminal output.
-        agentDetectionBuffer += text
-        agentDetectionBufferLower += text.lowercased()
-        // Trim both buffers in sync when the suffix window is exceeded.
-        if agentDetectionBuffer.count > maxLen {
-            agentDetectionBuffer = String(agentDetectionBuffer.suffix(maxLen))
-            agentDetectionBufferLower = String(agentDetectionBufferLower.suffix(maxLen))
+        // Pre-allocate backing storage on first use and after each reset to "".
+        // reserveCapacity avoids repeated reallocations during the growth phase;
+        // the in-place removeFirst below reuses the same backing store instead of
+        // copy-assigning a new String, eliminating the allocation spike at trim time.
+        if agentDetectionBuffer.isEmpty {
+            agentDetectionBuffer.reserveCapacity(2 * maxLen)
         }
-        for (pattern, type) in Self.outputSignatures where agentDetectionBufferLower.contains(pattern) {
+        // Append only the lowercased new chunk (O(chunk)).
+        // The buffer stores lowercase content; original-case copy is not needed
+        // because all pattern matching operates on lowercased text.
+        agentDetectionBuffer += text.lowercased()
+        // In-place trim: removeFirst shifts content within the existing backing store
+        // (no new String allocation), whereas String(suffix(maxLen)) would allocate a
+        // second maxLen buffer while the old one is still retained — peak 2x.
+        // Amortised at 2x threshold: trim frequency is halved vs. trimming on every overflow.
+        if agentDetectionBuffer.count > 2 * maxLen {
+            agentDetectionBuffer.removeFirst(agentDetectionBuffer.count - maxLen)
+        }
+        // Scan only the last maxLen characters as the detection window.
+        // The buffer holds at most 2*maxLen chars; suffix view is O(1) index computation.
+        let window = agentDetectionBuffer.count <= maxLen
+            ? agentDetectionBuffer[...]
+            : agentDetectionBuffer.suffix(maxLen)
+        for (pattern, type) in Self.outputSignatures where window.contains(pattern) {
             if hasDetectedAgentFromOutput, lastDetectedAgentType == type { return nil }
             hasDetectedAgentFromOutput = true
             lastDetectedAgentType = type
@@ -192,7 +214,16 @@ actor AgentCoordinator {
 
         await detector.analyzeOutput(stripped)
         if let stats = await detector.parseTokenStats(stripped) {
-            if let cached = stats.cachedTokens, cached > 0 {
+            if let input = stats.inputTokens, let output = stats.outputTokens {
+                // Parsed stats are authoritative — override heuristic accumulation for all
+                // three categories so Input/Output/Cache reflect actual API usage, not estimates.
+                await tokenCountingService.applyParsedStats(
+                    for: sid,
+                    inputTokens: input,
+                    outputTokens: output,
+                    cachedTokens: stats.cachedTokens ?? 0
+                )
+            } else if let cached = stats.cachedTokens, cached > 0 {
                 await tokenCountingService.accumulateCached(for: sid, count: cached)
             }
             if let cost = stats.totalCost {
@@ -246,6 +277,5 @@ actor AgentCoordinator {
         hasDetectedAgentFromOutput = false
         lastDetectedAgentType = nil
         agentDetectionBuffer = ""
-        agentDetectionBufferLower = ""
     }
 }
