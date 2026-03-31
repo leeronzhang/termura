@@ -69,6 +69,16 @@ struct SidebarTabBar: View {
         .animation(.easeInOut(duration: AppUI.Animation.tabSwitch), value: isFullScreen)
     }
 
+    private func tabAccessibilityValue(_ tab: SidebarTab) -> String {
+        guard tab == .project else { return "" }
+        if diagnosticErrorCount > 0 {
+            return "\(diagnosticErrorCount) error\(diagnosticErrorCount == 1 ? "" : "s")"
+        } else if hasUncommittedChanges {
+            return "Uncommitted changes"
+        }
+        return ""
+    }
+
     private func tabButton(_ tab: SidebarTab) -> some View {
         Button {
             selectedTab = tab
@@ -99,6 +109,7 @@ struct SidebarTabBar: View {
         .focusEffectDisabled()
         .help(tab.label)
         .accessibilityLabel(tab.label)
+        .accessibilityValue(tabAccessibilityValue(tab))
         .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
 }

@@ -15,11 +15,9 @@ enum FileTypeIcon {
     /// Returns the asset catalog name for a given filename.
     static func assetName(for filename: String) -> String {
         let ext = URL(fileURLWithPath: filename).pathExtension.lowercased()
-
         if ext.isEmpty {
-            return specialFilename(filename) ?? defaultIcon
+            return specialFilenameMap[filename.lowercased()] ?? defaultIcon
         }
-
         return extensionMap[ext] ?? defaultIcon
     }
 
@@ -27,207 +25,120 @@ enum FileTypeIcon {
 
     private static let defaultIcon = "FileTypeIcons/filetype-file"
 
-    private static func specialFilename(_ name: String) -> String? {
-        let lower = name.lowercased()
-        switch lower {
-        case "makefile", "justfile", "rakefile", "gemfile", "podfile":
-            return "FileTypeIcons/filetype-bash"
-        case "dockerfile", "dockerfile.dev", "dockerfile.prod":
-            return "FileTypeIcons/filetype-docker"
-        case "docker-compose.yml", "docker-compose.yaml",
-             "compose.yml", "compose.yaml":
-            return "FileTypeIcons/filetype-docker-compose"
-        case "license", "licence", "license.md", "licence.md":
-            return "FileTypeIcons/filetype-license"
-        case "readme", "readme.md":
-            return "FileTypeIcons/filetype-readme"
-        case ".gitignore", ".gitattributes", ".gitmodules", ".gitkeep":
-            return "FileTypeIcons/filetype-git"
-        case ".env", ".envrc", ".env.local", ".env.development",
-             ".env.production":
-            return "FileTypeIcons/filetype-env"
-        case ".editorconfig", ".prettierrc", ".eslintrc":
-            return "FileTypeIcons/filetype-config"
-        case ".npmrc", ".npmignore":
-            return "FileTypeIcons/filetype-npm"
-        default:
-            return nil
-        }
-    }
+    // MARK: Special Filenames (no extension)
+
+    private static let specialFilenameMap: [String: String] = icons([
+        "makefile": "filetype-bash", "justfile": "filetype-bash",
+        "rakefile": "filetype-bash", "gemfile": "filetype-bash", "podfile": "filetype-bash",
+        "dockerfile": "filetype-docker",
+        "dockerfile.dev": "filetype-docker", "dockerfile.prod": "filetype-docker",
+        "docker-compose.yml": "filetype-docker-compose",
+        "docker-compose.yaml": "filetype-docker-compose",
+        "compose.yml": "filetype-docker-compose", "compose.yaml": "filetype-docker-compose",
+        "license": "filetype-license", "licence": "filetype-license",
+        "license.md": "filetype-license", "licence.md": "filetype-license",
+        "readme": "filetype-readme", "readme.md": "filetype-readme",
+        ".gitignore": "filetype-git", ".gitattributes": "filetype-git",
+        ".gitmodules": "filetype-git", ".gitkeep": "filetype-git",
+        ".env": "filetype-env", ".envrc": "filetype-env",
+        ".env.local": "filetype-env", ".env.development": "filetype-env",
+        ".env.production": "filetype-env",
+        ".editorconfig": "filetype-config", ".prettierrc": "filetype-config",
+        ".eslintrc": "filetype-config",
+        ".npmrc": "filetype-npm", ".npmignore": "filetype-npm"
+    ])
+
+    // MARK: Extension Maps (grouped by category)
+
+    private static let languageExtensions: [String: String] = icons([
+        "swift": "filetype-swift",
+        "c": "filetype-c", "m": "filetype-c",
+        "h": "filetype-c-header", "hpp": "filetype-c-header", "hh": "filetype-c-header",
+        "cpp": "filetype-cpp", "cc": "filetype-cpp", "cxx": "filetype-cpp", "mm": "filetype-cpp",
+        "py": "filetype-python", "pyw": "filetype-python", "pyi": "filetype-python",
+        "js": "filetype-javascript", "mjs": "filetype-javascript", "cjs": "filetype-javascript",
+        "ts": "filetype-typescript",
+        "tsx": "filetype-typescript-react", "jsx": "filetype-typescript-react",
+        "rs": "filetype-rust",
+        "go": "filetype-go",
+        "java": "filetype-java", "jar": "filetype-java",
+        "kt": "filetype-kotlin",
+        "scala": "filetype-scala",
+        "rb": "filetype-ruby", "rake": "filetype-ruby", "gemspec": "filetype-ruby",
+        "php": "filetype-php",
+        "dart": "filetype-dart",
+        "lua": "filetype-lua",
+        "zig": "filetype-zig",
+        "nim": "filetype-nim",
+        "r": "filetype-r",
+        "pl": "filetype-perl", "pm": "filetype-perl",
+        "ex": "filetype-elixir", "exs": "filetype-elixir",
+        "asm": "filetype-assembly", "s": "filetype-assembly"
+    ])
+
+    private static let webExtensions: [String: String] = icons([
+        "html": "filetype-html", "htm": "filetype-html",
+        "css": "filetype-css",
+        "scss": "filetype-sass", "sass": "filetype-sass", "less": "filetype-sass",
+        "vue": "filetype-vue",
+        "svelte": "filetype-svelte",
+        "astro": "filetype-astro"
+    ])
+
+    private static let dataExtensions: [String: String] = icons([
+        "json": "filetype-json",
+        "yaml": "filetype-yaml", "yml": "filetype-yaml",
+        "toml": "filetype-toml",
+        "xml": "filetype-xml", "plist": "filetype-xml",
+        "csv": "filetype-csv",
+        "graphql": "filetype-graphql", "gql": "filetype-graphql",
+        "proto": "filetype-proto",
+        "ini": "filetype-config", "cfg": "filetype-config",
+        "conf": "filetype-config", "editorconfig": "filetype-config",
+        "env": "filetype-env",
+        "sh": "filetype-bash", "bash": "filetype-bash",
+        "zsh": "filetype-bash", "fish": "filetype-bash", "nu": "filetype-bash",
+        "ps1": "filetype-powershell",
+        "dockerfile": "filetype-docker",
+        "sql": "filetype-sql", "sqlite": "filetype-sql", "db": "filetype-sql",
+        "md": "filetype-markdown", "markdown": "filetype-markdown", "mdx": "filetype-markdown",
+        "txt": "filetype-text", "rst": "filetype-text",
+        "adoc": "filetype-text", "tex": "filetype-text",
+        "pdf": "filetype-pdf"
+    ])
+
+    private static let mediaAndSystemExtensions: [String: String] = icons([
+        "png": "filetype-image", "jpg": "filetype-image", "jpeg": "filetype-image",
+        "gif": "filetype-image", "webp": "filetype-image", "bmp": "filetype-image",
+        "ico": "filetype-image", "tiff": "filetype-image", "heic": "filetype-image",
+        "svg": "filetype-svg",
+        "mp3": "filetype-audio", "wav": "filetype-audio", "aac": "filetype-audio",
+        "flac": "filetype-audio", "ogg": "filetype-audio", "m4a": "filetype-audio",
+        "mp4": "filetype-video", "mov": "filetype-video", "avi": "filetype-video",
+        "mkv": "filetype-video", "webm": "filetype-video",
+        "zip": "filetype-zip", "tar": "filetype-zip", "gz": "filetype-zip",
+        "bz2": "filetype-zip", "xz": "filetype-zip", "rar": "filetype-zip", "7z": "filetype-zip",
+        "lock": "filetype-lock", "resolved": "filetype-lock",
+        "gitignore": "filetype-git", "gitattributes": "filetype-git",
+        "npmrc": "filetype-npm",
+        "log": "filetype-log",
+        "diff": "filetype-diff", "patch": "filetype-diff",
+        "bin": "filetype-binary", "exe": "filetype-binary",
+        "dylib": "filetype-binary", "so": "filetype-binary",
+        "pem": "filetype-certificate", "crt": "filetype-certificate",
+        "key": "filetype-certificate", "cer": "filetype-certificate"
+    ])
 
     private static let extensionMap: [String: String] = {
-        var map: [String: String] = [:]
-        let ns = "FileTypeIcons/"
-
-        // Swift
-        map["swift"] = ns + "filetype-swift"
-
-        // C family
-        let cfamily = ns + "filetype-c"
-        let ch = ns + "filetype-c-header"
-        let cpp = ns + "filetype-cpp"
-        map["c"] = cfamily; map["m"] = cfamily
-        map["h"] = ch; map["hpp"] = ch; map["hh"] = ch
-        map["cpp"] = cpp; map["cc"] = cpp; map["cxx"] = cpp; map["mm"] = cpp
-
-        // Python
-        let py = ns + "filetype-python"
-        map["py"] = py; map["pyw"] = py; map["pyi"] = py
-
-        // JavaScript / TypeScript
-        let js = ns + "filetype-javascript"
-        map["js"] = js; map["mjs"] = js; map["cjs"] = js
-        let ts = ns + "filetype-typescript"
-        map["ts"] = ts
-        let tsx = ns + "filetype-typescript-react"
-        map["tsx"] = tsx; map["jsx"] = tsx
-
-        // Rust
-        map["rs"] = ns + "filetype-rust"
-
-        // Go
-        map["go"] = ns + "filetype-go"
-
-        // Java / JVM
-        let java = ns + "filetype-java"
-        map["java"] = java; map["jar"] = java
-        map["kt"] = ns + "filetype-kotlin"
-        map["scala"] = ns + "filetype-scala"
-
-        // Ruby
-        let rb = ns + "filetype-ruby"
-        map["rb"] = rb; map["rake"] = rb; map["gemspec"] = rb
-
-        // PHP
-        map["php"] = ns + "filetype-php"
-
-        // Dart
-        map["dart"] = ns + "filetype-dart"
-
-        // Lua
-        map["lua"] = ns + "filetype-lua"
-
-        // Zig
-        map["zig"] = ns + "filetype-zig"
-
-        // Nim
-        map["nim"] = ns + "filetype-nim"
-
-        // R
-        map["r"] = ns + "filetype-r"
-
-        // Perl
-        let pl = ns + "filetype-perl"
-        map["pl"] = pl; map["pm"] = pl
-
-        // Elixir
-        let ex = ns + "filetype-elixir"
-        map["ex"] = ex; map["exs"] = ex
-
-        // Assembly
-        let asm = ns + "filetype-assembly"
-        map["asm"] = asm; map["s"] = asm
-
-        // Web markup
-        map["html"] = ns + "filetype-html"; map["htm"] = ns + "filetype-html"
-        map["css"] = ns + "filetype-css"
-        let sass = ns + "filetype-sass"
-        map["scss"] = sass; map["sass"] = sass; map["less"] = sass
-
-        // Frameworks
-        map["vue"] = ns + "filetype-vue"
-        map["svelte"] = ns + "filetype-svelte"
-        map["astro"] = ns + "filetype-astro"
-
-        // Data / config (structured)
-        map["json"] = ns + "filetype-json"
-        let yaml = ns + "filetype-yaml"
-        map["yaml"] = yaml; map["yml"] = yaml
-        map["toml"] = ns + "filetype-toml"
-        map["xml"] = ns + "filetype-xml"; map["plist"] = ns + "filetype-xml"
-        map["csv"] = ns + "filetype-csv"
-        map["graphql"] = ns + "filetype-graphql"; map["gql"] = ns + "filetype-graphql"
-        map["proto"] = ns + "filetype-proto"
-
-        // Config
-        let cfg = ns + "filetype-config"
-        map["ini"] = cfg; map["cfg"] = cfg; map["conf"] = cfg
-        map["editorconfig"] = cfg
-
-        map["env"] = ns + "filetype-env"
-
-        // Shell
-        let bash = ns + "filetype-bash"
-        map["sh"] = bash; map["bash"] = bash; map["zsh"] = bash; map["fish"] = bash; map["nu"] = bash
-        map["ps1"] = ns + "filetype-powershell"
-
-        // Docker
-        map["dockerfile"] = ns + "filetype-docker"
-
-        // Database
-        let sql = ns + "filetype-sql"
-        map["sql"] = sql; map["sqlite"] = sql; map["db"] = sql
-
-        // Markdown / text
-        let md = ns + "filetype-markdown"
-        map["md"] = md; map["markdown"] = md; map["mdx"] = md
-        let txt = ns + "filetype-text"
-        map["txt"] = txt; map["rst"] = txt; map["adoc"] = txt; map["tex"] = txt
-
-        // PDF / documents
-        map["pdf"] = ns + "filetype-pdf"
-
-        // Images
-        let img = ns + "filetype-image"
-        for ext in [
-            "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico",
-            "tiff", "heic"
-        ] {
-            map[ext] = img
-        }
-        map["svg"] = ns + "filetype-svg"
-
-        // Audio / Video
-        let audio = ns + "filetype-audio"
-        for ext in ["mp3", "wav", "aac", "flac", "ogg", "m4a"] {
-            map[ext] = audio
-        }
-        let video = ns + "filetype-video"
-        for ext in ["mp4", "mov", "avi", "mkv", "webm"] {
-            map[ext] = video
-        }
-
-        // Archives
-        let zip = ns + "filetype-zip"
-        for ext in ["zip", "tar", "gz", "bz2", "xz", "rar", "7z"] {
-            map[ext] = zip
-        }
-
-        // Lock files
-        let lock = ns + "filetype-lock"
-        map["lock"] = lock; map["resolved"] = lock
-
-        // Git
-        let git = ns + "filetype-git"
-        map["gitignore"] = git; map["gitattributes"] = git
-
-        // npm
-        map["npmrc"] = ns + "filetype-npm"
-
-        // Log
-        map["log"] = ns + "filetype-log"
-
-        // Diff
-        map["diff"] = ns + "filetype-diff"; map["patch"] = ns + "filetype-diff"
-
-        // Binary
-        let bin = ns + "filetype-binary"
-        map["bin"] = bin; map["exe"] = bin; map["dylib"] = bin; map["so"] = bin
-
-        // Certificates
-        let cert = ns + "filetype-certificate"
-        map["pem"] = cert; map["crt"] = cert; map["key"] = cert; map["cer"] = cert
-
-        return map
+        var result = languageExtensions
+        result.merge(webExtensions) { a, _ in a }
+        result.merge(dataExtensions) { a, _ in a }
+        result.merge(mediaAndSystemExtensions) { a, _ in a }
+        return result
     }()
+
+    /// Prefixes all icon suffix values with the "FileTypeIcons/" asset namespace.
+    private static func icons(_ pairs: [String: String]) -> [String: String] {
+        pairs.mapValues { "FileTypeIcons/" + $0 }
+    }
 }

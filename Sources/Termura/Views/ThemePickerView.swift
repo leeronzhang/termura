@@ -59,7 +59,7 @@ struct ThemePickerView: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.allowsOtherFileTypes = true
-        panel.message = "Select a .json or .itermcolors theme file"
+        panel.message = String(localized: "Select a .json or .itermcolors theme file")
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         importTheme(from: url)
@@ -113,6 +113,11 @@ private struct ThemeCard: View {
                 )
         )
         .onTapGesture { onSelect() }
+        .accessibilityLabel(definition.name)
+        .accessibilityValue(isSelected ? "Selected" : "")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction(.default) { onSelect() }
     }
 
     private var colorSwatches: some View {
@@ -127,5 +132,15 @@ private struct ThemeCard: View {
                     .cornerRadius(AppUI.Radius.xs)
             }
         }
+        .accessibilityHidden(true)
     }
 }
+
+#if DEBUG
+#Preview("Theme Picker") {
+    ThemePickerView(
+        themeManager: ThemeManager(),
+        themeImportService: MockThemeImportService()
+    )
+}
+#endif

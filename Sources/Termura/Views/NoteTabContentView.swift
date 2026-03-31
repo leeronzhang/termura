@@ -11,12 +11,15 @@ struct NoteTabContentView: View {
     var notes: Bindable<NotesViewModel>
     let onTitleChange: (NoteID, String) -> Void
 
+    @FocusState private var isTitleFocused: Bool
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: AppUI.Spacing.md) {
                 TextField("Title", text: notes.editingTitle)
                     .font(AppUI.Font.title1Semibold)
                     .textFieldStyle(.plain)
+                    .focused($isTitleFocused)
                 Spacer()
                 noteFavoriteButton
             }
@@ -30,7 +33,12 @@ struct NoteTabContentView: View {
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { notesViewModel.selectNote(id: noteID) }
+        .onAppear {
+            notesViewModel.selectNote(id: noteID)
+            if notesViewModel.editingTitle == "Untitled" {
+                isTitleFocused = true
+            }
+        }
         .onChange(of: notesViewModel.editingTitle) { _, newTitle in
             onTitleChange(noteID, newTitle)
         }
@@ -47,5 +55,6 @@ struct NoteTabContentView: View {
         }
         .buttonStyle(.plain)
         .help(isFav ? "Remove from favorites" : "Add to favorites")
+        .accessibilityLabel(isFav ? "Remove from favorites" : "Add to favorites")
     }
 }

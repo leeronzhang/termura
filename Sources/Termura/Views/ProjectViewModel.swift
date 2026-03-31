@@ -24,7 +24,7 @@ final class ProjectViewModel {
     /// When true, files/directories marked as gitignored are hidden from the tree.
     var hideIgnoredFiles: Bool = true {
         didSet {
-            UserDefaults.standard.set(hideIgnoredFiles, forKey: hideIgnoredKey)
+            userDefaults.set(hideIgnoredFiles, forKey: hideIgnoredKey)
             if _unfilteredDirty {
                 rebuildFlatVisibleItems()
             } else {
@@ -48,6 +48,7 @@ final class ProjectViewModel {
     private let clock: any AppClock
     private let fileTreeService: any FileTreeServiceProtocol
     private let projectRoot: String
+    private let userDefaults: any UserDefaultsStoring
     private var commandRouter: CommandRouter?
     private var chunkHandlerToken: UUID?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
@@ -63,13 +64,15 @@ final class ProjectViewModel {
         projectRoot: String,
         commandRouter: CommandRouter? = nil,
         fileTreeService: any FileTreeServiceProtocol = FileTreeService(),
-        clock: any AppClock = LiveClock()
+        clock: any AppClock = LiveClock(),
+        userDefaults: any UserDefaultsStoring = UserDefaults.standard
     ) {
         self.gitService = gitService
         self.projectRoot = projectRoot
         self.commandRouter = commandRouter
         self.fileTreeService = fileTreeService
         self.clock = clock
+        self.userDefaults = userDefaults
         restoreExpandedIDs()
         setupObservers()
     }
@@ -92,9 +95,7 @@ final class ProjectViewModel {
         refreshTask?.cancel()
         debounceTask?.cancel()
         persistTask?.cancel()
-        // Flush expansion state immediately on teardown
-        let array = Array(expandedNodeIDs)
-        UserDefaults.standard.set(array, forKey: expandedIDsKey)
+        userDefaults.set(Array(expandedNodeIDs), forKey: expandedIDsKey)
     }
 
     // MARK: - Public
@@ -223,19 +224,18 @@ final class ProjectViewModel {
                 return
             }
             guard let self, !Task.isCancelled else { return }
-            let array = Array(expandedNodeIDs)
-            UserDefaults.standard.set(array, forKey: expandedIDsKey)
+            userDefaults.set(Array(expandedNodeIDs), forKey: expandedIDsKey)
         }
     }
 
     private func restoreExpandedIDs() {
-        if let saved = UserDefaults.standard.stringArray(forKey: expandedIDsKey) {
+        if let saved = userDefaults.stringArray(forKey: expandedIDsKey) {
             expandedNodeIDs = Set(saved)
             hasRestoredExpandState = !saved.isEmpty
         }
         // Restore ignore filter (defaults to true if not set)
-        if UserDefaults.standard.object(forKey: hideIgnoredKey) != nil {
-            hideIgnoredFiles = UserDefaults.standard.bool(forKey: hideIgnoredKey)
+        if userDefaults.object(forKey: hideIgnoredKey) != nil {
+            hideIgnoredFiles = userDefaults.bool(forKey: hideIgnoredKey)
         }
     }
 

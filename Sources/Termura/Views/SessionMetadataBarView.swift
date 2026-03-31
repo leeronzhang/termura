@@ -8,6 +8,7 @@ struct SessionMetadataBarView: View {
     var onSelectChunkID: ((UUID) -> Void)?
 
     @Environment(\.themeManager) private var themeManager
+    @AppStorage(AppConfig.CostEstimation.subscriptionModeKey) private var subscriptionMode: Bool = false
     @State private var showAllTurns = false
 
     var body: some View {
@@ -100,8 +101,10 @@ struct SessionMetadataBarView: View {
 
     @ViewBuilder
     private var contextWindowSection: some View {
+        // Only show when real API data is available. Before the first turn completes,
+        // tokenCount is heuristic PTY output accumulation — not the API context window.
         let barColor = themeManager.current.foreground
-        if metadata.contextWindowLimit > 0 {
+        if metadata.contextWindowLimit > 0, metadata.hasParsedTokenData {
             VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
                 sectionLabel("Context Window")
 
@@ -155,69 +158,45 @@ struct SessionMetadataBarView: View {
 
     private var tokenSummarySection: some View {
         VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
-            sectionLabel("Tokens")
-            VStack(spacing: AppUI.Spacing.lg) {
-                tokenBar("Output", metadata.outputTokenCount)
-                tokenBar("Input", metadata.inputTokenCount)
-                tokenBar("Cache", metadata.cachedTokenCount)
+            HStack(alignment: .firstTextBaseline) {
+                sectionLabel("Tokens")
+                Spacer()
+                if !metadata.hasParsedTokenData {
+                    Text("Updated each turn")
+                        .font(AppUI.Font.micro)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
+                }
+            }
+            if metadata.hasParsedTokenData {
+                VStack(spacing: AppUI.Spacing.lg) {
+                    tokenBar("Output", metadata.outputTokenCount)
+                    tokenBar("Input", metadata.inputTokenCount)
+                    tokenBar("Cache", metadata.cachedTokenCount)
+                    if !subscriptionMode, metadata.estimatedCostUSD > 0 {
+                        costRow
+                    }
+                }
+            } else {
+                Text("Available after first turn completes")
+                    .font(AppUI.Font.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, AppUI.Spacing.xxs)
             }
         }
     }
 
-    // MARK: - Activity (Timeline)
-
-    @ViewBuilder
-    private var activitySection: some View {
-        if let tl = timeline, !tl.turns.isEmpty {
-            VStack(alignment: .leading, spacing: AppUI.Spacing.smMd) {
-                HStack {
-                    sectionLabel("Activity")
-                    Spacer()
-                    Text("\(tl.turns.count)")
-                        .font(AppUI.Font.captionMono)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, AppUI.Spacing.smMd)
-                        .padding(.vertical, AppUI.Spacing.xxs)
-                        .background(Color.secondary.opacity(AppUI.Opacity.whisper))
-                        .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.sm))
-                }
-                let visible = showAllTurns ? Array(tl.turns) : Array(tl.turns.suffix(3))
-                ForEach(visible) { turn in
-                    if isClearCommand(turn.command) {
-                        clearDividerRow(at: turn.startedAt)
-                    } else {
-                        Button { onSelectChunkID?(turn.chunkID) } label: {
-                            HStack(spacing: AppUI.Spacing.smMd) {
-                                Circle().fill(exitCodeColor(turn.exitCode))
-                                    .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
-                                Image(systemName: contentTypeIcon(turn.contentType))
-                                    .font(.system(size: 9))
-                                    .foregroundColor(.secondary)
-                                Text(turnLabel(turn)).font(AppUI.Font.captionMono)
-                                    .lineLimit(1).foregroundColor(.primary)
-                                Spacer()
-                                if let dur = turn.duration {
-                                    Text(formattedDuration(dur)).font(AppUI.Font.micro)
-                                        .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
-                                        .monospacedDigit()
-                                }
-                                Text(formattedTime(turn.startedAt)).font(AppUI.Font.micro)
-                                    .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
-                            }.padding(.vertical, AppUI.Spacing.xs)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(turn.startLine == nil)
-                    }
-                }
-                if tl.turns.count > 3, !showAllTurns {
-                    Button {
-                        withAnimation(.easeInOut(duration: AppUI.Animation.quick)) { showAllTurns = true }
-                    } label: {
-                        Text("Show all").font(AppUI.Font.caption).foregroundColor(.accentColor)
-                            .frame(maxWidth: .infinity).padding(.vertical, AppUI.Spacing.smMd)
-                    }.buttonStyle(.plain)
-                }
-            }
+    private var costRow: some View {
+        HStack(spacing: AppUI.Spacing.smMd) {
+            Text("Cost")
+                .font(AppUI.Font.micro)
+                .foregroundColor(.secondary)
+                .frame(width: 40, alignment: .leading)
+            Spacer()
+            Text(MetadataFormatter.formatCost(metadata.estimatedCostUSD))
+                .font(AppUI.Font.captionMono)
+                .foregroundColor(.primary)
+                .monospacedDigit()
+                .frame(width: 42, alignment: .trailing)
         }
     }
 
@@ -267,7 +246,7 @@ struct SessionMetadataBarView: View {
                 }
             }
             .frame(height: 16)
-            Text(MetadataFormatter.formatTokenCount(value))
+            Text(hasValue ? MetadataFormatter.formatTokenCount(value) : "\u{2013}")
                 .font(AppUI.Font.captionMono)
                 .foregroundColor(hasValue ? .primary : .secondary)
                 .monospacedDigit()

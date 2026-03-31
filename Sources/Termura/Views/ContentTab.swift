@@ -174,11 +174,13 @@ struct ContentTabBar: View {
                         .fill(Color.red)
                         .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
                         .offset(x: 3, y: -1)
+                        .accessibilityHidden(true)
                 } else if hasUncommittedChanges {
                     Circle()
                         .fill(Color.accentColor)
                         .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
                         .offset(x: 3, y: -1)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -193,6 +195,16 @@ struct ContentTabBar: View {
         .padding(.leading, isFullScreen ? AppUI.Spacing.xxl : AppConfig.UI.trafficLightSafeLeading)
         .padding(.top, isFullScreen ? AppUI.Spacing.smMd : AppConfig.UI.trafficLightTopInset)
         .help("Show Sidebar (Cmd+B)")
+        .accessibilityLabel(sidebarRevealAccessibilityLabel)
+    }
+
+    private var sidebarRevealAccessibilityLabel: String {
+        if diagnosticErrorCount > 0 {
+            return "Show Sidebar, \(diagnosticErrorCount) error\(diagnosticErrorCount == 1 ? "" : "s")"
+        } else if hasUncommittedChanges {
+            return "Show Sidebar, uncommitted changes"
+        }
+        return "Show Sidebar"
     }
 
     @ViewBuilder
@@ -212,6 +224,7 @@ struct ContentTabBar: View {
         let isSelected = selectedTab == tab
         return HStack(spacing: AppUI.Spacing.sm) {
             tabIcon(for: tab)
+                .accessibilityHidden(true)
             Text(tab.title)
                 .font(AppUI.Font.label)
                 .lineLimit(1)
@@ -222,6 +235,7 @@ struct ContentTabBar: View {
                     .foregroundColor(.secondary)
                     .contentShape(Rectangle().size(width: 24, height: 24))
                     .onTapGesture { onClose(tab) }
+                    .accessibilityHidden(true)
             }
         }
         .foregroundColor(isSelected ? .primary : .secondary)
@@ -232,6 +246,8 @@ struct ContentTabBar: View {
         .contentShape(Rectangle())
         .onTapGesture { selectedTab = tab }
         .accessibilityLabel(tab.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityAction(.default) { selectedTab = tab }
+        .accessibilityAction(named: "Close Tab") { onClose(tab) }
     }
 }

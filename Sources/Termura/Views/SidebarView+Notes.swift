@@ -23,13 +23,14 @@ extension SidebarView {
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("New Note")
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
     func notesList(vm: NotesViewModel) -> some View {
-        let composerActive = commandRouter.showComposer
+        let composerActive = commandRouter.isComposerNotesActive
         return ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: AppUI.Spacing.sm) {
                 ForEach(vm.notes) { note in
@@ -111,6 +112,12 @@ private struct SidebarNoteRow: View {
         .onTapGesture { rowTapped() }
         .onHover { isHovered = $0 }
         .draggable(note.body)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(note.title.isEmpty ? "Untitled Note" : note.title)
+        .accessibilityValue(notePreview(note.body) ?? "")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+        .accessibilityAction(.default) { rowTapped() }
     }
 
     private func rowTapped() {
@@ -147,6 +154,7 @@ private struct SidebarNoteRow: View {
         }
         .buttonStyle(.plain)
         .help(note.isFavorite ? "Remove from favorites" : "Add to favorites")
+        .accessibilityLabel(note.isFavorite ? "Remove from favorites" : "Add to favorites")
     }
 
     // MARK: - Helpers

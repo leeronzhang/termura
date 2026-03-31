@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Persistent bottom-edge banner shown when a high-risk agent operation is detected.
@@ -30,7 +31,8 @@ struct RiskAlertBannerView: View {
         .padding(.vertical, AppUI.Spacing.md)
         .background(.regularMaterial)
         .overlay(alignment: .top) { severityAccentLine }
-        .clipShape(RoundedRectangle(cornerRadius: AppUI.Spacing.md))
+        .clipShape(RoundedRectangle(cornerRadius: AppUI.Spacing.xs))
+        .frame(maxWidth: AppConfig.Agent.bannerMaxWidth)
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.bottom, AppUI.Spacing.xxl)
         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -42,20 +44,83 @@ struct RiskAlertBannerView: View {
             : "exclamationmark.circle.fill")
             .font(AppUI.Font.title2)
             .foregroundColor(alert.severity == .critical ? .red : .orange)
+            .accessibilityHidden(true)
     }
 
     private var severityAccentLine: some View {
         Rectangle()
             .fill(alert.severity == .critical ? Color.red : Color.orange)
             .frame(height: 2)
+            .accessibilityHidden(true)
     }
 
     private var actionButtons: some View {
         HStack(spacing: AppUI.Spacing.md) {
-            Button("Stop Agent", role: .destructive, action: onStopAgent)
-                .keyboardShortcut(.cancelAction)
-            Button("Allow", action: onAllow)
-                .keyboardShortcut(.defaultAction)
+            stopAgentButton
+            allowButton
         }
     }
+
+    /// AppKitClickableOverlay is required — the terminal NSView (NSViewRepresentable) intercepts
+    /// AppKit hitTest before SwiftUI gestures fire. Overlay an AppKit NSView so events are routed
+    /// at the correct Z-order (same pattern as ComposerOverlayView's notesToggleButton/sendButton).
+    private var stopAgentButton: some View {
+        Text("Stop Agent")
+            .font(AppUI.Font.bodyMedium)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, AppUI.Spacing.md)
+            .padding(.vertical, AppUI.Spacing.sm)
+            .background(Color(nsColor: .controlColor), in: RoundedRectangle(cornerRadius: AppUI.Spacing.xs))
+            .overlay(AppKitClickableOverlay(action: onStopAgent))
+            .accessibilityLabel("Stop Agent")
+            .accessibilityHint("Sends interrupt signal to the terminal")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default) { onStopAgent() }
+    }
+
+    private var allowButton: some View {
+        Text("Allow")
+            .font(AppUI.Font.bodyMedium)
+            .foregroundStyle(.white)
+            .padding(.horizontal, AppUI.Spacing.md)
+            .padding(.vertical, AppUI.Spacing.sm)
+            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: AppUI.Spacing.xs))
+            .overlay(AppKitClickableOverlay(action: onAllow))
+            .accessibilityLabel("Allow")
+            .accessibilityHint("Allows the detected operation to continue")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default) { onAllow() }
+    }
 }
+
+#if DEBUG
+#Preview("Risk Alert Banner — Critical") {
+    RiskAlertBannerView(
+        alert: RiskAlert(
+            trigger: "rm -rf",
+            description: "Recursive force delete",
+            severity: .critical,
+            commandSnippet: "rm -rf /Users/dev/project/node_modules"
+        ),
+        onStopAgent: {},
+        onAllow: {}
+    )
+    .frame(width: 700)
+    .padding()
+}
+
+#Preview("Risk Alert Banner — High") {
+    RiskAlertBannerView(
+        alert: RiskAlert(
+            trigger: "git reset --hard",
+            description: "Hard reset (discards changes)",
+            severity: .high,
+            commandSnippet: "git reset --hard HEAD~5"
+        ),
+        onStopAgent: {},
+        onAllow: {}
+    )
+    .frame(width: 700)
+    .padding()
+}
+#endif

@@ -22,6 +22,8 @@ extension SidebarView {
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("newSessionButton")
+            .accessibilityLabel("New Session")
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
@@ -74,6 +76,7 @@ extension SidebarView {
             .padding(.horizontal, AppUI.Spacing.md)
             .padding(.top, AppUI.Spacing.lg)
             .padding(.bottom, AppUI.Spacing.sm)
+            .accessibilityAddTraits(.isHeader)
     }
 
     func sessionRow(
@@ -191,6 +194,7 @@ extension SidebarView {
             }
             .buttonStyle(.plain)
             .contentShape(Rectangle())
+            .accessibilityLabel("New Session")
             Spacer()
         }
         .padding(.horizontal, AppUI.Spacing.lg)
