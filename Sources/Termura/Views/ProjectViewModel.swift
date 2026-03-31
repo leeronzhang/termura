@@ -17,37 +17,33 @@ final class ProjectViewModel {
     var errorMessage: String?
     /// IDs of expanded folder nodes. Persisted per project via UserDefaults.
     var expandedNodeIDs: Set<String> = [] {
-        didSet {
-            persistExpandedIDs()
-            rebuildFlatVisibleItems()
-        }
+        // No rebuild: toggleExpand splices incrementally; batch sets precede tree.didSet.
+        didSet { persistExpandedIDs() }
     }
 
     /// When true, files/directories marked as gitignored are hidden from the tree.
     var hideIgnoredFiles: Bool = true {
         didSet {
             UserDefaults.standard.set(hideIgnoredFiles, forKey: hideIgnoredKey)
-            rebuildFlatVisibleItems()
+            if _unfilteredDirty {
+                rebuildFlatVisibleItems()
+            } else {
+                applyIgnoreFilter()
+            }
         }
     }
 
-    /// Flattened list of visible tree items based on expansion and ignore filter.
-    /// Cached: rebuilt whenever tree, expandedNodeIDs, or hideIgnoredFiles changes.
+    /// Cached flat list of visible tree items (rebuilt on tree/expansion/filter changes).
     private(set) var flatVisibleItems: [FlatTreeItem] = []
 
     /// True when there are uncommitted changes — drives the tab badge dot.
     var hasUncommittedChanges: Bool { !gitResult.files.isEmpty }
-
     /// Full project root for tooltip.
     var projectRootPath: String { projectRoot }
-
     /// Shortened display path: replaces home directory with `~`.
     var displayPath: String {
         let home = AppConfig.Paths.homeDirectory
-        if projectRoot.hasPrefix(home) {
-            return "~" + projectRoot.dropFirst(home.count)
-        }
-        return projectRoot
+        return projectRoot.hasPrefix(home) ? "~" + projectRoot.dropFirst(home.count) : projectRoot
     }
 
     private let gitService: any GitServiceProtocol
@@ -62,6 +58,9 @@ final class ProjectViewModel {
     @ObservationIgnored private var persistTask: Task<Void, Never>?
     /// Tracks whether we've already handled initial expansion (persisted or auto).
     private var hasRestoredExpandState = false
+    /// Cached unfiltered flat list. Avoids tree traversal when only `hideIgnoredFiles` toggles.
+    @ObservationIgnored private var _unfilteredFlatItems: [FlatTreeItem] = []
+    @ObservationIgnored private var _unfilteredDirty = true // marked dirty by toggleExpand
 
     init(
         gitService: any GitServiceProtocol,
@@ -104,13 +103,16 @@ final class ProjectViewModel {
 
     // MARK: - Public
 
-    /// Toggle the expand/collapse state of a directory node.
+    /// Toggle expand/collapse. Incremental splice: O(items affected) vs O(all visible).
     func toggleExpand(_ node: FileTreeNode) {
         guard node.isDirectory else { return }
+        _unfilteredDirty = true
         if expandedNodeIDs.contains(node.id) {
             expandedNodeIDs.remove(node.id)
+            removeVisibleDescendants(of: node)
         } else {
             expandedNodeIDs.insert(node.id)
+            insertVisibleChildren(of: node)
         }
     }
 
@@ -160,17 +162,17 @@ final class ProjectViewModel {
         )
         guard !Task.isCancelled else { return }
 
-        tree = annotated
-        gitResult = status
-        isLoading = false
-        errorMessage = nil
-
-        // Auto-expand root directories only on very first scan (no persisted state).
-        // Single assignment avoids N didSet triggers (one persist debounce + one rebuild).
+        // Auto-expand roots on first scan. Set expandedNodeIDs BEFORE tree so tree.didSet
+        // fires once with the correct expansion state (expandedNodeIDs.didSet only persists).
         if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
             hasRestoredExpandState = true
             expandedNodeIDs = Set(annotated.lazy.filter(\.isDirectory).map(\.id))
         }
+
+        tree = annotated      // tree.didSet → rebuildFlatVisibleItems() with correct IDs
+        gitResult = status
+        isLoading = false
+        errorMessage = nil
 
         commandRouter?.hasUncommittedChanges = !status.files.isEmpty
     }
@@ -233,8 +235,51 @@ final class ProjectViewModel {
     }
 
     private func rebuildFlatVisibleItems() {
-        let items = tree.flattenVisible(expandedIDs: expandedNodeIDs)
-        flatVisibleItems = hideIgnoredFiles ? items.filter { !$0.node.isGitIgnored } : items
+        _unfilteredFlatItems = tree.flattenVisible(expandedIDs: expandedNodeIDs)
+        _unfilteredDirty = false
+        applyIgnoreFilter()
+    }
+
+    /// Re-applies the ignore filter to the cached unfiltered list. O(n) filter, no tree traversal.
+    private func applyIgnoreFilter() {
+        flatVisibleItems = hideIgnoredFiles
+            ? _unfilteredFlatItems.filter { !$0.node.isGitIgnored }
+            : _unfilteredFlatItems
+    }
+
+    // MARK: - Incremental flat-list mutations (expand/collapse hot path)
+
+    /// Splices visible children of `node` into `flatVisibleItems` after the node's row.
+    /// O(inserted items + elements shifted after insertion point).
+    private func insertVisibleChildren(of node: FileTreeNode) {
+        guard let idx = flatVisibleItems.firstIndex(where: { $0.id == node.id }),
+              let children = node.children else { return }
+        var toInsert: [FlatTreeItem] = []
+        appendVisibleNodes(children, depth: flatVisibleItems[idx].depth + 1, into: &toInsert)
+        guard !toInsert.isEmpty else { return }
+        flatVisibleItems.insert(contentsOf: toInsert, at: idx + 1)
+    }
+
+    /// Removes rows made invisible by collapsing `node`. O(removed + shifted elements).
+    private func removeVisibleDescendants(of node: FileTreeNode) {
+        guard let idx = flatVisibleItems.firstIndex(where: { $0.id == node.id }) else { return }
+        let depth = flatVisibleItems[idx].depth
+        let start = idx + 1
+        var end = start
+        while end < flatVisibleItems.count && flatVisibleItems[end].depth > depth { end += 1 }
+        guard end > start else { return }
+        flatVisibleItems.removeSubrange(start..<end)
+    }
+
+    /// Recursively builds the flat list for `nodes` honouring expansion and ignore filter.
+    private func appendVisibleNodes(_ nodes: [FileTreeNode], depth: Int, into result: inout [FlatTreeItem]) {
+        for node in nodes {
+            if hideIgnoredFiles && node.isGitIgnored { continue }
+            result.append(FlatTreeItem(node: node, depth: depth))
+            if node.isDirectory, expandedNodeIDs.contains(node.id), let children = node.children {
+                appendVisibleNodes(children, depth: depth + 1, into: &result)
+            }
+        }
     }
 
     private func debouncedRefresh() {
@@ -246,7 +291,7 @@ final class ProjectViewModel {
                 // CancellationError is expected — a newer refresh event supersedes this one.
                 return
             } catch {
-                logger.warning("Git refresh debounce sleep failed: \(error.localizedDescription)")
+                logger.warning("Git refresh debounce interrupted: \(error.localizedDescription)")
                 return
             }
             self?.refresh()
