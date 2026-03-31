@@ -38,7 +38,7 @@ final class CommandRouter {
         case toggleDualPane
         case closeTab
         case createNote
-        case toggleTimeline
+        case toggleSessionInfo
         case toggleAgentDashboard
         /// Pre-fills the Composer with the agent's default launch command and opens it.
         /// Fired once per restored session when the first shell prompt is detected.
@@ -128,8 +128,8 @@ final class CommandRouter {
         showSidebar.toggle()
     }
 
-    func toggleTimeline() {
-        pendingCommand = .toggleTimeline
+    func toggleSessionInfo() {
+        pendingCommand = .toggleSessionInfo
     }
 
     func toggleAgentDashboard() {

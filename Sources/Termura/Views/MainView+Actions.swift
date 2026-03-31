@@ -16,8 +16,8 @@ extension MainView {
             handleCloseTab()
         case .createNote:
             handleCreateNote()
-        case .toggleTimeline:
-            handleToggleTimeline()
+        case .toggleSessionInfo:
+            handleToggleSessionInfo()
         case .toggleAgentDashboard:
             handleToggleAgentDashboard()
         case .resumeAgent(let agentType):
@@ -94,7 +94,7 @@ extension MainView {
     /// Toggles the session-info metadata panel for the focused session.
     /// In dual-pane mode the toggle is global (CommandRouter.showDualPaneMetadata);
     /// in single-pane mode it is per-session (SessionViewState.showMetadata).
-    private func handleToggleTimeline() {
+    private func handleToggleSessionInfo() {
         if commandRouter.isDualPaneActive {
             withAnimation { commandRouter.showDualPaneMetadata.toggle() }
         } else {

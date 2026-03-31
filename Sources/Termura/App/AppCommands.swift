@@ -84,10 +84,10 @@ struct AppCommands: Commands {
 
         Divider()
 
-        Button("Toggle Timeline") {
-            appDelegate.activeContext?.commandRouter.toggleTimeline()
+        Button("Toggle Inspector") {
+            appDelegate.activeContext?.commandRouter.toggleSessionInfo()
         }
-        .keyboardShortcut("l", modifiers: [.command, .shift])
+        .keyboardShortcut("i", modifiers: [.command, .shift])
 
         Button("Toggle Agent Dashboard") {
             appDelegate.activeContext?.commandRouter.toggleAgentDashboard()

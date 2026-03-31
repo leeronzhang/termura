@@ -28,7 +28,16 @@ extension MainView {
     /// Callers must handle nil rather than receiving a ghost SessionID.
     var resolvedSelectedTab: ContentTab? {
         if let tab = selectedContentTab, allTabs.contains(tab) { return tab }
-        return terminalItems.first ?? openTabs.first
+        if let first = terminalItems.first ?? openTabs.first { return first }
+        // Startup gap: sessions are populated in SessionStore (sidebar updates immediately) but
+        // terminalItems hasn't been synced yet — syncTerminalItems() fires in the .onChange cycle
+        // after the current render. Derive an ephemeral tab for the active session so the content
+        // area doesn't flash "No Active Session" during this one-render window.
+        if let id = sessionStore.activeSessionID,
+           let session = sessionStore.session(id: id) {
+            return .terminal(sessionID: id, title: session.title)
+        }
+        return nil
     }
 
     @ViewBuilder
