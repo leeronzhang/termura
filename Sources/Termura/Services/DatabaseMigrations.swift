@@ -133,57 +133,47 @@ enum DatabaseMigrations {
 
     private static func registerV5SessionTree(into migrator: inout DatabaseMigrator) {
         migrator.registerMigration("v5_session_tree") { db in
-            // Add tree columns to sessions
-            try db.alter(table: "sessions") { table in
-                table.add(column: "parent_id", .text)
-                    .references("sessions")
-                table.add(column: "summary", .text)
-                    .notNull()
-                    .defaults(to: "")
-                table.add(column: "branch_type", .text)
-                    .notNull()
-                    .defaults(to: "main")
-            }
-            try db.create(
-                index: "idx_sessions_parent",
-                on: "sessions",
-                columns: ["parent_id"]
-            )
-
-            // Messages table (dual-track: model / metadata / ui)
-            try db.create(table: "session_messages") { table in
-                table.primaryKey("id", .text).notNull()
-                table.column("session_id", .text).notNull()
-                    .references("sessions", onDelete: .cascade)
-                table.column("role", .text).notNull()
-                table.column("content_type", .text).notNull()
-                table.column("content", .text).notNull()
-                table.column("token_count", .integer).defaults(to: 0)
-                table.column("created_at", .double).notNull()
-            }
-            try db.create(
-                index: "idx_messages_session",
-                on: "session_messages",
-                columns: ["session_id", "created_at"]
-            )
-
-            // Harness events table
-            try db.create(table: "harness_events") { table in
-                table.primaryKey("id", .text).notNull()
-                table.column("session_id", .text).notNull()
-                    .references("sessions", onDelete: .cascade)
-                table.column("event_type", .text).notNull()
-                table.column("payload", .text).notNull()
-                table.column("created_at", .double).notNull()
-            }
-            try db.create(
-                index: "idx_harness_events_session",
-                on: "harness_events",
-                columns: ["session_id", "created_at"]
-            )
-
+            try v5AddSessionTreeColumns(to: db)
+            try v5CreateSessionMessagesTable(in: db)
+            try v5CreateHarnessEventsTable(in: db)
             logger.info("v5 migration complete: session tree + messages + harness events")
         }
+    }
+
+    private static func v5AddSessionTreeColumns(to db: Database) throws {
+        try db.alter(table: "sessions") { table in
+            table.add(column: "parent_id", .text).references("sessions")
+            table.add(column: "summary", .text).notNull().defaults(to: "")
+            table.add(column: "branch_type", .text).notNull().defaults(to: "main")
+        }
+        try db.create(index: "idx_sessions_parent", on: "sessions", columns: ["parent_id"])
+    }
+
+    private static func v5CreateSessionMessagesTable(in db: Database) throws {
+        // Messages table (dual-track: model / metadata / ui)
+        try db.create(table: "session_messages") { table in
+            table.primaryKey("id", .text).notNull()
+            table.column("session_id", .text).notNull().references("sessions", onDelete: .cascade)
+            table.column("role", .text).notNull()
+            table.column("content_type", .text).notNull()
+            table.column("content", .text).notNull()
+            table.column("token_count", .integer).defaults(to: 0)
+            table.column("created_at", .double).notNull()
+        }
+        try db.create(index: "idx_messages_session", on: "session_messages",
+                      columns: ["session_id", "created_at"])
+    }
+
+    private static func v5CreateHarnessEventsTable(in db: Database) throws {
+        try db.create(table: "harness_events") { table in
+            table.primaryKey("id", .text).notNull()
+            table.column("session_id", .text).notNull().references("sessions", onDelete: .cascade)
+            table.column("event_type", .text).notNull()
+            table.column("payload", .text).notNull()
+            table.column("created_at", .double).notNull()
+        }
+        try db.create(index: "idx_harness_events_session", on: "harness_events",
+                      columns: ["session_id", "created_at"])
     }
 
     // MARK: - v6: rule files (Harness management)

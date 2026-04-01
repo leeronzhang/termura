@@ -1,14 +1,11 @@
-// Exemption: This is the ONLY file permitted to import SwiftTerm in the Views layer.
-// The NSViewRepresentable boundary is explicitly required by the architecture.
 import AppKit
 import OSLog
-import SwiftTerm
 import SwiftUI
 
 private let logger = Logger(subsystem: "com.termura.app", category: "TerminalContainerView")
 
-/// NSViewRepresentable wrapper around SwiftTerm's LocalProcessTerminalView.
-/// Acts as the bridge between SwiftUI layout and the AppKit terminal renderer.
+/// NSViewRepresentable wrapper around the active terminal engine's NSView.
+/// Engine-agnostic: theme and font are applied through the `TerminalEngine` protocol.
 /// Returns a TerminalDragContainerView so that drag-and-drop is handled by a real
 /// NSDraggingDestination override rather than a disconnected Coordinator.
 struct TerminalContainerView: NSViewRepresentable {
@@ -25,15 +22,12 @@ struct TerminalContainerView: NSViewRepresentable {
     func makeNSView(context: Context) -> TerminalDragContainerView {
         let termView = engine.terminalNSView
         termView.autoresizingMask = [.width, .height]
-        if let tv = termView as? LocalProcessTerminalView {
-            applyTheme(theme, to: tv)
-        }
+        engine.applyTheme(theme)
+        engine.applyFont(family: fontFamily, size: fontSize)
         let container = TerminalDragContainerView(terminalView: termView)
-        // Cache NSScroller references once at construction time so updateNSView never
-        // traverses subviews. SwiftTerm adds the scroller during its own init and does
-        // not remove/re-add it, so the reference remains valid for the view's lifetime.
+        // Cache NSScroller references once at construction time (O(1) on subsequent renders).
         container.cacheAndHideScrollers()
-        // Seed the font and theme caches so the first updateNSView call skips redundant assignments.
+        // Seed the caches so the first updateNSView call skips redundant assignments.
         container.lastAppliedFontName = fontFamily
         container.lastAppliedFontSize = fontSize
         container.lastAppliedTheme = theme
@@ -45,55 +39,28 @@ struct TerminalContainerView: NSViewRepresentable {
 
     func updateNSView(_ container: TerminalDragContainerView, context: Context) {
         container.isPassthrough = isComposerActive
-        guard let termView = container.terminalView as? LocalProcessTerminalView else { return }
-        // installColors() triggers setNeedsDisplay(bounds) — a full-grid redraw on every call.
-        // On Intel Mac, each redraw is ~2ms × N parent re-renders/sec = continuous CPU burn.
-        // Guard identically to font assignment: only apply when the theme actually changes.
+        // Theme application can be expensive. Only apply on actual change.
         let themeChanged = container.lastAppliedTheme != theme
         if themeChanged {
-            applyColors(theme, to: termView)
+            engine.applyTheme(theme)
             container.lastAppliedTheme = theme
         }
-        // Font assignment is expensive: SwiftTerm recalculates character dimensions for every cell.
-        // Guard to avoid triggering this on every parent re-render (ViewModel observable
-        // property changes cause frequent re-renders — without this guard, CPU spikes when idle).
+        // Font changes can trigger cell recalculation. Guard against redundant calls.
         let fontChanged = container.lastAppliedFontName != fontFamily
             || container.lastAppliedFontSize != fontSize
         if fontChanged {
-            applyFont(to: termView)
+            engine.applyFont(family: fontFamily, size: fontSize)
             container.lastAppliedFontName = fontFamily
             container.lastAppliedFontSize = fontSize
         }
         // Use cached scroller references — O(1) instead of O(n) subview traversal.
-        // SwiftTerm may reset isHidden after its own layout pass, so we re-apply each render.
         container.hideCachedScrollers()
     }
-
-    // MARK: - Theme application
-
-    private func applyColors(_ theme: ThemeColors, to view: LocalProcessTerminalView) {
-        view.nativeBackgroundColor = NSColor(theme.background)
-        view.nativeForegroundColor = NSColor(theme.foreground)
-        view.installColors(theme.toSwiftTermColors())
-    }
-
-    private func applyFont(to view: LocalProcessTerminalView) {
-        let font = NSFont(name: fontFamily, size: fontSize)
-            ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        view.font = font
-        logger.debug("Terminal font set: \(font.fontName) size=\(fontSize)")
-    }
-
-    private func applyTheme(_ theme: ThemeColors, to view: LocalProcessTerminalView) {
-        applyColors(theme, to: view)
-        applyFont(to: view)
-    }
-
 }
 
 // MARK: - TerminalDragContainerView
 
-/// Container NSView wrapping the SwiftTerm terminal view.
+/// Container NSView wrapping the terminal engine's view.
 /// Implements NSDraggingDestination directly — this is required because NSView subclasses
 /// must override drag methods themselves; there is no drag delegate protocol.
 ///
@@ -108,16 +75,12 @@ final class TerminalDragContainerView: NSView {
     /// Set to true while the composer overlay is visible so that hitTest returns nil,
     /// letting AppKit fall through to NSHostingView and SwiftUI handle events.
     var isPassthrough = false
-    /// Last font family/size applied via updateNSView. Guards against SwiftTerm
-    /// recalculating character dimensions on every parent view re-render.
+    /// Last font family/size applied via updateNSView. Guards against redundant re-application.
     var lastAppliedFontName: String?
     var lastAppliedFontSize: CGFloat = 0
-    /// Last theme applied via updateNSView. Guards against installColors() triggering a
-    /// full-grid setNeedsDisplay on every parent re-render — on Intel Mac this is the
-    /// primary source of idle CPU burn (~70%+ from repeated terminal cell redraws).
+    /// Last theme applied via updateNSView. Guards against redundant re-application.
     var lastAppliedTheme: ThemeColors?
-    /// Cached NSScroller subviews found at construction time. SwiftTerm adds its scroller
-    /// during init and never removes it, so this reference stays valid for the view's lifetime.
+    /// Cached NSScroller subviews found at construction time.
     /// Populated by cacheAndHideScrollers(); used by hideCachedScrollers() on every render.
     private var cachedScrollers: [NSScroller] = []
     // In-flight task debouncing SIGWINCH delivery after a layout change.
@@ -137,9 +100,8 @@ final class TerminalDragContainerView: NSView {
 
     // MARK: - Scroller cache
 
-    /// Called once in makeNSView after SwiftTerm has fully initialised its subview tree.
-    /// Locates all NSScroller instances, hides them, and stores references so that
-    /// hideCachedScrollers() can operate in O(1) on subsequent updateNSView calls.
+    /// Called once in makeNSView. Locates all NSScroller instances, hides them,
+    /// and stores references for O(1) access in subsequent updateNSView calls.
     func cacheAndHideScrollers() {
         cachedScrollers = terminalView.subviews.compactMap { $0 as? NSScroller }
         for scroller in cachedScrollers {
@@ -147,9 +109,7 @@ final class TerminalDragContainerView: NSView {
         }
     }
 
-    /// Re-hides the previously cached NSScroller references.
-    /// SwiftTerm may reset isHidden during its own layout pass, so this is called
-    /// on every updateNSView to keep the scrollers suppressed — cost is O(1).
+    /// Re-hides the previously cached NSScroller references — O(1).
     func hideCachedScrollers() {
         for scroller in cachedScrollers {
             scroller.isHidden = true

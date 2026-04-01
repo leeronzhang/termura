@@ -9,6 +9,8 @@ if [ -n "$ZSH_VERSION" ]; then
     precmd_termura() {
         printf '\033]133;D;%s\007' "${_termura_exit:-0}"
         printf '\033]133;A\007'
+        # OSC 7: report working directory so the terminal can show it in the path bar.
+        printf '\033]7;file://%s%s\007' "$HOST" "$PWD"
     }
 
     preexec_termura() {
@@ -28,6 +30,8 @@ elif [ -n "$BASH_VERSION" ]; then
     _termura_precmd() {
         printf '\033]133;D;%s\007' "${_termura_exit:-0}"
         printf '\033]133;A\007'
+        # OSC 7: report working directory so the terminal can show it in the path bar.
+        printf '\033]7;file://%s%s\007' "$HOSTNAME" "$PWD"
     }
 
     _termura_preexec() {

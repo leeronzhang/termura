@@ -19,12 +19,18 @@ struct HandoffContext: Sendable {
     var lastUpdated: Date
 }
 
+private struct HandoffPayload: Encodable {
+    let agentType: String
+    let decisionsCount: Int
+}
+
 // MARK: - Service
 
 actor SessionHandoffService: SessionHandoffServiceProtocol {
     private let messageRepo: any SessionMessageRepositoryProtocol
     private let harnessEventRepo: any HarnessEventRepositoryProtocol
     private let fileManager: any FileManagerProtocol
+    let clock: any AppClock
 
     /// Keywords used to identify error lines when summarising output chunks.
     /// Checked case-insensitively against lowercased line content.
@@ -35,11 +41,13 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
     init(
         messageRepo: any SessionMessageRepositoryProtocol,
         harnessEventRepo: any HarnessEventRepositoryProtocol,
-        fileManager: any FileManagerProtocol = FileManager.default
+        fileManager: any FileManagerProtocol = FileManager.default,
+        clock: any AppClock = LiveClock()
     ) {
         self.messageRepo = messageRepo
         self.harnessEventRepo = harnessEventRepo
         self.fileManager = fileManager
+        self.clock = clock
     }
 
     // MARK: - Public
@@ -49,7 +57,10 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         chunks: [OutputChunk],
         agentState: AgentState
     ) async throws {
-        guard let projectRoot = session.workingDirectory else { return }
+        guard let projectRoot = session.workingDirectory else {
+            logger.warning("Skipping handoff: session \(session.id) has no workingDirectory.")
+            return
+        }
 
         let context = await buildHandoffContext(
             session: session,
@@ -104,7 +115,7 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
             errors: errors,
             agentType: agentState.agentType,
             sessionDuration: duration,
-            lastUpdated: Date()
+            lastUpdated: clock.now()
         )
     }
 
@@ -126,10 +137,15 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         )
         try await messageRepo.save(message)
 
+        let payloadData = try JSONEncoder().encode(HandoffPayload(
+            agentType: context.agentType?.rawValue ?? "unknown",
+            decisionsCount: context.decisions.count
+        ))
+        let payloadString = String(data: payloadData, encoding: .utf8) ?? "{}"
         let event = HarnessEvent(
             sessionID: session.id,
             eventType: .sessionHandoff,
-            payload: "{\"agentType\":\"\(context.agentType?.rawValue ?? "unknown")\",\"decisionsCount\":\(context.decisions.count)}"
+            payload: payloadString
         )
         try await harnessEventRepo.save(event)
     }
@@ -166,6 +182,9 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         let fm = fileManager
 
         try await Task.detached {
+            // Ensure .termura/ is in .gitignore before creating the directory,
+            // preventing accidental commit of AI session data.
+            ensureProjectGitignore(at: rootURL, fileManager: fm)
             // Ensure directory exists
             if !fm.fileExists(atPath: dirPath) {
                 try fm.createDirectory(
@@ -211,34 +230,35 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
                 let matches = decisionKeywords.contains { lower.contains($0) }
                 if matches {
                     let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty, trimmed.count > 10 else { continue }
+                    guard !trimmed.isEmpty,
+                          trimmed.count > AppConfig.SessionHandoff.minDecisionLineLength else { continue }
                     let entry = DecisionEntry(
                         timestamp: chunk.startedAt,
-                        summary: String(trimmed.prefix(200))
+                        summary: String(trimmed.prefix(AppConfig.SessionHandoff.entryLineMaxLength))
                     )
                     entries.append(entry)
                 }
             }
         }
 
-        return Array(entries.prefix(10))
+        return Array(entries.prefix(AppConfig.SessionHandoff.maxHandoffDecisions))
     }
 
     private func extractErrors(from chunks: [OutputChunk]) -> [String] {
         var errors: [String] = []
 
         for chunk in chunks where chunk.contentType == .error || (chunk.exitCode ?? 0) != 0 {
-            for line in chunk.outputLines.prefix(5) {
+            for line in chunk.outputLines.prefix(AppConfig.SessionHandoff.maxErrorLinesPerChunk) {
                 let lower = line.lowercased()
                 let isError = Self.errorLineKeywords.contains(where: lower.contains)
                 if isError {
                     let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { continue }
-                    errors.append(String(trimmed.prefix(200)))
+                    errors.append(String(trimmed.prefix(AppConfig.SessionHandoff.entryLineMaxLength)))
                 }
             }
         }
 
-        return Array(errors.prefix(10))
+        return Array(errors.prefix(AppConfig.SessionHandoff.maxHandoffErrors))
     }
 }

@@ -72,8 +72,12 @@ private struct NoteRow: FetchableRecord, PersistableRecord, Sendable {
 
 actor NoteRepository: NoteRepositoryProtocol {
     private let db: any DatabaseServiceProtocol
+    private let clock: any AppClock
 
-    init(db: any DatabaseServiceProtocol) { self.db = db }
+    init(db: any DatabaseServiceProtocol, clock: any AppClock = LiveClock()) {
+        self.db = db
+        self.clock = clock
+    }
 
     func fetchAll() async throws -> [NoteRecord] {
         try await db.read { database in
@@ -87,7 +91,7 @@ actor NoteRepository: NoteRepositoryProtocol {
 
     func save(_ note: NoteRecord) async throws {
         var mutable = NoteRow(note: note)
-        mutable.updatedAt = Date().timeIntervalSince1970
+        mutable.updatedAt = clock.now().timeIntervalSince1970
         let row = mutable // immutable copy safe for @Sendable closure
         try await db.write { database in
             try row.save(database)

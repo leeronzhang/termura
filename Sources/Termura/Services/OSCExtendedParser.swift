@@ -19,13 +19,18 @@ enum OSC777Event: Sendable, Equatable {
 /// Stateless parsers for OSC 9, 99, and 777 payloads.
 /// Follows the same pattern as `OSC133Parser`.
 enum OSCExtendedParser {
+
+    private static let maxTitleLength = 80
+    private static let maxBodyLength = 200
+    private static let sourceAttribution = " \u{2014} via Termura Terminal"
+
     // MARK: - OSC 9: Growl-style notification
 
     static func parseOSC9(_ payload: ArraySlice<UInt8>) -> OSC9Event? {
         guard !payload.isEmpty else { return nil }
         guard let message = String(bytes: payload, encoding: .utf8),
               !message.isEmpty else { return nil }
-        return .notify(message: message)
+        return .notify(message: sanitizeBody(message))
     }
 
     // MARK: - OSC 99: Progress (state[;value])
@@ -48,8 +53,18 @@ enum OSCExtendedParser {
         // Expected: ["notify", title, body]
         guard parts.count >= 3,
               parts[0] == "notify" else { return nil }
-        let title = String(parts[1])
-        let body = String(parts[2])
+        let title = sanitizeTitle(String(parts[1]))
+        let body = sanitizeBody(String(parts[2]))
         return .notification(title: title, body: body)
+    }
+
+    // MARK: - Sanitization
+
+    private static func sanitizeTitle(_ raw: String) -> String {
+        String(raw.prefix(maxTitleLength))
+    }
+
+    private static func sanitizeBody(_ raw: String) -> String {
+        String(raw.prefix(maxBodyLength)) + sourceAttribution
     }
 }

@@ -103,9 +103,18 @@ actor GitService: GitServiceProtocol {
     }
 
     /// Returns the full file content for untracked files (no diff available).
+    /// Validates that the resolved path stays within `directory` (defends against
+    /// path traversal via `../` sequences and symlink attacks in malicious repos).
     func showFile(at path: String, directory: String) async throws -> String {
-        let url = URL(fileURLWithPath: directory).appendingPathComponent(path)
-        return try String(contentsOf: url, encoding: .utf8)
+        let rootURL = URL(fileURLWithPath: directory).resolvingSymlinksInPath()
+        let fileURL = URL(fileURLWithPath: directory)
+            .appendingPathComponent(path)
+            .resolvingSymlinksInPath()
+        guard fileURL.path.hasPrefix(rootURL.path + "/") || fileURL.path == rootURL.path else {
+            logger.warning("Path traversal blocked in showFile: \(path, privacy: .public)")
+            throw GitServiceError.pathTraversal(path: path)
+        }
+        return try String(contentsOf: fileURL, encoding: .utf8)
     }
 
     // MARK: - Helpers
@@ -154,44 +163,17 @@ actor GitService: GitServiceProtocol {
         at directory: String,
         cmdString: String
     ) async throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
-        process.currentDirectoryURL = URL(fileURLWithPath: directory)
-        process.environment = ProcessInfo.processInfo.environment
+        let process = makeGitProcess(arguments: arguments, at: directory)
+        let drains = startPipeDrains(for: process)
 
-        let pipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = errPipe
-
-        // Drain pipes in detached tasks BEFORE launch to prevent pipe-buffer deadlock.
-        // If readDataToEndOfFile() were called inside terminationHandler, a child
-        // producing >64 KB of output would fill the pipe buffer, block on write,
-        // never exit, and the handler would never fire.
-        // readAllData uses DispatchQueue.global (bounded pool) instead of Task.detached
-        // so the blocking pipe read does not occupy a Swift cooperative thread for the
-        // lifetime of the git process.
-        let stdoutHandle = pipe.fileHandleForReading
-        let stderrHandle = errPipe.fileHandleForReading
-        let stdoutTask = Task.detached { await Self.readAllData(from: stdoutHandle) }
-        let stderrTask = Task.detached { await Self.readAllData(from: stderrHandle) }
-
-        // Wait for process termination via continuation; pipes are already draining.
-        // `withTaskCancellationHandler` ensures the OS process is terminated when the
-        // Swift Task is cancelled (e.g. when the timeout task wins the race in `run(_:at:)`).
-        // Without this, cancelling the Task only stops Swift execution; the child git
-        // process would continue running and accumulate as a zombie.
+        // Wait for process termination; `runToCompletion` cancels via SIGTERM if the Task is cancelled.
         let exitStatus = try await runToCompletion(
-            process,
-            stdoutHandle: stdoutHandle,
-            stderrHandle: stderrHandle,
-            cmdString: cmdString
+            process, stdoutHandle: drains.stdoutHandle, stderrHandle: drains.stderrHandle, cmdString: cmdString
         )
 
         // Pipe reads complete once the child closes its file descriptors (on exit).
-        let stdoutData = await stdoutTask.value
-        let stderrData = await stderrTask.value
+        let stdoutData = await drains.stdoutTask.value
+        let stderrData = await drains.stderrTask.value
 
         guard exitStatus == 0 else {
             let stderr = Self.decodeOutput(stderrData)
@@ -199,8 +181,43 @@ actor GitService: GitServiceProtocol {
             logger.warning("\(error.localizedDescription)")
             throw error
         }
-
         return try Self.decodeStdout(stdoutData, command: cmdString)
+    }
+
+    private func makeGitProcess(arguments: [String], at directory: String) -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.currentDirectoryURL = URL(fileURLWithPath: directory)
+        process.environment = ProcessInfo.processInfo.environment
+        return process
+    }
+
+    /// Pipe handles and background drain tasks attached to a process before launch.
+    private struct PipeDrains {
+        let stdoutHandle: FileHandle
+        let stderrHandle: FileHandle
+        let stdoutTask: Task<Data, Never>
+        let stderrTask: Task<Data, Never>
+    }
+
+    /// Attaches pipes to `process` and starts background drains. Must be called before `process.run()`.
+    /// Draining BEFORE launch prevents pipe-buffer deadlock: a child producing >64 KB of output
+    /// would fill the buffer and block on write before the termination handler fires.
+    /// readAllData uses DispatchQueue.global (bounded pool) to avoid occupying cooperative threads.
+    private func startPipeDrains(for process: Process) -> PipeDrains {
+        let pipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = errPipe
+        let stdoutHandle = pipe.fileHandleForReading
+        let stderrHandle = errPipe.fileHandleForReading
+        return PipeDrains(
+            stdoutHandle: stdoutHandle,
+            stderrHandle: stderrHandle,
+            stdoutTask: Task.detached { await Self.readAllData(from: stdoutHandle) },
+            stderrTask: Task.detached { await Self.readAllData(from: stderrHandle) }
+        )
     }
 
     /// Launches `process` and waits for it to exit, cancelling via SIGTERM if the Task is cancelled.

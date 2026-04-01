@@ -86,8 +86,18 @@ extension AppConfig {
         static let contextFileName = "context.md"
         /// Maximum summary length in characters.
         static let maxSummaryLength = 2000
-        /// Maximum number of decision entries to keep.
+        /// Maximum number of decision entries to keep (DB/storage limit).
         static let maxDecisionEntries = 50
+        /// Maximum decisions extracted into a single handoff document.
+        static let maxHandoffDecisions = 10
+        /// Maximum errors extracted into a single handoff document.
+        static let maxHandoffErrors = 10
+        /// Maximum output lines sampled per error chunk.
+        static let maxErrorLinesPerChunk = 5
+        /// Minimum character length for a line to qualify as a decision entry.
+        static let minDecisionLineLength = 10
+        /// Maximum character length for a single decision/error entry line.
+        static let entryLineMaxLength = 200
         /// Maximum character length for context injection text.
         static let injectionMaxLength = 1500
         /// Delay before injecting context after prompt detection (200ms).

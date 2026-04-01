@@ -84,12 +84,12 @@ struct AppCommands: Commands {
         Button("Focus Left Pane") {
             dispatcher.focusDualPane(slot: .left)
         }
-        .keyboardShortcut(.leftArrow, modifiers: .control)
+        .keyboardShortcut(.leftArrow, modifiers: [.control, .shift])
 
         Button("Focus Right Pane") {
             dispatcher.focusDualPane(slot: .right)
         }
-        .keyboardShortcut(.rightArrow, modifiers: .control)
+        .keyboardShortcut(.rightArrow, modifiers: [.control, .shift])
 
         Divider()
 

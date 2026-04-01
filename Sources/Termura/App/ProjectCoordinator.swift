@@ -69,7 +69,8 @@ final class ProjectCoordinator {
                 at: url,
                 engineFactory: deps.appServices.engineFactory,
                 tokenCountingService: deps.appServices.tokenCountingService,
-                metricsCollector: deps.appServices.metricsCollector
+                metricsCollector: deps.appServices.metricsCollector,
+                notificationService: deps.appServices.notificationService
             )
             let controller = ProjectWindowController(
                 projectContext: context,
@@ -175,7 +176,15 @@ final class ProjectCoordinator {
         metricsFlush: (@Sendable () async -> Void)? = nil
     ) -> NSApplication.TerminateReply {
         let contexts = projectWindows.values.map(\.projectContext)
-        let handoffItems: [TerminationHandoffItem] = projectWindows.values.compactMap { controller in
+        let handoffItems = collectHandoffItems()
+        // Even without handoff items, flush pending writes to DB before exiting.
+        guard !handoffItems.isEmpty || !contexts.isEmpty else { return .terminateNow }
+        scheduleTerminationFlush(contexts: contexts, items: handoffItems, metricsFlush: metricsFlush)
+        return .terminateLater
+    }
+
+    private func collectHandoffItems() -> [TerminationHandoffItem] {
+        projectWindows.values.compactMap { controller in
             let ctx = controller.projectContext
             guard let activeID = ctx.sessionScope.store.activeSessionID,
                   let session = ctx.sessionScope.store.session(id: activeID) else {
@@ -191,23 +200,20 @@ final class ProjectCoordinator {
                 agentState: agentState
             )
         }
+    }
 
-        // Even without handoff items, flush pending writes to DB before exiting.
-        let needsDefer = !handoffItems.isEmpty || !contexts.isEmpty
-
-        guard needsDefer else { return .terminateNow }
-
-        // Lifecycle: termination — app waits for reply(toApplicationShouldTerminate:)
-        // before actually exiting. We race the flush+handoff work against a hard deadline
-        // so a hung DB or network call never prevents the reply from being sent.
+    /// Races flush+handoff against a deadline so a hung DB never blocks `reply(toApplicationShouldTerminate:)`.
+    private func scheduleTerminationFlush(
+        contexts: [ProjectContext],
+        items: [TerminationHandoffItem],
+        metricsFlush: (@Sendable () async -> Void)?
+    ) {
         Task.detached {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    // Metrics flush runs concurrently with session flush inside the same group,
-                    // so both are protected by the shared termination timeout.
                     if let flush = metricsFlush { await flush() }
                     for ctx in contexts { await ctx.flushPendingWrites() }
-                    for item in handoffItems {
+                    for item in items {
                         do {
                             try await item.handoff.generateHandoff(
                                 session: item.session,
@@ -225,18 +231,14 @@ final class ProjectCoordinator {
                         // Only reached when the deadline fires before work completes.
                         logger.warning("Termination flush deadline exceeded — replying anyway")
                     } catch {
-                        // CancellationError thrown when work task finishes first and
-                        // TaskGroup cancels this timeout task — this is the normal fast path.
+                        // CancellationError: work task finished first — normal fast path.
                         logger.debug("Termination deadline cancelled (work completed on time)")
                     }
                 }
-                // First child to finish (work or timeout) causes the group to return;
-                // TaskGroup cancels and awaits the remaining child automatically.
-                _ = await group.next()
+                _ = await group.next() // first child to finish (work or timeout) wins
             }
             Task { @MainActor in NSApp.reply(toApplicationShouldTerminate: true) }
         }
-        return .terminateLater
     }
 
     func tearDown() {
@@ -288,8 +290,6 @@ final class ProjectCoordinator {
             Task { await notification?.notifyIfLong(chunk) }
         }
     }
-
-    // MARK: - Termination Handoff Item
 
     private struct TerminationHandoffItem {
         let handoff: any SessionHandoffServiceProtocol

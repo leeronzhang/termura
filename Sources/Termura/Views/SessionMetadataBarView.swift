@@ -9,7 +9,7 @@ struct SessionMetadataBarView: View {
 
     @Environment(\.themeManager) private var themeManager
     @AppStorage(AppConfig.CostEstimation.subscriptionModeKey) private var subscriptionMode: Bool = false
-    @State private var showAllTurns = false
+    @State var showAllTurns = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -202,7 +202,7 @@ struct SessionMetadataBarView: View {
 
     // MARK: - Reusable Components
 
-    private func sectionLabel(_ text: String) -> some View {
+    func sectionLabel(_ text: String) -> some View {
         Text(text)
             .font(AppUI.Font.micro)
             .foregroundColor(.secondary)
@@ -213,7 +213,7 @@ struct SessionMetadataBarView: View {
     private func metaChip(icon: String, text: String) -> some View {
         HStack(spacing: AppUI.Spacing.xxs) {
             Image(systemName: icon)
-                .font(.system(size: 9))
+                .font(AppUI.Font.micro)
             Text(text)
                 .font(AppUI.Font.captionMono)
         }

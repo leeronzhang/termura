@@ -81,6 +81,8 @@ struct CodifyRuleSheet: View {
                 .font(AppUI.Font.bodyMono)
                 .frame(minHeight: 150)
                 .border(Color.secondary.opacity(AppUI.Opacity.muted))
+                .accessibilityLabel("Rule content")
+                .accessibilityHint("Edit the rule text to be appended")
         }
     }
 }

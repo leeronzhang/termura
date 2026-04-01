@@ -32,6 +32,7 @@ final class TerminalViewModel {
     let outputProcessor: OutputProcessor
     let sessionServices: SessionServices
     let clock: any AppClock
+    private let notificationService: (any NotificationServiceProtocol)?
     let sessionStartTime: Date = .init()
 
     // MARK: - Internal state (not view-driving — excluded from @Observable tracking)
@@ -75,6 +76,7 @@ final class TerminalViewModel {
         outputProcessor = components.outputProcessor
         sessionServices = components.sessionServices
         clock = components.clock
+        notificationService = components.notificationService
         taskExecutor = BoundedTaskExecutor(maxConcurrent: AppConfig.Runtime.maxConcurrentSessionTasks)
 
         currentMetadata = SessionMetadata.empty(
@@ -138,10 +140,15 @@ extension TerminalViewModel {
             }
         }
         let ctxStream = agentCoordinator.contextWindowAlerts
+        let notifService = notificationService
         contextWindowAlertTask = Task { [weak self] in
             for await alert in ctxStream {
                 guard let self, !Task.isCancelled else { break }
                 contextWindowAlert = alert
+                // Fire system notification regardless of foreground state: in multi-agent
+                // scenarios the user may be watching a different session while this one
+                // hits the context limit. UI sheet is session-local; notification is global.
+                Task { await notifService?.notifyContextWindow(alert) }
             }
         }
     }

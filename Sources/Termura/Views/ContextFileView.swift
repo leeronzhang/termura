@@ -26,6 +26,8 @@ struct ContextFileView: View {
                 TextEditor(text: $content)
                     .font(AppUI.Font.bodyMono)
                     .frame(minWidth: AppConfig.UI.contextFileMinWidth, minHeight: AppConfig.UI.contextFileMinHeight)
+                    .accessibilityLabel("Context file content")
+                    .accessibilityHint("Edit the project context document")
             }
 
             Divider()
@@ -38,6 +40,7 @@ struct ContextFileView: View {
     private var header: some View {
         HStack {
             Image(systemName: "doc.text")
+                .accessibilityHidden(true)
             Text("context.md")
                 .font(.headline)
             Spacer()
@@ -52,12 +55,14 @@ struct ContextFileView: View {
         HStack {
             Button("Dismiss") { isPresented = false }
                 .keyboardShortcut(.cancelAction)
+                .accessibilityHint("Closes without saving changes")
 
             Spacer()
 
             Button("Save") { saveFile() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(isSaving || errorMessage != nil)
+                .accessibilityHint("Saves changes to context.md on disk")
         }
         .padding(AppUI.Spacing.md)
     }
@@ -107,7 +112,12 @@ struct ContextFileView: View {
         // so the main thread is not blocked, and state updates after the await are safely on MainActor.
         Task {
             do {
+                let root = projectRoot
                 try await Task.detached {
+                    // Ensure .termura/ is in .gitignore before creating the directory,
+                    // preventing accidental commit of AI session data.
+                    let rootURL = URL(fileURLWithPath: root)
+                    ensureProjectGitignore(at: rootURL)
                     if !FileManager.default.fileExists(atPath: dirPath) {
                         try FileManager.default.createDirectory(
                             atPath: dirPath, withIntermediateDirectories: true

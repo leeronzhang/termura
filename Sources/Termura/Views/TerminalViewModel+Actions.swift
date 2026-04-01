@@ -27,6 +27,14 @@ extension TerminalViewModel {
         spawnTracked { await eng.resize(columns: columns, rows: rows) }
     }
 
+    /// Silent working directory switch: cd + clear so the user never sees the command.
+    /// The command is intentionally not accumulated as user input.
+    func changeDirectory(to url: URL) {
+        let eng = engine
+        let cdCommand = "cd \(url.path.shellEscaped) && clear\r"
+        spawnTracked { await eng.send(cdCommand) }
+    }
+
     /// Dismiss the pending risk alert. ViewModel is the single source of truth for alert state.
     func dismissRiskAlert() {
         pendingRiskAlert = nil

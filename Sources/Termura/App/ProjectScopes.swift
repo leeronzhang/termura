@@ -96,6 +96,7 @@ final class SessionViewStateManager {
     private let contextInjectionService: any ContextInjectionServiceProtocol
     private let sessionHandoffService: any SessionHandoffServiceProtocol
     private let metricsCollector: (any MetricsCollectorProtocol)?
+    private let notificationService: (any NotificationServiceProtocol)?
     // @ObservationIgnored: internal Combine subscription state; views must never
     // observe cancellables directly — mutation here must not trigger SwiftUI re-renders.
     @ObservationIgnored private var cancellables: Set<AnyCancellable> = []
@@ -110,6 +111,7 @@ final class SessionViewStateManager {
         let contextInjectionService: any ContextInjectionServiceProtocol
         let sessionHandoffService: any SessionHandoffServiceProtocol
         let metricsCollector: (any MetricsCollectorProtocol)?
+        let notificationService: (any NotificationServiceProtocol)? // Optional: observability, nil = no-op
 
         init(
             commandRouter: CommandRouter,
@@ -118,7 +120,8 @@ final class SessionViewStateManager {
             agentStateStore: AgentStateStore,
             contextInjectionService: any ContextInjectionServiceProtocol,
             sessionHandoffService: any SessionHandoffServiceProtocol,
-            metricsCollector: (any MetricsCollectorProtocol)? = nil // Optional: observability, nil = no-op
+            metricsCollector: (any MetricsCollectorProtocol)? = nil, // Optional: observability, nil = no-op
+            notificationService: (any NotificationServiceProtocol)? = nil // Optional: observability, nil = no-op
         ) {
             self.commandRouter = commandRouter
             self.sessionStore = sessionStore
@@ -127,6 +130,7 @@ final class SessionViewStateManager {
             self.contextInjectionService = contextInjectionService
             self.sessionHandoffService = sessionHandoffService
             self.metricsCollector = metricsCollector
+            self.notificationService = notificationService
         }
     }
 
@@ -138,6 +142,7 @@ final class SessionViewStateManager {
         self.contextInjectionService = components.contextInjectionService
         self.sessionHandoffService = components.sessionHandoffService
         self.metricsCollector = components.metricsCollector
+        self.notificationService = components.notificationService
 
         sessionStore.sessionDidClose
             .receive(on: RunLoop.main)
@@ -164,23 +169,9 @@ final class SessionViewStateManager {
         let outputStore = OutputStore(sessionID: sessionID, commandRouter: commandRouter)
         let modeCtrl = InputModeController()
         let timeline = SessionTimeline()
-
-        let coordinator = AgentCoordinator(
-            sessionID: sessionID,
-            sessionStore: sessionStore,
-            agentStateStore: agentStateStore,
-            metricsCollector: metricsCollector
-        )
-        let processor = OutputProcessor(
-            sessionID: sessionID,
-            outputStore: outputStore,
-            tokenCountingService: tokenCountingService
-        )
-        let services = SessionServices(
-            contextInjectionService: contextInjectionService,
-            sessionHandoffService: sessionHandoffService,
-            isRestoredSession: sessionStore.isRestoredSession(id: sessionID)
-        )
+        let coordinator = makeAgentCoordinator(for: sessionID)
+        let processor = makeOutputProcessor(sessionID: sessionID, outputStore: outputStore)
+        let services = makeSessionServices(for: sessionID)
 
         let initialDir = sessionStore.session(id: sessionID)?.workingDirectory
             ?? AppConfig.Paths.homeDirectory
@@ -192,10 +183,10 @@ final class SessionViewStateManager {
             agentCoordinator: coordinator,
             outputProcessor: processor,
             sessionServices: services,
-            initialWorkingDirectory: initialDir
+            initialWorkingDirectory: initialDir,
+            notificationService: notificationService
         ))
         let editorVM = EditorViewModel(engine: engine, modeController: modeCtrl)
-
         let state = SessionViewState(
             outputStore: outputStore,
             viewModel: vm,
@@ -206,6 +197,31 @@ final class SessionViewStateManager {
         sessionViewStates[sessionID] = state
         outputStores[sessionID] = outputStore
         return state
+    }
+
+    private func makeAgentCoordinator(for sessionID: SessionID) -> AgentCoordinator {
+        AgentCoordinator(
+            sessionID: sessionID,
+            sessionStore: sessionStore,
+            agentStateStore: agentStateStore,
+            metricsCollector: metricsCollector
+        )
+    }
+
+    private func makeOutputProcessor(sessionID: SessionID, outputStore: OutputStore) -> OutputProcessor {
+        OutputProcessor(
+            sessionID: sessionID,
+            outputStore: outputStore,
+            tokenCountingService: tokenCountingService
+        )
+    }
+
+    private func makeSessionServices(for sessionID: SessionID) -> SessionServices {
+        SessionServices(
+            contextInjectionService: contextInjectionService,
+            sessionHandoffService: sessionHandoffService,
+            isRestoredSession: sessionStore.isRestoredSession(id: sessionID)
+        )
     }
 
     /// Remove cached view state when a session is closed.

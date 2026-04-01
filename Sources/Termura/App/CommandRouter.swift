@@ -59,6 +59,8 @@ final class CommandRouter {
         case cycleContentTab(forward: Bool)
         /// Focus the specified pane in dual-pane mode. No-op in single-pane mode.
         case focusDualPane(PaneSlot)
+        /// Open the most recently silently-created note (e.g. via "Send to Notes" toast tap).
+        case openLastSilentNote
     }
 
     // MARK: - Dual pane
@@ -145,6 +147,7 @@ final class CommandRouter {
     }
 
     func toggleDualPane() {
+        logger.info("[DIAG] toggleDualPane called, pendingCommand was \(String(describing: self.pendingCommand))")
         pendingCommand = .toggleDualPane
     }
 
@@ -189,12 +192,15 @@ final class CommandRouter {
     /// SwiftUI batches them into one render pass — no intermediate notesEmptyState flash.
     func toggleComposerNotes() {
         if !isComposerNotesActive {
-            isComposerNotesActive = true
             tabBeforeComposer = selectedSidebarTab
             // Auto-reveal sidebar if hidden, mirroring toggleComposerWithNotes() behaviour.
             let needsReveal = !showSidebar
             if needsReveal { sidebarWasHiddenForNotes = true }
+            // isComposerNotesActive and selectedSidebarTab must change in the same
+            // withAnimation transaction so restoreContentTabOnSidebarSwitch sees the
+            // flag as true when the onChange fires — prevents a stale tab restore.
             withAnimation(.easeInOut(duration: AppUI.Animation.quick)) {
+                isComposerNotesActive = true
                 selectedSidebarTab = .notes
                 if needsReveal { showSidebar = true }
             }
@@ -230,12 +236,15 @@ final class CommandRouter {
         // Auto-reveal sidebar if hidden so the notes list is immediately visible.
         let needsReveal = !showSidebar
         if needsReveal { sidebarWasHiddenForNotes = true }
-        // Open composer, reveal sidebar, and switch to notes in a single render pass.
-        isComposerNotesActive = true
+        // All state changes must happen inside the same withAnimation transaction so
+        // restoreContentTabOnSidebarSwitch sees isComposerNotesActive == true when the
+        // .onChange(of: selectedSidebarTab) fires — otherwise the sidebar switch is
+        // treated as permanent and the content tab is restored from history.
         withAnimation(.spring(
             response: AppConfig.UI.composerSpringResponse,
             dampingFraction: AppConfig.UI.composerSpringDamping
         )) {
+            isComposerNotesActive = true
             showComposer = true
             selectedSidebarTab = .notes
             if needsReveal { showSidebar = true }

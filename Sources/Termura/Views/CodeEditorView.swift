@@ -21,7 +21,7 @@ struct CodeEditorView: View {
 
     private var absolutePath: String {
         if filePath.hasPrefix("/") { return filePath }
-        return URL(fileURLWithPath: projectRoot).appendingPathComponent(filePath).path
+        return URL(fileURLWithPath: projectRoot).appendingPathComponent(filePath).standardized.path
     }
 
     private var displayPath: String {
@@ -79,10 +79,23 @@ struct CodeEditorView: View {
         .task { await loadFile() }
     }
 
+    /// Checks whether `filePath` resolves within `rootPath` after symlink resolution.
+    /// Must be called off-MainActor (resolvingSymlinksInPath performs I/O).
+    nonisolated private static func isContained(filePath: String, inRoot rootPath: String) -> Bool {
+        let resolvedFile = URL(fileURLWithPath: filePath).resolvingSymlinksInPath().path
+        let resolvedRoot = URL(fileURLWithPath: rootPath).resolvingSymlinksInPath().path
+        return resolvedFile.hasPrefix(resolvedRoot + "/") || resolvedFile == resolvedRoot
+    }
+
     private func loadFile() async {
         let path = absolutePath
+        let root = projectRoot
         let result: Result<String, Error> = await Task.detached {
-            Result { try String(contentsOfFile: path, encoding: .utf8) }
+            // Absolute paths (harness rules) bypass root containment.
+            if !path.hasPrefix("/"), !Self.isContained(filePath: path, inRoot: root) {
+                return .failure(CocoaError(.fileReadNoPermission))
+            }
+            return Result { try String(contentsOfFile: path, encoding: .utf8) }
         }.value
         switch result {
         case let .success(text):
@@ -96,12 +109,18 @@ struct CodeEditorView: View {
 
     private func saveFile() {
         let path = absolutePath
+        let root = projectRoot
         let text = content
         // Task { } inherits @MainActor; I/O is offloaded via inner Task.detached so the
         // main thread is not blocked, and state update after the await is safely on MainActor.
         Task {
             do {
-                try await Task.detached { try text.write(toFile: path, atomically: true, encoding: .utf8) }.value
+                try await Task.detached {
+                    if !path.hasPrefix("/"), !Self.isContained(filePath: path, inRoot: root) {
+                        throw CocoaError(.fileWriteNoPermission)
+                    }
+                    try text.write(toFile: path, atomically: true, encoding: .utf8)
+                }.value
                 isModified = false
                 logger.info("Saved \(path)")
             } catch {

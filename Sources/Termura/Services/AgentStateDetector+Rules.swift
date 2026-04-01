@@ -3,6 +3,16 @@ import Foundation
 // MARK: - Static pattern tables and rule evaluation
 
 extension AgentStateDetector {
+    /// Valid state transitions — prevents impossible jumps between non-adjacent states.
+    static let validTransitions: [AgentStatus: Set<AgentStatus>] = [
+        .idle: [.thinking, .toolRunning, .waitingInput, .error],
+        .thinking: [.toolRunning, .waitingInput, .completed, .error, .idle],
+        .toolRunning: [.thinking, .waitingInput, .completed, .error, .idle],
+        .waitingInput: [.thinking, .toolRunning, .idle, .error],
+        .completed: [.idle, .thinking, .toolRunning],
+        .error: [.idle, .thinking, .toolRunning, .waitingInput]
+    ]
+
     static let launchPatterns: [(String, AgentType)] = [
         ("claude", .claudeCode),
         ("codex", .codex),

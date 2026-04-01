@@ -198,6 +198,15 @@ actor AgentCoordinator {
         return nil
     }
 
+    // MARK: - Structured signal (Phase 2 hook)
+
+    /// Forward an authoritative OSC agent-status signal to the detector, bypassing
+    /// text-rule analysis. Called when OSC 9/99/777 carries a confirmed status frame.
+    /// Phase 2: wired from ShellIntegrationEvent when OSC parser emits agentStatus events.
+    func applyStructuredAgentSignal(status: AgentStatus) async {
+        await agentDetector.applyStructuredSignal(status)
+    }
+
     // MARK: - Output analysis (background)
 
     /// Analyze output text for agent status changes, token stats, and risk patterns.

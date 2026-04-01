@@ -23,27 +23,7 @@ extension SessionMetadataBarView {
                     if isClearCommand(turn.command) {
                         clearDividerRow(at: turn.startedAt)
                     } else {
-                        Button { onSelectChunkID?(turn.chunkID) } label: {
-                            HStack(spacing: AppUI.Spacing.smMd) {
-                                Circle().fill(exitCodeColor(turn.exitCode))
-                                    .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
-                                Image(systemName: contentTypeIcon(turn.contentType))
-                                    .font(.system(size: 9))
-                                    .foregroundColor(.secondary)
-                                Text(turnLabel(turn)).font(AppUI.Font.captionMono)
-                                    .lineLimit(1).foregroundColor(.primary)
-                                Spacer()
-                                if let dur = turn.duration {
-                                    Text(formattedDuration(dur)).font(AppUI.Font.micro)
-                                        .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
-                                        .monospacedDigit()
-                                }
-                                Text(formattedTime(turn.startedAt)).font(AppUI.Font.micro)
-                                    .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
-                            }.padding(.vertical, AppUI.Spacing.xs)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(turn.startLine == nil)
+                        turnRowButton(turn)
                     }
                 }
                 if tl.turns.count > 3, !showAllTurns {
@@ -56,6 +36,31 @@ extension SessionMetadataBarView {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func turnRowButton(_ turn: TimelineTurn) -> some View {
+        Button { onSelectChunkID?(turn.chunkID) } label: {
+            HStack(spacing: AppUI.Spacing.smMd) {
+                Circle().fill(exitCodeColor(turn.exitCode))
+                    .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
+                Image(systemName: contentTypeIcon(turn.contentType))
+                    .font(AppUI.Font.micro)
+                    .foregroundColor(.secondary)
+                Text(turnLabel(turn)).font(AppUI.Font.captionMono)
+                    .lineLimit(1).foregroundColor(.primary)
+                Spacer()
+                if let dur = turn.duration {
+                    Text(formattedDuration(dur)).font(AppUI.Font.micro)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
+                        .monospacedDigit()
+                }
+                Text(formattedTime(turn.startedAt)).font(AppUI.Font.micro)
+                    .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
+            }.padding(.vertical, AppUI.Spacing.xs)
+        }
+        .buttonStyle(.plain)
+        .disabled(turn.startLine == nil)
     }
 }
 

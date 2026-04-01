@@ -9,6 +9,14 @@ private let logger = Logger(subsystem: "com.termura.app", category: "AgentStateS
 @Observable
 @MainActor
 final class AgentStateStore: AgentStateStoreProtocol {
+    // MARK: - Dependencies
+
+    private let clock: any AppClock
+
+    init(clock: any AppClock = LiveClock()) {
+        self.clock = clock
+    }
+
     // MARK: - Observable state
 
     /// All detected agent states, keyed by session ID.
@@ -32,7 +40,7 @@ final class AgentStateStore: AgentStateStoreProtocol {
                 } catch {
                     break
                 }
-                store.now = Date()
+                store.now = store.clock.now()
             }
         }
     }

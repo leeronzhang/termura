@@ -58,6 +58,14 @@ final class LineNumberRulerView: NSRulerView {
 
     // MARK: - Drawing
 
+    /// Shared drawing parameters passed to line-number drawing helpers.
+    private struct DrawContext {
+        let containerOrigin: NSPoint
+        let visibleRect: NSRect
+        let margin: CGFloat
+        let attrs: [NSAttributedString.Key: Any]
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         // Clip to bounds to prevent drawing outside the ruler area
         let clippedRect = dirtyRect.intersection(bounds)
@@ -78,60 +86,64 @@ final class LineNumberRulerView: NSRulerView {
         guard text.length > 0 else { return }
 
         layoutManager.ensureLayout(for: textContainer)
-
-        let attrs = rulerAttributes()
-        let containerOrigin = textView.textContainerOrigin
-        let visibleRect = textView.visibleRect
-        let margin: CGFloat = (fontSize + lineSpacing) * 2
-
         // Pre-build a char-offset → line-number lookup (O(n) once, O(1) per query)
         let lineNumberAt = buildLineNumberLookup(text: text)
+        let ctx = DrawContext(
+            containerOrigin: textView.textContainerOrigin,
+            visibleRect: textView.visibleRect,
+            margin: (fontSize + lineSpacing) * 2,
+            attrs: rulerAttributes()
+        )
+        let lastDrawnLine = drawLineNumbers(layoutManager: layoutManager,
+                                            textContainer: textContainer,
+                                            lineNumberAt: lineNumberAt, ctx: ctx)
+        drawExtraLineFragment(layoutManager: layoutManager, lastDrawnLine: lastDrawnLine, ctx: ctx)
+    }
 
-        // Use enumerateLineFragments to get exact Y positions for every visual line.
+    /// Enumerates visible line fragments and draws their numbers. Returns the last drawn line number.
+    private func drawLineNumbers(
+        layoutManager: NSLayoutManager,
+        textContainer: NSTextContainer,
+        lineNumberAt: [Int],
+        ctx: DrawContext
+    ) -> Int {
         let fullGlyphRange = layoutManager.glyphRange(for: textContainer)
         var lastDrawnLine = -1
-
         layoutManager.enumerateLineFragments(
             forGlyphRange: fullGlyphRange
         ) { lineRect, _, _, glyphRange, stop in
-            let yInTextView = lineRect.origin.y + containerOrigin.y
-
+            let yInTextView = lineRect.origin.y + ctx.containerOrigin.y
             // Skip fragments well above visible area
-            if yInTextView + lineRect.height < visibleRect.origin.y - margin { return }
+            if yInTextView + lineRect.height < ctx.visibleRect.origin.y - ctx.margin { return }
             // Stop well below visible area
-            if yInTextView > visibleRect.maxY + margin {
-                stop.pointee = true
-                return
-            }
-
+            if yInTextView > ctx.visibleRect.maxY + ctx.margin { stop.pointee = true; return }
             let charRange = layoutManager.characterRange(
                 forGlyphRange: glyphRange, actualGlyphRange: nil
             )
             let charIdx = min(charRange.location, lineNumberAt.count - 1)
             let lineNumber = charIdx >= 0 ? lineNumberAt[charIdx] : 1
-
             // Only draw for the first fragment of each logical line (skip soft-wrapped continuations)
             guard lineNumber != lastDrawnLine else { return }
             lastDrawnLine = lineNumber
-
-            self.drawNumber(
-                lineNumber,
-                lineRect: lineRect,
-                containerOrigin: containerOrigin,
-                attrs: attrs
-            )
+            self.drawNumber(lineNumber, lineRect: lineRect,
+                            containerOrigin: ctx.containerOrigin, attrs: ctx.attrs)
         }
+        return lastDrawnLine
+    }
 
-        // Handle the extra line fragment (empty line after trailing \n)
+    /// Draws the line number for the extra line fragment (empty line after trailing \n).
+    private func drawExtraLineFragment(
+        layoutManager: NSLayoutManager,
+        lastDrawnLine: Int,
+        ctx: DrawContext
+    ) {
         let extraRect = layoutManager.extraLineFragmentRect
-        if extraRect.height > 0 {
-            let yInTextView = extraRect.origin.y + containerOrigin.y
-            if yInTextView >= visibleRect.origin.y - margin,
-               yInTextView <= visibleRect.maxY + margin {
-                let lastLine = (lastDrawnLine > 0 ? lastDrawnLine : 0) + 1
-                drawNumber(lastLine, lineRect: extraRect, containerOrigin: containerOrigin, attrs: attrs)
-            }
-        }
+        guard extraRect.height > 0 else { return }
+        let yInTextView = extraRect.origin.y + ctx.containerOrigin.y
+        guard yInTextView >= ctx.visibleRect.origin.y - ctx.margin,
+              yInTextView <= ctx.visibleRect.maxY + ctx.margin else { return }
+        let lastLine = (lastDrawnLine > 0 ? lastDrawnLine : 0) + 1
+        drawNumber(lastLine, lineRect: extraRect, containerOrigin: ctx.containerOrigin, attrs: ctx.attrs)
     }
 
     // MARK: - Helpers

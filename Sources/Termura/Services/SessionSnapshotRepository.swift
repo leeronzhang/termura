@@ -6,14 +6,18 @@ private let logger = Logger(subsystem: "com.termura.app", category: "SessionSnap
 
 actor SessionSnapshotRepository: SessionSnapshotRepositoryProtocol {
     private let db: any DatabaseServiceProtocol
+    private let clock: any AppClock
 
-    init(db: any DatabaseServiceProtocol) { self.db = db }
+    init(db: any DatabaseServiceProtocol, clock: any AppClock = LiveClock()) {
+        self.db = db
+        self.clock = clock
+    }
 
     func save(lines: [String], for sessionID: SessionID) async throws {
         let capped = Array(lines.suffix(AppConfig.Persistence.snapshotMaxLines))
         let compressed = try compress(capped)
         let idStr = sessionID.rawValue.uuidString
-        let now = Date().timeIntervalSince1970
+        let now = clock.now().timeIntervalSince1970
         let count = capped.count
         try await db.write { database in
             try database.execute(

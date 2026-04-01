@@ -52,9 +52,14 @@ extension ProjectContext {
         at projectURL: URL,
         engineFactory: any TerminalEngineFactory,
         tokenCountingService: any TokenCountingServiceProtocol,
-        metricsCollector: (any MetricsCollectorProtocol)? = nil // Optional: observability, nil = MetricsCollector()
+        metricsCollector: (any MetricsCollectorProtocol)? = nil, // Optional: observability, nil = MetricsCollector()
+        notificationService: (any NotificationServiceProtocol)? = nil // Optional: observability, nil = no-op
     ) async throws -> ProjectContext {
         let fallbackMetrics: any MetricsCollectorProtocol = metricsCollector ?? MetricsCollector()
+        // Ensure .termura/ is in .gitignore BEFORE any files are written to .termura/.
+        // Must complete before makePool creates the directory, otherwise a `git add .`
+        // between directory creation and gitignore update could capture sensitive files.
+        await Task.detached { ensureProjectGitignore(at: projectURL) }.value
         // makePool is non-isolated async — awaiting it suspends MainActor and runs
         // filesystem + SQLite work on the cooperative thread pool (CLAUDE.md §6, Principle 6).
         let pool = try await DatabaseService.makePool(at: projectURL)
@@ -69,8 +74,6 @@ extension ProjectContext {
         // open(at:) is async throws — await the actor hop directly, no Task wrapper needed.
         await healthMonitor.start()
 
-        // Lifecycle: one-shot housekeeping — gitignore management is non-critical.
-        Task.detached { ensureProjectGitignore(at: projectURL) }
         logger.info("Opened project at \(projectURL.path)")
         let projectVM = ProjectViewModel(
             gitService: services.git, projectRoot: projectURL.path,
@@ -82,8 +85,12 @@ extension ProjectContext {
         )
         let scopes = makeScopes(
             repos: repos, services: services,
-            tokenCountingService: tokenCountingService,
-            metricsCollector: fallbackMetrics, projectVM: projectVM
+            supplements: ScopeSupplements(
+                tokenCountingService: tokenCountingService,
+                metricsCollector: fallbackMetrics,
+                notificationService: notificationService,
+                projectVM: projectVM
+            )
         )
         return ProjectContext(makeComponents(
             projectURL: projectURL, infra: infra,
@@ -159,6 +166,13 @@ extension ProjectContext {
         )
     }
 
+    private struct ScopeSupplements {
+        let tokenCountingService: any TokenCountingServiceProtocol
+        let metricsCollector: any MetricsCollectorProtocol
+        let notificationService: (any NotificationServiceProtocol)?
+        let projectVM: ProjectViewModel
+    }
+
     private struct ProjectScopes {
         let session: SessionScope
         let data: DataScope
@@ -203,9 +217,7 @@ extension ProjectContext {
     private static func makeScopes(
         repos: ProjectRepositories,
         services: ProjectServices,
-        tokenCountingService: any TokenCountingServiceProtocol,
-        metricsCollector: any MetricsCollectorProtocol,
-        projectVM: ProjectViewModel
+        supplements: ScopeSupplements
     ) -> ProjectScopes {
         let session = SessionScope(
             store: services.sessionStore, engines: services.engineStore, agentStates: services.agentState
@@ -217,20 +229,21 @@ extension ProjectContext {
         let viewState = SessionViewStateManager(SessionViewStateManager.Components(
             commandRouter: services.router,
             sessionStore: services.sessionStore,
-            tokenCountingService: tokenCountingService,
+            tokenCountingService: supplements.tokenCountingService,
             agentStateStore: services.agentState,
             contextInjectionService: services.injection,
             sessionHandoffService: services.handoff,
-            metricsCollector: metricsCollector
+            metricsCollector: supplements.metricsCollector,
+            notificationService: supplements.notificationService
         ))
         return ProjectScopes(
             session: session, data: data,
             project: ProjectScope(
                 gitService: services.git,
-                viewModel: projectVM,
+                viewModel: supplements.projectVM,
                 diagnosticsStore: DiagnosticsStore(
                     commandRouter: services.router,
-                    projectRoot: projectVM.projectRootPath
+                    projectRoot: supplements.projectVM.projectRootPath
                 )
             ),
             viewState: viewState

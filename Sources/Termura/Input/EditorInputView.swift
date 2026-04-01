@@ -25,12 +25,25 @@ struct EditorInputView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? EditorTextView else { return }
-        // Sync viewModel text → NSTextView, guarding against feedback loops
+        // Sync viewModel text → NSTextView, guarding against feedback loops.
+        // Undo registration is disabled for programmatic syncs: if allowed, each sync
+        // (e.g., input clear after submit) pushes an entry onto the window's shared
+        // NSUndoManager. After the view is torn down, those stale entries reference a
+        // freed NSTextStorage and crash when any text view in the window calls undo.
         if textView.string != viewModel.currentText {
             context.coordinator.isSyncing = true
+            textView.undoManager?.disableUndoRegistration()
             textView.string = viewModel.currentText
+            textView.undoManager?.enableUndoRegistration()
             context.coordinator.isSyncing = false
         }
+    }
+
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        // Remove all undo/redo actions to prevent use-after-free: NSUndoManager retains
+        // undo targets by reference; if any survive view teardown their memory is invalid.
+        textView.undoManager?.removeAllActions()
     }
 
     func makeCoordinator() -> Coordinator {

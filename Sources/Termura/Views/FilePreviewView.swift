@@ -1,6 +1,9 @@
 import AppKit
+import OSLog
 import QuickLookUI
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.termura.app", category: "FilePreviewView")
 
 /// Read-only file preview using macOS QuickLook.
 /// Supports images, PDFs, Office documents, and dozens of other formats natively.
@@ -9,12 +12,13 @@ struct FilePreviewView: View {
     let projectRoot: String
 
     @State private var zoomScale: CGFloat = 1.0
+    @State private var isPathBlocked = false
 
     private var absoluteURL: URL {
         if filePath.hasPrefix("/") {
             return URL(fileURLWithPath: filePath)
         }
-        return URL(fileURLWithPath: projectRoot).appendingPathComponent(filePath)
+        return URL(fileURLWithPath: projectRoot).appendingPathComponent(filePath).standardized
     }
 
     /// Image extensions that benefit from 1:1 pixel rendering.
@@ -28,15 +32,40 @@ struct FilePreviewView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            previewHeader
-            Divider()
-            if isImage {
-                ImagePreviewView(fileURL: absoluteURL, zoom: zoomScale)
+            if isPathBlocked {
+                Spacer()
+                Text("File path escapes project root")
+                    .foregroundColor(.secondary)
+                Spacer()
             } else {
-                QuickLookPreviewRepresentable(fileURL: absoluteURL)
+                previewHeader
+                Divider()
+                if isImage {
+                    ImagePreviewView(fileURL: absoluteURL, zoom: zoomScale)
+                } else {
+                    QuickLookPreviewRepresentable(fileURL: absoluteURL)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task { await validateContainment() }
+    }
+
+    /// Validates that the resolved file path stays within the project root.
+    /// Uses resolvingSymlinksInPath (I/O) off-MainActor to detect symlink attacks.
+    private func validateContainment() async {
+        guard !filePath.hasPrefix("/") else { return }
+        let url = absoluteURL
+        let root = projectRoot
+        let blocked: Bool = await Task.detached {
+            let resolvedFile = url.resolvingSymlinksInPath().path
+            let resolvedRoot = URL(fileURLWithPath: root).resolvingSymlinksInPath().path
+            return !(resolvedFile.hasPrefix(resolvedRoot + "/") || resolvedFile == resolvedRoot)
+        }.value
+        if blocked {
+            logger.warning("Path traversal blocked in FilePreview: \(filePath, privacy: .public)")
+            isPathBlocked = true
+        }
     }
 
     private var previewHeader: some View {

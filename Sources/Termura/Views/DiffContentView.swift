@@ -136,8 +136,16 @@ struct DiffContentView: View {
                 // Untracked files have no diff — show full content with + prefix
                 let url = URL(fileURLWithPath: projectRoot)
                     .appendingPathComponent(filePath)
+                    .standardized
+                let root = projectRoot
                 let content: String = try await Task.detached {
-                    try String(contentsOf: url, encoding: .utf8)
+                    let resolvedFile = url.resolvingSymlinksInPath().path
+                    let resolvedRoot = URL(fileURLWithPath: root).resolvingSymlinksInPath().path
+                    guard resolvedFile.hasPrefix(resolvedRoot + "/")
+                        || resolvedFile == resolvedRoot else {
+                        throw GitServiceError.pathTraversal(path: url.lastPathComponent)
+                    }
+                    return try String(contentsOf: url, encoding: .utf8)
                 }.value
                 rawText = content
                     .components(separatedBy: "\n")

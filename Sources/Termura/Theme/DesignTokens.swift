@@ -94,10 +94,16 @@ enum AppUI {
         static let pathMono = SwiftUI.Font.custom(AppConfig.Fonts.terminalFamily, size: 13)
         /// 9pt semibold — folder / tree chevrons
         static let chevron = SwiftUI.Font.system(size: 9, weight: .semibold)
+        /// 9pt medium — attachment size labels, compact metadata chips
+        static let microMedium = SwiftUI.Font.system(size: 9, weight: .medium)
         /// 10pt bold monospaced — git status badges (M, A, D, U, R)
         static let gitBadge = SwiftUI.Font.custom(AppConfig.Fonts.terminalFamily, size: 10).bold()
+        /// 14pt — sidebar section labels, overlay titles (regular weight)
+        static let title2Regular = SwiftUI.Font.system(size: 14)
         /// 15pt — sidebar tab bar icons
         static let tabBarIcon = SwiftUI.Font.system(size: 15)
+        /// 40pt light — onboarding / sheet hero icons
+        static let sheetIcon = SwiftUI.Font.system(size: 40, weight: .light)
     }
 
     // MARK: - Opacity

@@ -65,6 +65,7 @@ struct SearchView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
                 .frame(width: AppUI.Size.iconFrame)
+                .accessibilityHidden(true)
             TextField("Search sessions and notes\u{2026}", text: $viewModel.query)
                 .textFieldStyle(.plain)
                 .font(AppUI.Font.searchField)
@@ -96,6 +97,13 @@ struct SearchView: View {
                 SearchResultRowView(result: result)
                     .contentShape(Rectangle())
                     .onTapGesture {
+                        if case let .session(s) = result {
+                            onSelectSession(s.id)
+                            isPresented = false
+                        }
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction(.default) {
                         if case let .session(s) = result {
                             onSelectSession(s.id)
                             isPresented = false

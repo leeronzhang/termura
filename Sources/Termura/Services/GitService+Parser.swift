@@ -133,6 +133,8 @@ enum GitServiceError: Error, LocalizedError {
     case decodeFailed(command: String)
     /// The target directory is not inside a git repository (exit 128).
     case notARepo
+    /// A file path from git output resolved outside the project root (path traversal / symlink attack).
+    case pathTraversal(path: String)
 
     var errorDescription: String? {
         switch self {
@@ -144,6 +146,8 @@ enum GitServiceError: Error, LocalizedError {
             "git \(command): output could not be decoded as UTF-8 or Latin-1"
         case .notARepo:
             "Not a git repository"
+        case .pathTraversal:
+            "File path escapes the project root"
         }
     }
 
@@ -159,6 +163,8 @@ enum GitServiceError: Error, LocalizedError {
         case .decodeFailed:
             false
         case .notARepo:
+            false
+        case .pathTraversal:
             false
         }
     }

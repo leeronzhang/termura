@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 // MARK: - Pane slot
@@ -69,64 +70,27 @@ struct MainView: View {
             contentArea
         }
         .background(themeManager.current.background)
-        // Capture the hosting NSWindow so fullscreen observers are filtered per-window.
-        // Required for correctness when multiple project windows are open simultaneously.
-        .background(HostingWindowCapture { window in
-            hostingWindow = window
-            isFullScreen = window.styleMask.contains(.fullScreen)
-        })
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { notification in
-            guard (notification.object as? NSWindow) === hostingWindow else { return }
-            isFullScreen = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { notification in
-            guard (notification.object as? NSWindow) === hostingWindow else { return }
-            isFullScreen = false
-        }
-        // onChange inventory — limit: 5 (CLAUDE.md §5.5). Adding a 6th requires PR justification.
-        // NOTE: .onChange attached anywhere in a MainView+*.swift @ViewBuilder also counts here.
-        //   1. pendingCommand        — command channel (all menu/keyboard commands)
-        //   2. focusedDualPaneID     — external sync (NSEvent monitor writes from outside SwiftUI)
-        //   3. sessions.count        — external sync (actor state change, outside render cycle)
-        //   4. selectedSidebarTab    — local state memory (needs old+new for tab history)
-        //   5. selectedContentTab    — local state memory + dual-pane sync
+        .modifier(FullScreenObservingModifier(isFullScreen: $isFullScreen, hostingWindow: $hostingWindow))
+        // onChange × 5 — CLAUDE.md §5.5 cap. Adding a 6th requires PR justification.
+        // 1.pendingCommand 2.focusedDualPaneID 3.sessions.count 4.selectedSidebarTab 5.selectedContentTab
+        // NOTE: .onChange on any MainView+*.swift @ViewBuilder also counts toward this limit.
         .onChange(of: commandRouter.pendingCommand) { _, command in
+            let log = Logger(subsystem: "com.termura.app", category: "MainView")
+            log.info("[DIAG] onChange pendingCommand: \(String(describing: command))")
             guard let command else { return }
             commandRouter.pendingCommand = nil
             reduce(command: command)
         }
         .onChange(of: commandRouter.focusedDualPaneID) { _, newID in
             guard let newID, isInSplitMode else { return }
-            if newID == leftPaneSessionID {
-                focusedSlot = .left
-            } else if newID == rightPaneSessionID {
-                focusedSlot = .right
-            }
+            focusedSlot = newID == leftPaneSessionID ? .left : .right
         }
-        .onChange(of: sessionStore.sessions.count) { _, _ in
-            syncTerminalItems()
-        }
+        .onChange(of: sessionStore.sessions.count) { _, _ in syncTerminalItems() }
         .onChange(of: commandRouter.selectedSidebarTab) { oldTab, newTab in
             restoreContentTabOnSidebarSwitch(from: oldTab, to: newTab)
         }
-        .onChange(of: selectedContentTab) { _, newTab in
-            if let newTab { trackContentTabForSidebarTab(newTab) }
-            // Sync isDualPaneActive + focusedSlot when selected tab changes externally
-            // (commands, session deletion, initial load) — not just user tab taps.
-            guard let tab = newTab else { return }
-            let isSplit = tab.isSplit
-            commandRouter.isDualPaneActive = isSplit
-            if isSplit {
-                focusedSlot = .left
-                commandRouter.focusedDualPaneID = leftPaneSessionID
-            } else {
-                commandRouter.focusedDualPaneID = nil
-            }
-        }
-        .task {
-            await ensureInitialSession()
-            restoreOpenTabs()
-        }
+        .onChange(of: selectedContentTab) { _, newTab in onSelectedContentTabChange(newTab) }
+        .task { await ensureInitialSession(); restoreOpenTabs() }
         .sheet(isPresented: router.showSearch) { searchSheet }
         .sheet(isPresented: router.showNotes) { notesSheet }
         .sheet(isPresented: showExportBinding) { exportSheet }
@@ -140,6 +104,23 @@ struct MainView: View {
             }
         } message: {
             Text("This session and all its history will be permanently removed.")
+        }
+    }
+
+    // MARK: - onChange helpers
+
+    private func onSelectedContentTabChange(_ newTab: ContentTab?) {
+        if let newTab { trackContentTabForSidebarTab(newTab) }
+        // Sync isDualPaneActive + focusedSlot when selected tab changes externally
+        // (commands, session deletion, initial load) — not just user tab taps.
+        guard let tab = newTab else { return }
+        let isSplit = tab.isSplit
+        commandRouter.isDualPaneActive = isSplit
+        if isSplit {
+            focusedSlot = .left
+            commandRouter.focusedDualPaneID = leftPaneSessionID
+        } else {
+            commandRouter.focusedDualPaneID = nil
         }
     }
 
@@ -184,6 +165,35 @@ struct MainView: View {
             get: { commandRouter.exportSessionID != nil },
             set: { if !$0 { commandRouter.exportSessionID = nil } }
         )
+    }
+}
+
+// MARK: - Hosting window capture
+
+// MARK: - FullScreen observer modifier
+
+/// Captures the hosting NSWindow and updates `isFullScreen` in response to enter/exit
+/// fullscreen notifications, scoped to this specific window instance.
+private struct FullScreenObservingModifier: ViewModifier {
+    @Binding var isFullScreen: Bool
+    @Binding var hostingWindow: NSWindow?
+
+    func body(content: Content) -> some View {
+        content
+            // Capture the hosting NSWindow so observers are filtered per-window.
+            // Required for correctness when multiple project windows are open.
+            .background(HostingWindowCapture { window in
+                hostingWindow = window
+                isFullScreen = window.styleMask.contains(.fullScreen)
+            })
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { n in
+                guard (n.object as? NSWindow) === hostingWindow else { return }
+                isFullScreen = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { n in
+                guard (n.object as? NSWindow) === hostingWindow else { return }
+                isFullScreen = false
+            }
     }
 }
 

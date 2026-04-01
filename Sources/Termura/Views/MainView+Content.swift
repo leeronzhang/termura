@@ -117,6 +117,18 @@ extension MainView {
             return best.map { .tab($0) } ?? .empty
         }
 
+        // Composer notes mode: the Composer overlay renders inside TerminalAreaView, so the
+        // content area must show a terminal/split tab — otherwise the overlay has no host.
+        // A stale non-terminal selectedContentTab (e.g. a note restored at startup) would
+        // leave the Composer invisible even though showComposer is true.
+        if sidebar == .notes, commandRouter.isComposerNotesActive,
+           !selectedTab.isTerminal, !selectedTab.isSplit {
+            let best = sessionStore.activeSessionID.flatMap { activeID in
+                terminalItems.first(where: { $0.containsSession(activeID) })
+            } ?? terminalItems.first
+            return best.map { .tab($0) } ?? .tab(selectedTab)
+        }
+
         // Notes sidebar with no note tab selected and the Composer overlay not active.
         // Tab navigation takes priority for window display: if a terminal/split tab is
         // explicitly selected in the tab bar, honour it rather than showing notesEmpty.
@@ -208,5 +220,4 @@ extension MainView {
         openTabs[idx] = .note(noteID: noteID, title: title)
         if case .note = selectedContentTab { selectedContentTab = openTabs[idx] }
     }
-
 }

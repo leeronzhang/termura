@@ -21,9 +21,11 @@ enum ExportFormat: String, Sendable, CaseIterable {
 
 actor SessionExportService: SessionExportProtocol {
     private let fileManager: any FileManagerProtocol
+    private let clock: any AppClock
 
-    init(fileManager: any FileManagerProtocol = FileManager.default) {
+    init(fileManager: any FileManagerProtocol = FileManager.default, clock: any AppClock = LiveClock()) {
         self.fileManager = fileManager
+        self.clock = clock
     }
 
     private var exportDirectory: URL {
@@ -44,7 +46,7 @@ actor SessionExportService: SessionExportProtocol {
 
     func exportJSON(session: SessionRecord, chunks: [OutputChunk]) async throws -> URL {
         try ensureExportDirectory()
-        let export = JSONExportData(session: session, chunks: chunks)
+        let export = JSONExportData(session: session, chunks: chunks, exportedAt: clock.now())
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -123,8 +125,8 @@ private struct JSONExportData: Encodable {
     let session: SessionData
     let chunks: [ChunkData]
 
-    init(session: SessionRecord, chunks: [OutputChunk]) {
-        exportedAt = Date()
+    init(session: SessionRecord, chunks: [OutputChunk], exportedAt: Date) {
+        self.exportedAt = exportedAt
         self.session = SessionData(record: session)
         self.chunks = chunks.prefix(AppConfig.Export.maxExportMessages).map { ChunkData(chunk: $0) }
     }

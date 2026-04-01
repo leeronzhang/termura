@@ -62,7 +62,7 @@ struct ComposerOverlayView: View {
     private var notesToggleButton: some View {
         Image(systemName: isNotesActive
             ? "text.rectangle.fill" : "text.rectangle")
-            .font(.system(size: 14))
+            .font(AppUI.Font.title2Regular)
             .foregroundColor(isNotesActive ? .accentColor : .secondary)
             .frame(width: 32, height: 32)
             .overlay(AppKitClickableOverlay(action: onToggleNotes))
@@ -71,7 +71,7 @@ struct ComposerOverlayView: View {
     /// Dismiss button — same AppKit overlay approach as notesToggleButton.
     private var dismissButton: some View {
         Image(systemName: "xmark")
-            .font(.system(size: 13, weight: .medium))
+            .font(AppUI.Font.title3Medium)
             .foregroundColor(.secondary)
             .frame(width: 32, height: 32)
             .overlay(AppKitClickableOverlay(action: onDismiss))
@@ -94,7 +94,7 @@ struct ComposerOverlayView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !editorViewModel.attachments.isEmpty
         return Image(systemName: "paperplane.fill")
-            .font(.system(size: 14))
+            .font(AppUI.Font.title2Regular)
             .foregroundColor(hasContent ? .white : Color.white.opacity(0.4))
             .frame(width: 36, height: 36)
             .background(Circle().fill(hasContent ? Color.accentColor : Color.secondary.opacity(0.4)))

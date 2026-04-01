@@ -62,12 +62,15 @@ actor MetricsPersistenceService {
     private let metrics: any MetricsCollectorProtocol
     private let metricsDirectory: URL
     private let sessionStartTime: ContinuousClock.Instant
+    private let clock: any AppClock
 
     init(
         metrics: any MetricsCollectorProtocol,
-        homeDirectory: URL = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+        homeDirectory: URL = URL(fileURLWithPath: AppConfig.Paths.homeDirectory),
+        clock: any AppClock = LiveClock()
     ) {
         self.metrics = metrics
+        self.clock = clock
         self.sessionStartTime = ContinuousClock.now
         metricsDirectory = homeDirectory
             .appendingPathComponent(AppConfig.Persistence.directoryName)
@@ -82,7 +85,7 @@ actor MetricsPersistenceService {
         let snap = await metrics.snapshot()
         let elapsed = (ContinuousClock.now - sessionStartTime).totalSeconds
         let record = PersistedMetricsRecord(
-            recordedAt: Date(),
+            recordedAt: clock.now(),
             sessionDurationSeconds: elapsed,
             snapshot: PersistedMetricsSnapshot(from: snap)
         )
@@ -135,6 +138,6 @@ actor MetricsPersistenceService {
     private func isoFilenameTimestamp() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        return formatter.string(from: clock.now()).replacingOccurrences(of: ":", with: "-")
     }
 }

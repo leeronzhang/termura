@@ -70,3 +70,17 @@ enum FileOpenMode {
     case edit
     case preview
 }
+
+#if DEBUG
+#Preview("Sidebar \u{2014} Sessions") {
+    @Previewable @State var tab: SidebarTab = .sessions
+    SidebarView(selectedTab: $tab)
+        .frame(width: 280, height: 600)
+}
+
+#Preview("Sidebar \u{2014} Project") {
+    @Previewable @State var tab: SidebarTab = .project
+    SidebarView(selectedTab: $tab)
+        .frame(width: 280, height: 600)
+}
+#endif

@@ -56,40 +56,11 @@ struct TerminalAreaView: View {
 
     var body: some View {
         mainLayout
-            .overlay(alignment: .bottom) {
-                if let message = notesViewModel.toastMessage {
-                    Text(message)
-                        .font(AppUI.Font.bodyMedium)
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, AppUI.Spacing.xxl)
-                        .padding(.vertical, AppUI.Spacing.md)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AppUI.Spacing.md))
-                        .padding(.bottom, AppUI.Spacing.xxl)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
+            .overlay(alignment: .bottom) { notesOverlay }
             .animation(.easeInOut(duration: 0.25), value: notesViewModel.toastMessage != nil)
-            .overlay(alignment: .bottom) {
-                if let risk = state.viewModel.pendingRiskAlert {
-                    RiskAlertBannerView(
-                        alert: risk,
-                        onStopAgent: {
-                            state.viewModel.dismissRiskAlert()
-                            let eng = engine
-                            Task { await eng.send("\u{03}") }
-                        },
-                        onAllow: { state.viewModel.dismissRiskAlert() }
-                    )
-                }
-            }
+            .overlay(alignment: .bottom) { riskAlertOverlay }
             .animation(.easeInOut(duration: 0.25), value: state.viewModel.pendingRiskAlert != nil)
-            .overlay(alignment: .bottom) {
-                if let alert = state.viewModel.contextWindowAlert {
-                    ContextWindowAlertView(alert: alert) {
-                        state.viewModel.contextWindowAlert = nil
-                    }
-                }
-            }
+            .overlay(alignment: .bottom) { contextWindowOverlay }
             .animation(.easeInOut(duration: 0.25), value: state.viewModel.contextWindowAlert != nil)
             .onAppear { onViewAppear() }
             .onDisappear { removeKeyRouter() }
@@ -109,20 +80,72 @@ struct TerminalAreaView: View {
                 checkContextFileExists()
             }
             .onChange(of: sessionScope.store.sessions.count) { old, new in
-                guard new > old else { return }
-                let sid = sessionID
-                let tl = timeline
-                let added = sessionScope.store.sessions.suffix(new - old)
-                for session in added {
-                    guard session.parentID == sid else { continue }
-                    let marker = BranchPointMarker(
-                        branchID: session.id,
-                        branchType: session.branchType,
-                        createdAt: session.createdAt
-                    )
-                    tl.addBranchMarker(at: tl.turns.indices.last ?? 0, marker: marker)
-                }
+                registerNewBranchMarkers(oldCount: old, newCount: new)
             }
+    }
+
+    // MARK: - Bottom overlays
+
+    /// Notes silent-capture toast — only shown in the focused pane in dual-pane mode.
+    @ViewBuilder
+    private var notesOverlay: some View {
+        if let message = notesViewModel.toastMessage,
+           !commandRouter.isDualPaneActive || isFocusedPane {
+            Button {
+                notesViewModel.toastMessage = nil
+                commandRouter.pendingCommand = .openLastSilentNote
+            } label: {
+                Text(message)
+                    .font(AppUI.Font.bodyMedium)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, AppUI.Spacing.xxl)
+                    .padding(.vertical, AppUI.Spacing.md)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AppUI.Spacing.md))
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, AppUI.Spacing.xxl)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    @ViewBuilder
+    private var riskAlertOverlay: some View {
+        if let risk = state.viewModel.pendingRiskAlert {
+            RiskAlertBannerView(
+                alert: risk,
+                onStopAgent: {
+                    state.viewModel.dismissRiskAlert()
+                    let eng = engine
+                    Task { await eng.send("\u{03}") }
+                },
+                onAllow: { state.viewModel.dismissRiskAlert() }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var contextWindowOverlay: some View {
+        if let alert = state.viewModel.contextWindowAlert {
+            ContextWindowAlertView(alert: alert) {
+                state.viewModel.contextWindowAlert = nil
+            }
+        }
+    }
+
+    private func registerNewBranchMarkers(oldCount: Int, newCount: Int) {
+        guard newCount > oldCount else { return }
+        let sid = sessionID
+        let tl = timeline
+        let added = sessionScope.store.sessions.suffix(newCount - oldCount)
+        for session in added {
+            guard session.parentID == sid else { continue }
+            let marker = BranchPointMarker(
+                branchID: session.id,
+                branchType: session.branchType,
+                createdAt: session.createdAt
+            )
+            tl.addBranchMarker(at: tl.turns.indices.last ?? 0, marker: marker)
+        }
     }
 
     // MARK: - Extracted layout
@@ -170,23 +193,11 @@ struct TerminalAreaView: View {
     }
 
     /// Connects the terminal view's right-click context actions to the CommandRouter and NotesViewModel.
-    /// Only wires when the engine exposes a TermuraTerminalView; no-ops for mocks.
+    /// Context menu integration for ghostty will be added in a future iteration.
     private func wireTerminalContextActions() {
-        guard let tv = engine.terminalNSView as? TermuraTerminalView else { return }
-        let router = commandRouter
-        tv.onContextAction = { text in
-            router.prefillComposer(text: text)
-        }
-        let notes = notesViewModel
-        let store = sessionScope.store
-        let sid = sessionID
-        tv.onSendToNotes = { text in
-            let title = store.session(id: sid)?.title ?? "Terminal"
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let body = "```\n\(trimmed)\n```"
-            notes.silentlyCreateNote(title: title, body: body)
-            notes.showToast("Saved to Notes")
-        }
+        // ghostty context menu actions are not yet wired.
+        // The right-click menu was previously tied to TermuraTerminalView (SwiftTerm);
+        // a ghostty-native implementation will follow once the core migration is validated.
     }
 
     /// Registers a one-shot callback on the TerminalViewModel to pre-fill the Composer

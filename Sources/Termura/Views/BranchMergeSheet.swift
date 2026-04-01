@@ -29,6 +29,7 @@ struct BranchMergeSheet: View {
         HStack {
             Image(systemName: branchIcon)
                 .foregroundColor(branchColor)
+                .accessibilityHidden(true)
             Text("Merge Branch Summary")
                 .font(.headline)
             Spacer()
@@ -67,6 +68,8 @@ struct BranchMergeSheet: View {
                 .font(AppUI.Font.bodyMono)
                 .frame(minHeight: 120)
                 .border(Color.secondary.opacity(AppUI.Opacity.muted))
+                .accessibilityLabel("Branch summary")
+                .accessibilityHint("Edit the branch session summary")
         }
     }
 
@@ -82,6 +85,7 @@ struct BranchMergeSheet: View {
             }
             .keyboardShortcut(.defaultAction)
             .disabled(summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityHint("Merges this branch summary back to the parent session")
         }
     }
 

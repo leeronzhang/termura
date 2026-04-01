@@ -23,7 +23,7 @@ actor NotificationService: NotificationServiceProtocol {
         guard duration > AppConfig.Runtime.longCommandThresholdSeconds else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = chunk.commandText.isEmpty ? "Command finished" : chunk.commandText
+        content.title = sanitizedCommandName(chunk.commandText)
         let exitStr = chunk.exitCode.map { "exit \($0)" } ?? "completed"
         content.body = "\(exitStr) · \(formattedDuration(duration))"
         content.sound = .default
@@ -76,6 +76,16 @@ actor NotificationService: NotificationServiceProtocol {
         } catch {
             logger.error("Notification authorization error: \(error)")
         }
+    }
+
+    /// Extracts only the command basename (no arguments) to prevent
+    /// credential/token leakage via macOS Notification Center history.
+    private func sanitizedCommandName(_ commandText: String) -> String {
+        let trimmed = commandText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return "Command finished" }
+        let firstToken = trimmed.components(separatedBy: .whitespaces).first ?? ""
+        let basename = URL(fileURLWithPath: firstToken).lastPathComponent
+        return basename.isEmpty ? "Command finished" : "\(basename) finished"
     }
 
     func formattedDuration(_ secs: TimeInterval) -> String {

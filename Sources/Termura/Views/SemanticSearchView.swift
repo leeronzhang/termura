@@ -31,6 +31,7 @@ struct SemanticSearchView: View {
         HStack(spacing: AppUI.Spacing.md) {
             Image(systemName: "sparkle.magnifyingglass")
                 .foregroundColor(.secondary)
+                .accessibilityHidden(true)
             TextField("Semantic search\u{2026}", text: $query)
                 .textFieldStyle(.plain)
                 .font(AppUI.Font.searchField)
@@ -64,6 +65,14 @@ struct SemanticSearchView: View {
                             isPresented = false
                         }
                     }
+                    .accessibilityLabel(hit.sectionHeading ?? "Session output")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction(.default) {
+                        if let sid = hit.sessionID {
+                            onSelectSession(sid)
+                            isPresented = false
+                        }
+                    }
             }
             .listStyle(.plain)
         }
@@ -75,6 +84,7 @@ struct SemanticSearchView: View {
                 Image(systemName: hit.isRuleResult ? "doc.text" : "terminal")
                     .foregroundColor(hit.isRuleResult ? .orange : .blue)
                     .font(AppUI.Font.label)
+                    .accessibilityHidden(true)
                 if let heading = hit.sectionHeading {
                     Text(heading).font(AppUI.Font.bodyMedium)
                 } else {

@@ -79,7 +79,7 @@ extension MainView {
     var emptyState: some View {
         VStack(spacing: 0) {
             Image(systemName: "terminal")
-                .font(.system(size: 40, weight: .light))
+                .font(AppUI.Font.sheetIcon)
                 .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.muted))
                 .padding(.bottom, AppUI.Spacing.lg)
             VStack(spacing: AppUI.Spacing.xs) {
@@ -94,7 +94,7 @@ extension MainView {
                 sessionStore.createSession(title: "Terminal")
             } label: {
                 Text("New Session")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(AppUI.Font.title2)
                     .foregroundColor(.white)
                     .padding(.horizontal, AppUI.Spacing.xxxl)
                     .padding(.vertical, AppUI.Spacing.md)
@@ -113,7 +113,7 @@ extension MainView {
     var notesEmptyState: some View {
         VStack(spacing: 0) {
             Image(systemName: "text.rectangle")
-                .font(.system(size: 40, weight: .light))
+                .font(AppUI.Font.sheetIcon)
                 .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.muted))
                 .padding(.bottom, AppUI.Spacing.lg)
             VStack(spacing: AppUI.Spacing.xs) {
@@ -128,7 +128,7 @@ extension MainView {
                 commandRouter.pendingCommand = .createNote
             } label: {
                 Text("New Note")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(AppUI.Font.title2)
                     .foregroundColor(.white)
                     .padding(.horizontal, AppUI.Spacing.xxxl)
                     .padding(.vertical, AppUI.Spacing.md)

@@ -16,65 +16,69 @@ extension TerminalAreaView {
     }
 
     private func installKeyEventMonitor() {
-        let modeCtrl = modeController
-        let termEngine = engine
-        let router = commandRouter
-        let sid = sessionID
-        let handle = editorHandle
+        let ctx = KeyHandlerContext(
+            router: commandRouter, modeCtrl: modeController,
+            termEngine: engine, sid: sessionID, handle: editorHandle
+        )
         keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            dispatchPrecondition(condition: .onQueue(.main))
-            // In dual-pane mode, only the focused pane handles key events.
-            if router.isDualPaneActive, router.focusedDualPaneID != sid { return event }
-            guard let window = NSApp.keyWindow else { return event }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            // Intercept Cmd+K directly to toggle composer.
-            if flags == .command, event.charactersIgnoringModifiers == "k" {
-                router.toggleComposer(); return nil
-            }
-            // Escape closes composer (without clearing text).
-            if router.showComposer, event.keyCode == 53 { router.dismissComposer(); return nil }
-            // Defense-in-depth: when Composer is open and the user pastes (Cmd+V),
-            // ensure EditorTextView has first responder before the event is dispatched.
-            // This MUST run before the generic Cmd early-exit below — otherwise Cmd+V
-            // exits early and the event lands in whatever view currently holds focus
-            // (often the terminal PTY after a submit), silently discarding the image.
-            // Reproduces on first auto-resume: focusEditor() delay hasn't finished yet
-            // when the user pastes, so the terminal still owns first responder.
-            if router.showComposer, flags == .command,
-               event.charactersIgnoringModifiers == "v",
-               let textView = handle.textView, window.firstResponder !== textView {
-                window.makeFirstResponder(textView)
-            }
-            // Let other Cmd-key shortcuts pass through to the menu system.
-            if flags.contains(.command) { return event }
-            if router.showComposer { return event }
-            // Dual-pane focus switch: Ctrl+left/right arrow while split mode is active.
-            // Intercepted here (before passthrough) so the shell never receives the event.
-            // Mirrors the composer invariant: focus shift is blocked when composer is open
-            // (handled above by the early return).
-            if router.isDualPaneActive, flags == .control {
-                if event.keyCode == 123 { router.focusDualPane(.left); return nil }
-                if event.keyCode == 124 { router.focusDualPane(.right); return nil }
-            }
-            // Ctrl+1-9: switch to session by index, even in passthrough mode.
-            // Must run before the passthrough block so the event is not forwarded to the PTY.
-            if flags == .control,
-               let ch = event.charactersIgnoringModifiers,
-               ch.count == 1,
-               let digit = ch.first?.wholeNumberValue,
-               (1...9).contains(digit) {
-                router.pendingCommand = .selectSession(index: digit - 1)
-                return nil
-            }
-            // In passthrough mode route keys to the terminal.
-            if modeCtrl.mode == .passthrough {
-                let termView = termEngine.terminalNSView
-                if window.firstResponder !== termView { window.makeFirstResponder(termView) }
-                termView.keyDown(with: event)
-                return nil
-            }
-            return event
+            Self.handleKeyDown(event, context: ctx)
         }
+    }
+
+    /// Captured dependencies for the key-down handler. All values are value-type copies
+    /// frozen at monitor-installation time (struct value semantics).
+    private struct KeyHandlerContext {
+        let router: CommandRouter
+        let modeCtrl: InputModeController
+        let termEngine: any TerminalEngine
+        let sid: SessionID
+        let handle: EditorViewHandle
+    }
+
+    /// Processes a local key-down event; returns `nil` to consume or `event` to pass through.
+    private static func handleKeyDown(_ event: NSEvent, context ctx: KeyHandlerContext) -> NSEvent? {
+        dispatchPrecondition(condition: .onQueue(.main))
+        // In dual-pane mode, only the focused pane handles key events.
+        if ctx.router.isDualPaneActive, ctx.router.focusedDualPaneID != ctx.sid { return event }
+        guard let window = NSApp.keyWindow else { return event }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .command, event.charactersIgnoringModifiers == "k" { ctx.router.toggleComposer(); return nil }
+        // Escape closes composer (without clearing text).
+        if ctx.router.showComposer, event.keyCode == 53 { ctx.router.dismissComposer(); return nil }
+        // Cmd+V while composer is open: ensure EditorTextView has focus before event dispatch.
+        // Without this, auto-resume delay may leave the terminal with first responder,
+        // causing paste to land in the PTY instead of the composer. Must run before Cmd exit below.
+        if ctx.router.showComposer, flags == .command,
+           event.charactersIgnoringModifiers == "v",
+           let textView = ctx.handle.textView, window.firstResponder !== textView {
+            window.makeFirstResponder(textView)
+        }
+        if flags.contains(.command) { return event }
+        if ctx.router.showComposer { return event }
+        // Shift+Ctrl+left/right switches dual-pane focus (intercepted before passthrough).
+        // Arrow keys include .numericPad and .function flags; strip them for comparison.
+        if ctx.router.isDualPaneActive,
+           flags.subtracting([.numericPad, .function]) == [.control, .shift] {
+            if event.keyCode == 123 { ctx.router.focusDualPane(.left); return nil }
+            if event.keyCode == 124 { ctx.router.focusDualPane(.right); return nil }
+        }
+        // Ctrl+1-9: switch to session by index; must run before passthrough check.
+        if flags == .control,
+           let ch = event.charactersIgnoringModifiers,
+           ch.count == 1,
+           let digit = ch.first?.wholeNumberValue,
+           (1...9).contains(digit) {
+            ctx.router.pendingCommand = .selectSession(index: digit - 1)
+            return nil
+        }
+        // In passthrough mode route keys to the terminal.
+        if ctx.modeCtrl.mode == .passthrough {
+            let termView = ctx.termEngine.terminalNSView
+            if window.firstResponder !== termView { window.makeFirstResponder(termView) }
+            termView.keyDown(with: event)
+            return nil
+        }
+        return event
     }
 
     // Mouse monitor: dual-pane focus tracking only.

@@ -132,59 +132,62 @@ final class ProjectViewModel {
         // File tree scan is skipped off the project tab — expensive (contentsOfDirectory,
         // maxDepth=10), only needed for the tree view. Git status always refreshes (badge dot).
         let shouldScanTree = commandRouter?.selectedSidebarTab == .project
-
-        async let gitStatus = {
-            do {
-                return try await self.gitService.status(at: self.projectRoot)
-            } catch {
-                logger.warning("Git status failed: \(error.localizedDescription)")
-                return GitStatusResult.notARepo
-            }
-        }()
-        async let tracked = {
-            do {
-                return try await self.gitService.trackedFiles(at: self.projectRoot)
-            } catch {
-                logger.warning("Tracked files fetch failed: \(error.localizedDescription)")
-                return Set<String>()
-            }
-        }()
-        async let scannedTree: [FileTreeNode] = { // parallel with git queries; skipped off-tab
-            guard shouldScanTree else { return [] }
-            return await fileTreeService.scan(at: projectRoot)
-        }()
-
-        let rawTree = await scannedTree
-        let status = await gitStatus
-        let trackedFiles = await tracked
+        let data = await fetchProjectData(shouldScanTree: shouldScanTree)
         guard !Task.isCancelled else { return }
-
         // Only update the tree when we actually scanned — preserves existing tree on other tabs.
         if shouldScanTree {
             let annotated = await fileTreeService.annotate(
-                tree: rawTree, with: status, trackedFiles: trackedFiles
+                tree: data.rawTree, with: data.status, trackedFiles: data.trackedFiles
             )
             guard !Task.isCancelled else { return }
-
             // Auto-expand roots on first scan. Set expandedNodeIDs BEFORE tree so tree.didSet
             // fires once with the correct expansion state (expandedNodeIDs.didSet only persists).
             if expandedNodeIDs.isEmpty && !hasRestoredExpandState {
                 hasRestoredExpandState = true
                 expandedNodeIDs = Set(annotated.lazy.filter(\.isDirectory).map(\.id))
             }
-
             tree = annotated      // tree.didSet → rebuildFlatVisibleItems() with correct IDs
         }
 
-        gitResult = status
+        gitResult = data.status
         isLoading = false
         errorMessage = nil
+        commandRouter?.hasUncommittedChanges = !data.status.files.isEmpty
+    }
 
-        commandRouter?.hasUncommittedChanges = !status.files.isEmpty
+    private struct ProjectRefreshData {
+        let status: GitStatusResult
+        let trackedFiles: Set<String>
+        let rawTree: [FileTreeNode]
+    }
+    private func fetchProjectData(shouldScanTree: Bool) async -> ProjectRefreshData {
+        async let statusFuture = fetchGitStatus()
+        async let trackedFuture = fetchTrackedFiles()
+        async let treeFuture = fetchFileTree(shouldScan: shouldScanTree)
+        return ProjectRefreshData(
+            status: await statusFuture,
+            trackedFiles: await trackedFuture,
+            rawTree: await treeFuture
+        )
+    }
+    private func fetchGitStatus() async -> GitStatusResult {
+        do { return try await gitService.status(at: projectRoot) } catch {
+            logger.warning("Git status failed: \(error.localizedDescription)")
+            return .notARepo
+        }
+    }
+    private func fetchTrackedFiles() async -> Set<String> {
+        do { return try await gitService.trackedFiles(at: projectRoot) } catch {
+            logger.warning("Tracked files fetch failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+    private func fetchFileTree(shouldScan: Bool) async -> [FileTreeNode] {
+        guard shouldScan else { return [] }
+        return await fileTreeService.scan(at: projectRoot)
     }
 
     // MARK: - Private
-
     private func setupObservers() {
         // Refresh git status when a terminal chunk completes (command may have changed files).
         chunkHandlerToken = commandRouter?.onChunkCompleted { [weak self] _ in
@@ -260,7 +263,6 @@ final class ProjectViewModel {
         guard !toInsert.isEmpty else { return }
         flatVisibleItems.insert(contentsOf: toInsert, at: idx + 1)
     }
-
     private func removeVisibleDescendants(of node: FileTreeNode) { // O(removed + shifted elements)
         guard let idx = flatVisibleItems.firstIndex(where: { $0.id == node.id }) else { return }
         let depth = flatVisibleItems[idx].depth
@@ -270,7 +272,6 @@ final class ProjectViewModel {
         guard end > start else { return }
         flatVisibleItems.removeSubrange(start..<end)
     }
-
     /// Recursively builds the flat list for `nodes` honouring expansion and ignore filter.
     private func appendVisibleNodes(_ nodes: [FileTreeNode], depth: Int, into result: inout [FlatTreeItem]) {
         for node in nodes {
@@ -281,7 +282,6 @@ final class ProjectViewModel {
             }
         }
     }
-
     private func debouncedRefresh() {
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in

@@ -53,9 +53,10 @@ enum TitleSanitizer {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 didStrip = true
             }
-            if let first = stripped.unicodeScalars.first,
-               symbolPrefixSet.contains(first) || isStrippableSymbolCategory(first) {
-                stripped = String(stripped.unicodeScalars.dropFirst())
+            if let firstChar = stripped.first,
+               let firstScalar = firstChar.unicodeScalars.first,
+               symbolPrefixSet.contains(firstScalar) || isStrippableSymbolCategory(firstScalar) {
+                stripped = String(stripped.dropFirst())
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 didStrip = true
             }

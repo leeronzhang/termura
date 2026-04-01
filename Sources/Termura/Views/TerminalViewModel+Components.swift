@@ -16,6 +16,7 @@ extension TerminalViewModel {
         let sessionServices: SessionServices
         let initialWorkingDirectory: String
         let clock: any AppClock
+        let notificationService: (any NotificationServiceProtocol)? // Optional: observability, nil = no-op
 
         init(
             sessionID: SessionID,
@@ -26,7 +27,8 @@ extension TerminalViewModel {
             outputProcessor: OutputProcessor,
             sessionServices: SessionServices,
             initialWorkingDirectory: String = AppConfig.Paths.homeDirectory,
-            clock: any AppClock = LiveClock()
+            clock: any AppClock = LiveClock(),
+            notificationService: (any NotificationServiceProtocol)? = nil // Optional: observability, nil = no-op
         ) {
             self.sessionID = sessionID
             self.engine = engine
@@ -37,6 +39,7 @@ extension TerminalViewModel {
             self.sessionServices = sessionServices
             self.initialWorkingDirectory = initialWorkingDirectory
             self.clock = clock
+            self.notificationService = notificationService
         }
     }
 

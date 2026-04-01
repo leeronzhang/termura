@@ -138,7 +138,7 @@ private struct SidebarNoteRow: View {
             onInsert(note.body)
         } label: {
             Image(systemName: "arrow.right.circle.fill")
-                .font(.system(size: 14))
+                .font(AppUI.Font.title2Regular)
                 .foregroundColor(.accentColor)
         }
         .buttonStyle(.plain)
@@ -149,7 +149,7 @@ private struct SidebarNoteRow: View {
     private var favoriteIcon: some View {
         Button { onToggleFavorite() } label: {
             Image(systemName: note.isFavorite ? "star.fill" : "star")
-                .font(.system(size: 11))
+                .font(AppUI.Font.label)
                 .foregroundColor(note.isFavorite ? .yellow : .secondary)
         }
         .buttonStyle(.plain)

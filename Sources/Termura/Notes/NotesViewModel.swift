@@ -39,6 +39,8 @@ final class NotesViewModel {
     /// Nil when no toast is active.
     var toastMessage: String?
     @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
+    /// ID of the most recently silently-created note. Used by the toast tap-to-navigate action.
+    @ObservationIgnored private(set) var lastSilentNoteID: NoteID?
 
     init(repository: any NoteRepositoryProtocol, clock: any AppClock = LiveClock()) {
         self.repository = repository
@@ -86,6 +88,7 @@ final class NotesViewModel {
     func silentlyCreateNote(title: String, body: String) {
         let note = NoteRecord(title: title, body: body)
         notes.insert(note, at: 0)
+        lastSilentNoteID = note.id
         persistTracked { [repository] in
             try await repository.save(note)
         }
@@ -100,9 +103,10 @@ final class NotesViewModel {
             do {
                 try await Task.sleep(for: AppConfig.Runtime.toastAutoDismiss)
                 self?.toastMessage = nil
+            } catch is CancellationError {
+                // Expected: superseded by a newer showToast call.
             } catch {
-                // Non-critical: cancellation is expected when showToast is called again
-                // before the previous toast expires; the newer task handles dismissal.
+                logger.warning("Toast dismiss sleep failed unexpectedly: \(error)")
             }
         }
     }

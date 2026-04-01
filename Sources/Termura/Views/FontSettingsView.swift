@@ -33,16 +33,28 @@ struct FontSettingsView: View {
             HStack {
                 Text("Font Size")
                 Spacer()
-                Button("-") { fontSettings.zoomOut() }
+                Button("-") {
+                    fontSettings.terminalFontSize = max(
+                        fontSettings.terminalFontSize - FontSettings.zoomStep,
+                        FontSettings.minSize
+                    )
+                }
                     .disabled(fontSettings.terminalFontSize <= FontSettings.minSize)
                     .accessibilityLabel("Decrease terminal font size")
                 Text("\(Int(fontSettings.terminalFontSize)) pt")
                     .frame(width: AppConfig.UI.settingsFontSizeFieldWidth, alignment: .center)
                     .monospacedDigit()
-                Button("+") { fontSettings.zoomIn() }
+                Button("+") {
+                    fontSettings.terminalFontSize = min(
+                        fontSettings.terminalFontSize + FontSettings.zoomStep,
+                        FontSettings.maxSize
+                    )
+                }
                     .disabled(fontSettings.terminalFontSize >= FontSettings.maxSize)
                     .accessibilityLabel("Increase terminal font size")
-                Button("Reset") { fontSettings.resetZoom() }
+                Button("Reset") {
+                    fontSettings.terminalFontSize = FontSettings.defaultTerminalSize
+                }
                     .foregroundColor(.secondary)
                     .accessibilityLabel("Reset terminal font size")
             }

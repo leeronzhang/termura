@@ -133,9 +133,11 @@ struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
 actor SessionRepository: SessionRepositoryProtocol {
     // internal: SessionRepository+Tree.swift needs access for tree queries.
     let db: any DatabaseServiceProtocol
+    private let clock: any AppClock
 
-    init(db: any DatabaseServiceProtocol) {
+    init(db: any DatabaseServiceProtocol, clock: any AppClock = LiveClock()) {
         self.db = db
+        self.clock = clock
     }
 
     func fetchAll() async throws -> [SessionRecord] {
@@ -177,7 +179,7 @@ actor SessionRepository: SessionRepositoryProtocol {
 
     func archive(id: SessionID) async throws {
         let idStr = id.rawValue.uuidString
-        let now = Date().timeIntervalSince1970
+        let now = clock.now().timeIntervalSince1970
         try await db.write { database in
             try database.execute(
                 sql: "UPDATE sessions SET archived_at = ? WHERE id = ?",

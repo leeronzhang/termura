@@ -41,38 +41,19 @@ struct FileTreeRowView: View {
 
     var body: some View {
         HStack(spacing: AppUI.Spacing.sm) {
-            // Indentation (fixed-width invisible block)
             if depth > 0 {
-                Color.clear
-                    .frame(
-                        width: CGFloat(depth) * AppConfig.UI.fileTreeIndentPerLevel,
-                        height: 1
-                    )
+                Color.clear.frame(
+                    width: CGFloat(depth) * AppConfig.UI.fileTreeIndentPerLevel,
+                    height: 1
+                )
             }
-
-            // Directory: arrow only; File: file icon only
-            if node.isDirectory {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(AppUI.Font.chevron)
-                    .foregroundColor(.secondary)
-                    .frame(width: AppConfig.UI.fileTreeChevronWidth)
-            } else {
-                FileTypeIcon.image(for: node.name)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: AppUI.Size.fileTypeIcon, height: AppUI.Size.fileTypeIcon)
-                    .foregroundColor(fileColor)
-            }
-
+            leadingIcon
             Text(node.name)
                 .font(AppUI.Font.title3)
                 .foregroundColor(nameColor)
                 .lineLimit(1)
                 .truncationMode(.middle)
-
             Spacer(minLength: 0)
-
-            // Git status badges
             if node.isDirectory && !node.gitChildStats.isEmpty {
                 directoryStatsBadges
             } else if let status = node.gitStatus, !node.isDirectory {
@@ -89,6 +70,23 @@ struct FileTreeRowView: View {
                 .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
+    }
+
+    /// Directory gets a disclosure chevron; file gets its type icon.
+    @ViewBuilder
+    private var leadingIcon: some View {
+        if node.isDirectory {
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(AppUI.Font.chevron)
+                .foregroundColor(.secondary)
+                .frame(width: AppConfig.UI.fileTreeChevronWidth)
+        } else {
+            FileTypeIcon.image(for: node.name)
+                .resizable()
+                .scaledToFit()
+                .frame(width: AppUI.Size.fileTypeIcon, height: AppUI.Size.fileTypeIcon)
+                .foregroundColor(fileColor)
+        }
     }
 
     // MARK: - Colors (Xcode-style: modified=orange, untracked/added=green, deleted=red)

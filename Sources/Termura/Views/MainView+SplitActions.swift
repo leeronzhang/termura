@@ -8,11 +8,17 @@ private let logger = Logger(subsystem: "com.termura.app", category: "MainView+Sp
 extension MainView {
     /// Toggles the current terminal tab between single and split (two-pane) mode.
     func toggleSplitTab() {
-        guard let current = resolvedSelectedTab else { return }
+        guard let current = resolvedSelectedTab else {
+            logger.info("[DIAG] toggleSplitTab: resolvedSelectedTab is nil, returning")
+            return
+        }
+        logger.info("[DIAG] toggleSplitTab: resolvedSelectedTab = \(String(describing: current))")
         if current.isSplit {
             dissolveSplitTab()
         } else if case let .terminal(leftID, leftTitle) = current {
             convertToSplitTab(leftID: leftID, leftTitle: leftTitle)
+        } else {
+            logger.info("[DIAG] toggleSplitTab: tab is neither split nor terminal, doing nothing")
         }
     }
 
@@ -33,6 +39,7 @@ extension MainView {
 
     private func convertToSplitTab(leftID: SessionID, leftTitle: String) {
         let secondary = pickSecondarySession(excluding: leftID)
+        logger.info("[DIAG] convertToSplitTab: leftID=\(leftID), secondary=\(secondary.id), isEnded=\(secondary.isEnded)")
         if secondary.isEnded {
             Task { @MainActor in
                 await sessionStore.reopenSession(id: secondary.id)
@@ -49,6 +56,7 @@ extension MainView {
     }
 
     private func applySplit(leftID: SessionID, leftTitle: String, secondary: SessionRecord) {
+        logger.info("[DIAG] applySplit: leftID=\(leftID), rightID=\(secondary.id)")
         let splitTab = ContentTab.split(
             left: leftID,
             right: secondary.id,

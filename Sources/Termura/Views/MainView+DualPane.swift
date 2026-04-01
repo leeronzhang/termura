@@ -38,9 +38,7 @@ extension MainView {
             .id(sessionID)
             .overlay(alignment: .top) {
                 if isFocused {
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(height: 2)
+                    Rectangle().fill(Color.accentColor).frame(height: 2)
                 }
             }
             .overlay {
@@ -50,20 +48,7 @@ extension MainView {
                         .allowsHitTesting(false)
                 }
             }
-            .background {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        // Don't shift pane focus while the composer is open in the
-                        // currently focused pane. Changing focus would move the composer
-                        // to this pane and give its terminal NSView first responder,
-                        // causing subsequent Cmd+V paste to land in the PTY.
-                        if commandRouter.showComposer && focusedSlot != slot { return }
-                        focusedSlot = slot
-                        commandRouter.focusedDualPaneID = sessionID
-                        sessionStore.activateSession(id: sessionID)
-                    }
-            }
+            .background { paneSelectionBackground(slot: slot, sessionID: sessionID) }
             .dropDestination(for: String.self) { items, _ in
                 guard let str = items.first,
                       let uuid = UUID(uuidString: str) else { return false }
@@ -73,6 +58,21 @@ extension MainView {
                 dropTargetSlot = isTargeted ? slot : nil
             }
         }
+    }
+
+    @ViewBuilder
+    private func paneSelectionBackground(slot: PaneSlot, sessionID: SessionID) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // Don't shift pane focus while the composer is open in the currently focused
+                // pane — changing focus would move the composer and give the terminal NSView
+                // first responder, causing subsequent Cmd+V paste to land in the PTY.
+                if commandRouter.showComposer && focusedSlot != slot { return }
+                focusedSlot = slot
+                commandRouter.focusedDualPaneID = sessionID
+                sessionStore.activateSession(id: sessionID)
+            }
     }
 
     @ViewBuilder

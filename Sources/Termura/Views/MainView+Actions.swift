@@ -39,7 +39,16 @@ extension MainView {
             handleCycleContentTab(forward: forward)
         case .focusDualPane(let slot):
             handleFocusDualPane(slot)
+        case .openLastSilentNote:
+            handleOpenLastSilentNote()
         }
+    }
+
+    private func handleOpenLastSilentNote() {
+        guard let noteID = notesViewModel.lastSilentNoteID,
+              let note = notesViewModel.notes.first(where: { $0.id == noteID }) else { return }
+        commandRouter.selectedSidebarTab = .notes
+        openNoteTab(noteID: note.id, title: note.title)
     }
 
     /// Activate the session at the given 0-based index in the visible (non-ended) session list.
@@ -188,10 +197,8 @@ extension MainView {
     func closeContentTab(_ tab: ContentTab) {
         switch tab {
         case let .terminal(sid, _):
-            // Synchronously remove the tab and update selection BEFORE the async endSession
-            // to prevent blank state: endSession calls terminateEngine synchronously (before
-            // the DB await), so the engine disappears while selectedContentTab still points
-            // to the closed tab. Moving the UI update here eliminates that window.
+            // Remove tab synchronously before async endSession to prevent blank state
+            // (endSession terminates the engine synchronously before its DB await).
             removeTerminalTab(containingSession: sid)
             Task { @MainActor in
                 await sessionStore.endSession(id: sid)
@@ -284,15 +291,9 @@ extension MainView {
             terminalItems.append(tab)
             selectedContentTab = tab
         }
-        // Eagerly create the engine before activateSession so the terminal renders
-        // immediately rather than showing empty state during the lazy-creation debounce
-        // (~120ms). ensureEngine is idempotent; activateSession then takes the
-        // zero-cost "engine already alive" path instead of scheduling a debounce task.
+        // Eagerly create the engine before activateSession to avoid ~120ms blank state from the
+        // lazy-creation debounce. ensureEngine is idempotent; activateSession takes the fast path.
         sessionStore.ensureEngine(for: session.id)
         sessionStore.activateSession(id: session.id)
     }
 }
-
-// Tab persistence is in MainView+TabPersistence.swift
-// Session lifecycle helpers are in MainView+SessionSync.swift
-// Split tab management is in MainView+SplitActions.swift

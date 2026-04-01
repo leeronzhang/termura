@@ -8,18 +8,21 @@ private let logger = Logger(subsystem: "com.termura.app", category: "RecentProje
 struct RecentProjectsService: Sendable {
     private let fileURL: URL
     private let fileManager: any FileManagerProtocol
+    private let clock: any AppClock
 
-    init(fileManager: any FileManagerProtocol = FileManager.default) {
+    init(fileManager: any FileManagerProtocol = FileManager.default, clock: any AppClock = LiveClock()) {
         let home = URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
         let dir = home.appendingPathComponent(AppConfig.RecentProjects.globalDirectoryName)
         fileURL = dir.appendingPathComponent(AppConfig.RecentProjects.fileName)
         self.fileManager = fileManager
+        self.clock = clock
     }
 
     /// Testable initializer allowing injection of a custom file URL and file manager.
-    init(fileURL: URL, fileManager: any FileManagerProtocol = FileManager.default) {
+    init(fileURL: URL, fileManager: any FileManagerProtocol = FileManager.default, clock: any AppClock = LiveClock()) {
         self.fileURL = fileURL
         self.fileManager = fileManager
+        self.clock = clock
     }
 
     // MARK: - Read
@@ -54,7 +57,7 @@ struct RecentProjectsService: Sendable {
         var list = fetchRecent().filter { $0.path != url.path }
         let entry = RecentProject(
             path: url.path,
-            lastOpenedAt: Date(),
+            lastOpenedAt: clock.now(),
             displayName: url.lastPathComponent
         )
         list.insert(entry, at: 0)

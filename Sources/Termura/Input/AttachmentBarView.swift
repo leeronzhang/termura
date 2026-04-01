@@ -33,7 +33,7 @@ struct AttachmentBarView: View {
                 .fill(Color.secondary.opacity(AppUI.Opacity.highlight))
                 .frame(width: 28, height: 28)
             Image(systemName: "plus")
-                .font(.system(size: 12, weight: .medium))
+                .font(AppUI.Font.bodyMedium)
                 .foregroundColor(isAtLimit ? Color.secondary.opacity(AppUI.Opacity.tertiary) : Color.secondary)
             if !isAtLimit {
                 AppKitMenuOverlay(menuProvider: menuItems)
@@ -93,16 +93,16 @@ private struct AttachmentPillView: View {
     var body: some View {
         HStack(spacing: AppUI.Spacing.xs) {
             Image(systemName: attachment.symbolName)
-                .font(.system(size: 10))
+                .font(AppUI.Font.caption)
                 .foregroundColor(.secondary)
             Text(attachment.displayName)
-                .font(.system(size: 11))
+                .font(AppUI.Font.label)
                 .foregroundColor(.primary)
                 .lineLimit(1)
             ZStack {
                 Color.clear.frame(width: 16, height: 16)
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(AppUI.Font.microMedium)
                     .foregroundColor(.secondary)
                 AppKitClickableOverlay(action: onRemove)
             }
