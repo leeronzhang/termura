@@ -45,13 +45,19 @@ extension TerminalAreaView {
         if flags == .command, event.charactersIgnoringModifiers == "k" { ctx.router.toggleComposer(); return nil }
         // Escape closes composer (without clearing text).
         if ctx.router.showComposer, event.keyCode == 53 { ctx.router.dismissComposer(); return nil }
-        // Cmd+V while composer is open: ensure EditorTextView has focus before event dispatch.
-        // Without this, auto-resume delay may leave the terminal with first responder,
-        // causing paste to land in the PTY instead of the composer. Must run before Cmd exit below.
-        if ctx.router.showComposer, flags == .command,
-           event.charactersIgnoringModifiers == "v",
-           let textView = ctx.handle.textView, window.firstResponder !== textView {
-            window.makeFirstResponder(textView)
+        // Cmd+V while composer is open: paste directly into EditorTextView and consume event.
+        // Changing firstResponder inside a monitor does not redirect the in-flight event —
+        // the event was already targeted at the old responder. We must paste programmatically.
+        let cmdOnly = flags.subtracting(.capsLock) == .command
+        if ctx.router.showComposer, cmdOnly,
+           event.charactersIgnoringModifiers == "v" {
+            if let textView = ctx.handle.textView {
+                if window.firstResponder !== textView {
+                    window.makeFirstResponder(textView)
+                }
+                textView.paste(nil)
+            }
+            return nil
         }
         if flags.contains(.command) { return event }
         if ctx.router.showComposer { return event }

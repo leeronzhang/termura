@@ -226,7 +226,15 @@ extension TerminalAreaView {
             )
             .onAppear {
                 let vm = editorViewModel
-                commandRouter.composerInsertHandler = { text in vm.appendText("\n" + text) }
+                let handle = editorHandle
+                commandRouter.composerInsertHandler = { text in
+                    if let textView = handle.textView {
+                        textView.appendTextAtEnd("\n" + text)
+                        textView.window?.makeFirstResponder(textView)
+                    } else {
+                        vm.appendText("\n" + text)
+                    }
+                }
             }
             .transition(.asymmetric(
                 insertion: .move(edge: .bottom),

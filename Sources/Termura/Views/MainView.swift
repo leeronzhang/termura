@@ -85,7 +85,7 @@ struct MainView: View {
             guard let newID, isInSplitMode else { return }
             focusedSlot = newID == leftPaneSessionID ? .left : .right
         }
-        .onChange(of: sessionStore.sessions.count) { _, _ in syncTerminalItems() }
+        .onChange(of: sessionStore.sessionTitles) { _, _ in syncTerminalItems() }
         .onChange(of: commandRouter.selectedSidebarTab) { oldTab, newTab in
             restoreContentTabOnSidebarSwitch(from: oldTab, to: newTab)
         }

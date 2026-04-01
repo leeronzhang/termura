@@ -96,6 +96,8 @@ enum TitleSanitizer {
                 didStrip = true
             }
         }
-        return stripped.isEmpty ? title : stripped
+        // Return empty so the display layer can fall back to agent display name.
+        // Returning the original (symbols-only) title creates invisible/unreadable rows.
+        return stripped
     }
 }

@@ -34,6 +34,7 @@ struct EditorInputView: NSViewRepresentable {
             context.coordinator.isSyncing = true
             textView.undoManager?.disableUndoRegistration()
             textView.string = viewModel.currentText
+            textView.setSelectedRange(NSRange(location: viewModel.currentText.count, length: 0))
             textView.undoManager?.enableUndoRegistration()
             context.coordinator.isSyncing = false
         }

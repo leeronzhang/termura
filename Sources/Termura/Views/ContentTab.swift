@@ -23,13 +23,16 @@ enum ContentTab: Identifiable, Hashable, Codable {
 
     var title: String {
         switch self {
-        case let .terminal(_, title): title.isEmpty ? "Terminal" : title
+        case let .terminal(_, title):
+            return title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Terminal" : title
         case let .split(_, _, leftTitle, rightTitle):
-            "\(leftTitle.isEmpty ? "Terminal" : leftTitle) | \(rightTitle.isEmpty ? "Terminal" : rightTitle)"
-        case let .note(_, title): title.isEmpty ? "Untitled" : title
-        case let .diff(path, _, _): URL(fileURLWithPath: path).lastPathComponent
-        case let .file(_, name): name
-        case let .preview(_, name): name
+            let left = leftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Terminal" : leftTitle
+            let right = rightTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Terminal" : rightTitle
+            return "\(left) | \(right)"
+        case let .note(_, title): return title.isEmpty ? "Untitled" : title
+        case let .diff(path, _, _): return URL(fileURLWithPath: path).lastPathComponent
+        case let .file(_, name): return name
+        case let .preview(_, name): return name
         }
     }
 

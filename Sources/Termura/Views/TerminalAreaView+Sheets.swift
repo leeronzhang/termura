@@ -19,6 +19,7 @@ struct TerminalAreaSheets: ViewModifier {
     let sessionStore: SessionStore
     let outputStore: OutputStore
     let viewModel: TerminalViewModel
+    let projectRoot: String
 
     func body(content: Content) -> some View {
         content
@@ -34,7 +35,7 @@ struct TerminalAreaSheets: ViewModifier {
             }
             .sheet(isPresented: $showContextSheet) {
                 ContextFileView(
-                    projectRoot: viewModel.currentMetadata.workingDirectory,
+                    projectRoot: projectRoot,
                     isPresented: $showContextSheet
                 )
             }

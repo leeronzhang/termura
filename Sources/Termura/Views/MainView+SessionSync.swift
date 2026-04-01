@@ -22,54 +22,72 @@ extension MainView {
 
     /// Reconciles `terminalItems` with the current session list.
     /// Adds tabs for new active sessions; removes tabs for deleted or ended sessions.
+    /// Also refreshes tab titles when sessions are renamed.
     func syncTerminalItems() {
-        let activeSessionIDs = Set(sessionStore.activeSessions.map(\.id))
-        // Remove tabs for sessions that no longer exist or have been ended.
-        var updated: [ContentTab] = []
-        for item in terminalItems {
-            switch item {
-            case let .terminal(sid, _):
-                if activeSessionIDs.contains(sid) { updated.append(item) }
-                // else: session deleted or ended — drop the tab
-            case let .split(left, right, leftTitle, rightTitle):
-                let leftActive = activeSessionIDs.contains(left)
-                let rightActive = activeSessionIDs.contains(right)
-                if leftActive && rightActive {
-                    updated.append(item)
-                } else if leftActive {
-                    updated.append(.terminal(sessionID: left, title: leftTitle))
-                } else if rightActive {
-                    updated.append(.terminal(sessionID: right, title: rightTitle))
-                }
-                // else: both gone — drop the tab
-            default:
-                updated.append(item)
-            }
-        }
-        // Add tabs for active (non-ended) sessions not yet represented.
-        let coveredIDs = Set(updated.flatMap { item -> [SessionID] in
-            switch item {
-            case let .terminal(sid, _): return [sid]
-            case let .split(left, right, _, _): return [left, right]
-            default: return []
-            }
-        })
-        var tabForActiveSession: ContentTab?
-        for session in sessionStore.activeSessions where !coveredIDs.contains(session.id) {
-            let tab = ContentTab.terminal(sessionID: session.id, title: session.title)
-            updated.append(tab)
-            if session.id == sessionStore.activeSessionID {
-                tabForActiveSession = tab
-            }
-        }
+        let activeIDs = Set(sessionStore.activeSessions.map(\.id))
+        var updated = reconcileExistingTabs(activeIDs: activeIDs)
+        let tabForActive = appendNewSessionTabs(into: &updated, activeIDs: activeIDs)
         terminalItems = updated
-        // Auto-select the newly created tab if it matches the active session.
-        if let newTab = tabForActiveSession {
+        if let newTab = tabForActive {
             selectedContentTab = newTab
         } else if let sel = selectedContentTab, !allTabs.contains(sel) {
-            // Ensure selected tab is still valid.
             selectedContentTab = terminalItems.last
         }
     }
 
+    /// Walks existing tabs: drops stale ones, refreshes titles, demotes split to single.
+    private func reconcileExistingTabs(activeIDs: Set<SessionID>) -> [ContentTab] {
+        let titles = sessionStore.sessionTitles
+        var result: [ContentTab] = []
+        for item in terminalItems {
+            switch item {
+            case let .terminal(sid, currentTitle):
+                guard activeIDs.contains(sid) else { continue }
+                let fresh = titles[sid] ?? currentTitle
+                result.append(fresh != currentTitle
+                    ? .terminal(sessionID: sid, title: fresh)
+                    : item)
+            case let .split(left, right, lTitle, rTitle):
+                let lActive = activeIDs.contains(left)
+                let rActive = activeIDs.contains(right)
+                if lActive && rActive {
+                    let newL = titles[left] ?? lTitle
+                    let newR = titles[right] ?? rTitle
+                    if newL != lTitle || newR != rTitle {
+                        result.append(.split(left: left, right: right, leftTitle: newL, rightTitle: newR))
+                    } else {
+                        result.append(item)
+                    }
+                } else if lActive {
+                    result.append(.terminal(sessionID: left, title: titles[left] ?? lTitle))
+                } else if rActive {
+                    result.append(.terminal(sessionID: right, title: titles[right] ?? rTitle))
+                }
+            default:
+                result.append(item)
+            }
+        }
+        return result
+    }
+
+    /// Adds tabs for active sessions not yet covered by existing tabs.
+    private func appendNewSessionTabs(
+        into updated: inout [ContentTab],
+        activeIDs: Set<SessionID>
+    ) -> ContentTab? {
+        let coveredIDs = Set(updated.flatMap { item -> [SessionID] in
+            switch item {
+            case let .terminal(sid, _): [sid]
+            case let .split(left, right, _, _): [left, right]
+            default: []
+            }
+        })
+        var tabForActive: ContentTab?
+        for session in sessionStore.activeSessions where !coveredIDs.contains(session.id) {
+            let tab = ContentTab.terminal(sessionID: session.id, title: session.title)
+            updated.append(tab)
+            if session.id == sessionStore.activeSessionID { tabForActive = tab }
+        }
+        return tabForActive
+    }
 }

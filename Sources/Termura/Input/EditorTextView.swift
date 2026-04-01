@@ -23,6 +23,17 @@ final class EditorTextView: NSTextView {
         didSet { needsDisplay = true }
     }
 
+    // MARK: - Programmatic insertion
+
+    /// Inserts text at the end using the standard editing pipeline.
+    /// Preserves undo state and text storage consistency — unlike setting `string` directly,
+    /// this goes through NSTextView's `insertText` which properly updates layout and selection.
+    func appendTextAtEnd(_ text: String) {
+        let end = NSRange(location: string.count, length: 0)
+        insertText(text, replacementRange: end)
+        setSelectedRange(NSRange(location: string.count, length: 0))
+    }
+
     // MARK: - Drag and drop
 
     /// Called when a file or image is dropped onto the editor.

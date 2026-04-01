@@ -140,7 +140,11 @@ struct SessionRowView: View {
                 .foregroundColor(themeManager.current.sidebarText)
                 .onExitCommand { cancelEdit() }
         } else {
-            Text(session.title)
+            let visibleTitle = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayTitle = visibleTitle.isEmpty
+                ? (agentType?.displayName ?? "Terminal")
+                : session.title
+            Text(displayTitle)
                 .font((isActive || isInSplit) ? AppUI.Font.title3Medium : AppUI.Font.title3)
                 .foregroundColor((isActive || isInSplit) ? .primary : themeManager.current.sidebarText)
                 .lineLimit(1)
@@ -277,21 +281,15 @@ struct SessionRowView: View {
         )
         SessionRowView(
             session: SessionRecord(title: "Terminal Session"),
-            isActive: false,
-            hasUnreadFailure: true,
-            onActivate: {},
-            onRename: { _ in }
+            isActive: false, hasUnreadFailure: true,
+            onActivate: {}, onRename: { _ in }
         )
         SessionRowView(
             session: SessionRecord(title: "Archived session", endedAt: Date()),
-            isActive: false,
-            hasUnreadFailure: false,
-            agentStatus: .completed,
-            agentType: .gemini,
-            tokenSummary: "88.0k",
-            durationText: "12m 41s",
-            onActivate: {},
-            onRename: { _ in }
+            isActive: false, hasUnreadFailure: false,
+            agentStatus: .completed, agentType: .gemini,
+            tokenSummary: "88.0k", durationText: "12m 41s",
+            onActivate: {}, onRename: { _ in }
         )
     }
     .frame(width: 260)
