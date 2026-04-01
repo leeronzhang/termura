@@ -63,8 +63,9 @@ final class GhosttyAppContext {
     private func injectTermuraDefaults(into cfg: ghostty_config_t) {
         let bg = ThemeColors.dark.background.hexRGB
         let fg = ThemeColors.dark.foreground.hexRGB
-        let font = AppConfig.Fonts.terminalFamily
-        let size = Int(AppConfig.Fonts.terminalSize)
+        let fontSettings = FontSettings()
+        let font = fontSettings.terminalFontFamily
+        let size = Int(fontSettings.terminalFontSize)
         let config = """
         font-family = \(font)
         font-size = \(size)
@@ -204,8 +205,9 @@ final class GhosttyAppContext {
 
         switch action.tag {
         case GHOSTTY_ACTION_SET_TITLE:
-            guard let rawTitle = action.action.set_title.title else { return }
-            view.onTitleChanged?(String(cString: rawTitle))
+            guard let rawTitle = action.action.set_title.title,
+                  let title = String(cString: rawTitle, encoding: .utf8) else { return }
+            view.onTitleChanged?(title)
 
         case GHOSTTY_ACTION_PWD:
             guard let rawPwd = action.action.pwd.pwd else { return }
