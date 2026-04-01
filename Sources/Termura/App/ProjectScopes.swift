@@ -242,6 +242,13 @@ final class SessionViewStateManager {
         outputStores[sessionID] = nil
     }
 
+    /// Awaits all in-flight handoff writes across active sessions.
+    func flushPendingHandoffs() async {
+        for (_, state) in sessionViewStates {
+            await state.viewModel.sessionServices.flushPendingHandoff()
+        }
+    }
+
     func clearAll() {
         sessionViewStates.removeAll()
         outputStores.removeAll()

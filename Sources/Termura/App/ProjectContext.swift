@@ -154,6 +154,7 @@ final class ProjectContext {
     func flushPendingWrites() async {
         await sessionScope.store.flushPendingWrites()
         await notesViewModel.flushPendingWrites()
+        await viewStateManager.flushPendingHandoffs()
     }
 
     func close() {

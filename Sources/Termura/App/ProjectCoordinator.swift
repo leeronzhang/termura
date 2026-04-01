@@ -29,6 +29,9 @@ final class ProjectCoordinator {
     private var windowObserver: NSObjectProtocol?
     /// Tracks the chunk-handler token per open project so it can be removed on close.
     private var chunkHandlerTokens: [URL: UUID] = [:]
+    /// Single-flight guard: URLs currently being opened. Prevents concurrent
+    /// openProject calls from creating duplicate contexts during the async window.
+    private var openingInFlight: Set<URL> = []
     /// Fired exactly once with the first project's CommandRouter after its window opens.
     /// Set by AppDelegate to perform launch-time work that requires a live CommandRouter.
     var onFirstProjectOpened: ((CommandRouter) -> Void)?
@@ -53,11 +56,14 @@ final class ProjectCoordinator {
             existing.window?.makeKeyAndOrderFront(nil)
             return
         }
+        guard !openingInFlight.contains(url) else { return }
+        openingInFlight.insert(url)
         // Task inherits @MainActor — DB migration in DatabaseService.init runs off main thread.
         Task { [weak self] in await self?.performOpenProjectAsync(url: url) }
     }
 
     private func performOpenProjectAsync(url: URL, persist: Bool = true) async {
+        defer { openingInFlight.remove(url) }
         guard let deps else { return }
         // Re-check inside task — a concurrent open for the same URL may have completed.
         if let existing = projectWindows[url] {
@@ -113,13 +119,20 @@ final class ProjectCoordinator {
             projectWindows[url]?.projectContext.commandRouter.removeChunkHandler(token: token)
         }
         guard let controller = projectWindows.removeValue(forKey: url) else { return }
-        controller.projectContext.close()
-        controller.close()
+        let context = controller.projectContext
         if activeContext?.projectURL == url {
             activeContext = projectWindows.values.first?.projectContext
         }
         persistOpenProjects()
-        logger.info("Closed project: \(url.path)")
+        controller.close()
+        // Flush pending debounced writes (session rename, notes autosave, etc.)
+        // before tearing down resources. The window is already closed; this Task
+        // keeps the context alive until DB writes land.
+        Task { @MainActor [context] in
+            await context.flushPendingWrites()
+            context.close()
+            logger.info("Closed project: \(url.path)")
+        }
     }
 
     func showProjectPicker() {
@@ -167,80 +180,6 @@ final class ProjectCoordinator {
         }
     }
 
-    // MARK: - Termination
-
-    /// - Parameter metricsFlush: Optional additional async work (e.g. metrics persistence) to include
-    ///   in the structured task group so it is protected by the termination timeout.
-    ///   `MetricsPersistenceService` is an actor (Sendable) — safe to capture in @Sendable closure.
-    func handleTermination(
-        metricsFlush: (@Sendable () async -> Void)? = nil
-    ) -> NSApplication.TerminateReply {
-        let contexts = projectWindows.values.map(\.projectContext)
-        let handoffItems = collectHandoffItems()
-        // Even without handoff items, flush pending writes to DB before exiting.
-        guard !handoffItems.isEmpty || !contexts.isEmpty else { return .terminateNow }
-        scheduleTerminationFlush(contexts: contexts, items: handoffItems, metricsFlush: metricsFlush)
-        return .terminateLater
-    }
-
-    private func collectHandoffItems() -> [TerminationHandoffItem] {
-        projectWindows.values.compactMap { controller in
-            let ctx = controller.projectContext
-            guard let activeID = ctx.sessionScope.store.activeSessionID,
-                  let session = ctx.sessionScope.store.session(id: activeID) else {
-                return nil
-            }
-            let chunks = ctx.viewStateManager.outputStores[activeID].map { Array($0.chunks) } ?? []
-            let agentState = ctx.sessionScope.agentStates.agents[activeID]
-                ?? AgentState(sessionID: activeID, agentType: .unknown)
-            return TerminationHandoffItem(
-                handoff: ctx.sessionHandoffService,
-                session: session,
-                chunks: chunks,
-                agentState: agentState
-            )
-        }
-    }
-
-    /// Races flush+handoff against a deadline so a hung DB never blocks `reply(toApplicationShouldTerminate:)`.
-    private func scheduleTerminationFlush(
-        contexts: [ProjectContext],
-        items: [TerminationHandoffItem],
-        metricsFlush: (@Sendable () async -> Void)?
-    ) {
-        Task.detached {
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    if let flush = metricsFlush { await flush() }
-                    for ctx in contexts { await ctx.flushPendingWrites() }
-                    for item in items {
-                        do {
-                            try await item.handoff.generateHandoff(
-                                session: item.session,
-                                chunks: item.chunks,
-                                agentState: item.agentState
-                            )
-                        } catch {
-                            logger.error("generateHandoff failed on termination: \(error)")
-                        }
-                    }
-                }
-                group.addTask {
-                    do {
-                        try await Task.sleep(for: .seconds(AppConfig.Runtime.terminationFlushTimeoutSeconds))
-                        // Only reached when the deadline fires before work completes.
-                        logger.warning("Termination flush deadline exceeded — replying anyway")
-                    } catch {
-                        // CancellationError: work task finished first — normal fast path.
-                        logger.debug("Termination deadline cancelled (work completed on time)")
-                    }
-                }
-                _ = await group.next() // first child to finish (work or timeout) wins
-            }
-            Task { @MainActor in NSApp.reply(toApplicationShouldTerminate: true) }
-        }
-    }
-
     func tearDown() {
         if let observer = windowObserver {
             NotificationCenter.default.removeObserver(observer)
@@ -249,6 +188,8 @@ final class ProjectCoordinator {
             projectWindows[url]?.projectContext.commandRouter.removeChunkHandler(token: token)
         }
         chunkHandlerTokens.removeAll()
+        // Termination path: flushPendingWrites() already called by handleTermination()
+        // before tearDown() is reached. Only resource cleanup needed here.
         for (_, controller) in projectWindows {
             controller.projectContext.close()
         }
@@ -291,10 +232,4 @@ final class ProjectCoordinator {
         }
     }
 
-    private struct TerminationHandoffItem {
-        let handoff: any SessionHandoffServiceProtocol
-        let session: SessionRecord
-        let chunks: [OutputChunk]
-        let agentState: AgentState
-    }
 }

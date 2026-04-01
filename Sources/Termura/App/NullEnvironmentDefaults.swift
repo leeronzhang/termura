@@ -96,6 +96,6 @@ actor NullContextInjectionService: ContextInjectionServiceProtocol {
 // MARK: - Session Handoff
 
 actor NullSessionHandoffService: SessionHandoffServiceProtocol {
-    func generateHandoff(session: SessionRecord, chunks: [OutputChunk], agentState: AgentState) async throws {}
+    func generateHandoff(session: SessionRecord, chunks: [OutputChunk], agentState: AgentState, projectRoot: String) async throws {}
     func readExistingContext(projectRoot: String) async -> HandoffContext? { nil }
 }

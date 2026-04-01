@@ -6,6 +6,8 @@ import Foundation
 protocol SessionStoreProtocol: AnyObject, Sendable {
     var sessions: [SessionRecord] { get }
     var activeSessionID: SessionID? { get }
+    /// Fixed project root directory — does not change with shell `cd`.
+    var projectRoot: String? { get }
     /// Cached derived lists — rebuilt in one O(n) pass on every sessions mutation.
     var activeSessions: [SessionRecord] { get }
     var pinnedSessions: [SessionRecord] { get }

@@ -5,7 +5,8 @@ protocol SessionHandoffServiceProtocol: Actor {
     func generateHandoff(
         session: SessionRecord,
         chunks: [OutputChunk],
-        agentState: AgentState
+        agentState: AgentState,
+        projectRoot: String
     ) async throws
 
     func readExistingContext(projectRoot: String) async -> HandoffContext?

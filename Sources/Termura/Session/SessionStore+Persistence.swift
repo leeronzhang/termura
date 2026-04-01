@@ -14,7 +14,7 @@ extension SessionStore {
         do {
             let branch = try await repo.createBranch(from: sessionID, type: type, title: resolvedTitle)
             appendSession(branch)
-            engineStore.createEngine(for: branch.id, shell: defaultShell)
+            engineStore.createEngine(for: branch.id, shell: defaultShell, currentDirectory: projectRoot)
             activeSessionID = branch.id
             errorMessage = nil
             logger.info("Created branch \(branch.id) from \(sessionID)")

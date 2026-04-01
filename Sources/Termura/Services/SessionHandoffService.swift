@@ -55,17 +55,14 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
     func generateHandoff(
         session: SessionRecord,
         chunks: [OutputChunk],
-        agentState: AgentState
+        agentState: AgentState,
+        projectRoot: String
     ) async throws {
-        guard let projectRoot = session.workingDirectory else {
-            logger.warning("Skipping handoff: session \(session.id) has no workingDirectory.")
-            return
-        }
-
         let context = await buildHandoffContext(
             session: session,
             chunks: chunks,
-            agentState: agentState
+            agentState: agentState,
+            projectRoot: projectRoot
         )
 
         try await persistHandoff(
@@ -82,7 +79,8 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
     private func buildHandoffContext(
         session: SessionRecord,
         chunks: [OutputChunk],
-        agentState: AgentState
+        agentState: AgentState,
+        projectRoot: String
     ) async -> HandoffContext {
         let summary = BranchSummarizer.summarize(
             chunks: chunks,
@@ -96,11 +94,7 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         let errors = extractErrors(from: chunks)
         let duration = session.lastActiveAt.timeIntervalSince(session.createdAt)
 
-        let existing: HandoffContext? = if let dir = session.workingDirectory {
-            await readExistingContext(projectRoot: dir)
-        } else {
-            nil
-        }
+        let existing = await readExistingContext(projectRoot: projectRoot)
 
         var mergedDecisions = (existing?.decisions ?? []) + decisions
         if mergedDecisions.count > AppConfig.SessionHandoff.maxDecisionEntries {

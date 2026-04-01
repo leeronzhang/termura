@@ -9,6 +9,7 @@ import Foundation
 final class MockSessionStore: SessionStoreProtocol {
     private(set) var sessions: [SessionRecord]
     private(set) var activeSessionID: SessionID?
+    var projectRoot: String?
     // Cached derived state — mirrors SessionStore for protocol conformance.
     private(set) var activeSessions: [SessionRecord] = []
     private(set) var pinnedSessions: [SessionRecord] = []

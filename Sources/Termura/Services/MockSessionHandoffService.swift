@@ -12,7 +12,8 @@ actor MockSessionHandoffService: SessionHandoffServiceProtocol {
     func generateHandoff(
         session: SessionRecord,
         chunks: [OutputChunk],
-        agentState: AgentState
+        agentState: AgentState,
+        projectRoot: String
     ) async throws {
         generateCallCount += 1
         lastGenerateSession = session

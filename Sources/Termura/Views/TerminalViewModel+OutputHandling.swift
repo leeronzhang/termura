@@ -23,7 +23,8 @@ extension TerminalViewModel {
             await sessionServices.generateHandoffIfNeeded(
                 session: session,
                 chunks: chunks,
-                agentState: agentState
+                agentState: agentState,
+                projectRoot: sessionStore.projectRoot
             )
 
         case let .titleChanged(title):
