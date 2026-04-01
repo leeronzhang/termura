@@ -49,6 +49,16 @@ enum AgentType: String, Sendable, Codable, CaseIterable {
         case .unknown:    return ""
         }
     }
+
+    /// Shell command used to resume a previous session of this agent.
+    /// Falls back to `defaultLaunchCommand` for agents without a dedicated resume flag.
+    /// Claude Code uses `--continue` to resume the last conversation.
+    var resumeCommand: String {
+        switch self {
+        case .claudeCode: return "claude --continue"
+        default:          return defaultLaunchCommand
+        }
+    }
 }
 
 /// Current operational status of a detected agent.

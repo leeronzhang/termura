@@ -22,6 +22,20 @@ enum TokenStatRegex {
     /// Matches the session-total cost in Aider's "Cost: $0.013 message, $0.237 session."
     static let aiderSessionCost = compile("\\$([\\d.]+)\\s+session")
 
+    // Codex CLI completion summary format:
+    // "tokens: 5234 input + 678 output"  or  "tokens: 5.2k input, 678 output"
+    // "cost: $0.05"
+    static let codexInput = compile("([\\d,.]+k?)\\s+input")
+    static let codexOutput = compile("([\\d,.]+k?)\\s+output")
+    static let codexCost = compile("cost:\\s*\\$([\\d.]+)")
+
+    // Gemini CLI completion summary format:
+    // "Token count: 1234 / 1048576"  or  "Tokens: 5.2k in / 1.8k out"
+    // "input_tokens: 1234"  "output_tokens: 567"
+    static let geminiTokenCount = compile("Token count:\\s*([\\d,.]+k?)")
+    static let geminiInputTokens = compile("input.tokens?:\\s*([\\d,.]+k?)")
+    static let geminiOutputTokens = compile("output.tokens?:\\s*([\\d,.]+k?)")
+
     /// Matches "Writing to <path>" lines emitted by Claude Code and similar agents.
     static let writingTo = compile("Writing to ([^\\n\\r]+)")
     /// Matches "\u{23FA} Task: <description>" — Claude Code explicit task header lines.
@@ -89,6 +103,10 @@ extension AgentStateDetector {
         switch detectedType {
         case .aider:
             return parseAiderStats(text)
+        case .codex:
+            return parseCodexStats(text) ?? parseClaudeFormatStats(text)
+        case .gemini:
+            return parseGeminiStats(text) ?? parseClaudeFormatStats(text)
         default:
             // Claude Code, OpenCode, and unrecognised agents all use the same summary format.
             return parseClaudeFormatStats(text)
@@ -139,6 +157,43 @@ extension AgentStateDetector {
         return found ? stats : nil
     }
 
+    /// Codex CLI completion summary:
+    /// "tokens: 5234 input + 678 output"  or  "tokens: 5.2k input, 678 output"
+    /// "cost: $0.05"
+    private func parseCodexStats(_ text: String) -> ParsedTokenStats? {
+        guard text.contains("input") && text.contains("output") else { return nil }
+        var stats = ParsedTokenStats()
+        var found = false
+        if let input = Self.extractTokenCount(from: text, pattern: Self.codexInputPattern) {
+            stats.inputTokens = input; found = true
+        }
+        if let output = Self.extractTokenCount(from: text, pattern: Self.codexOutputPattern) {
+            stats.outputTokens = output; found = true
+        }
+        if let cost = Self.extractDouble(from: text, pattern: Self.codexCostPattern) {
+            stats.totalCost = cost; found = true
+        }
+        return found ? stats : nil
+    }
+
+    /// Gemini CLI completion summary:
+    /// "Token count: 1234 / 1048576"  or  "input_tokens: 1234  output_tokens: 567"
+    private func parseGeminiStats(_ text: String) -> ParsedTokenStats? {
+        guard text.localizedCaseInsensitiveContains("token") else { return nil }
+        var stats = ParsedTokenStats()
+        var found = false
+        if let input = Self.extractTokenCount(from: text, pattern: Self.geminiInputPattern) {
+            stats.inputTokens = input; found = true
+        }
+        if let output = Self.extractTokenCount(from: text, pattern: Self.geminiOutputPattern) {
+            stats.outputTokens = output; found = true
+        }
+        if !found, let total = Self.extractTokenCount(from: text, pattern: Self.geminiTokenCountPattern) {
+            stats.inputTokens = total; found = true
+        }
+        return found ? stats : nil
+    }
+
     // MARK: - Token Stat Patterns
 
     // Claude Code / OpenCode patterns
@@ -150,6 +205,14 @@ extension AgentStateDetector {
     private nonisolated static let aiderSentPattern = TokenStatRegex.aiderSent
     private nonisolated static let aiderReceivedPattern = TokenStatRegex.aiderReceived
     private nonisolated static let aiderSessionCostPattern = TokenStatRegex.aiderSessionCost
+    // Codex patterns
+    private nonisolated static let codexInputPattern = TokenStatRegex.codexInput
+    private nonisolated static let codexOutputPattern = TokenStatRegex.codexOutput
+    private nonisolated static let codexCostPattern = TokenStatRegex.codexCost
+    // Gemini patterns
+    private nonisolated static let geminiTokenCountPattern = TokenStatRegex.geminiTokenCount
+    private nonisolated static let geminiInputPattern = TokenStatRegex.geminiInputTokens
+    private nonisolated static let geminiOutputPattern = TokenStatRegex.geminiOutputTokens
 
     private static func extractDouble(
         from text: String,

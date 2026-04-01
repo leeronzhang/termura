@@ -16,12 +16,20 @@ actor SessionServices {
     let sessionHandoffService: (any SessionHandoffServiceProtocol)?
     let isRestoredSession: Bool
 
+    /// True when PTY-level context injection is available for this restored session.
+    /// Checked synchronously by TerminalAreaView to skip redundant Composer pre-fill.
+    /// Safe as `nonisolated let` — immutable value set at init.
+    nonisolated let hasContextInjection: Bool
+
     // MARK: - Internal state
 
     private var hasInjectedContext = false
     // Swift actor deinit runs synchronously under last-reference guarantee and can
     // access actor-isolated state — no unsafe keyword needed for Task? slots in actors.
     private var injectionTask: Task<Void, Never>?
+    /// Tracked handoff task — awaited by flushPendingHandoff() on window close
+    /// so the write completes before resources are torn down.
+    private var handoffTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -33,10 +41,12 @@ actor SessionServices {
         self.contextInjectionService = contextInjectionService
         self.sessionHandoffService = sessionHandoffService
         self.isRestoredSession = isRestoredSession
+        self.hasContextInjection = isRestoredSession && contextInjectionService != nil
     }
 
     deinit {
         injectionTask?.cancel()
+        handoffTask?.cancel()
     }
 
     // MARK: - Context injection
@@ -75,30 +85,37 @@ actor SessionServices {
     // MARK: - Session handoff
 
     /// Generate a session handoff document on process exit.
-    /// Requires an active agent (non-unknown), a session with a working directory,
-    /// and a configured handoff service.
+    /// Requires an active agent (non-unknown) and a configured handoff service.
     func generateHandoffIfNeeded(
         session: SessionRecord?,
         chunks: [OutputChunk],
-        agentState: AgentState?
+        agentState: AgentState?,
+        projectRoot: String?
     ) {
         guard let agentState, agentState.agentType != .unknown else { return }
         guard let session else { return }
-        // Require a working directory — generateHandoff uses it to resolve the project root.
-        guard session.workingDirectory != nil else { return }
+        guard let projectRoot else { return }
         // sessionHandoffService is nil in non-Harness builds (harness feature gate — expected early exit).
         guard let handoffService = sessionHandoffService else { return }
 
-        Task.detached {
+        handoffTask = Task.detached {
             do {
                 try await handoffService.generateHandoff(
                     session: session,
                     chunks: chunks,
-                    agentState: agentState
+                    agentState: agentState,
+                    projectRoot: projectRoot
                 )
             } catch {
                 logger.error("Session handoff failed: \(error)")
             }
         }
+    }
+
+    /// Awaits the in-flight handoff task if one exists.
+    /// Called from the flush path on window close to prevent data loss.
+    func flushPendingHandoff() async {
+        await handoffTask?.value
+        handoffTask = nil
     }
 }

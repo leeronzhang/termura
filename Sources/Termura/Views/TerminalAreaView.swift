@@ -70,15 +70,14 @@ struct TerminalAreaView: View {
                 sessionID: sessionID,
                 sessionStore: sessionScope.store,
                 outputStore: outputStore,
-                viewModel: viewModel
+                viewModel: viewModel,
+                projectRoot: sessionScope.store.projectRoot ?? ""
             ))
             .onChange(of: outputStore.chunks.count) { old, new in
                 guard new > old, let latest = outputStore.chunks.last else { return }
                 timeline.append(latest, startLine: engine.currentScrollLine())
             }
-            .onChange(of: viewModel.currentMetadata.workingDirectory) { _, _ in
-                checkContextFileExists()
-            }
+            .onAppear { checkContextFileExists() }
             .onChange(of: sessionScope.store.sessions.count) { old, new in
                 registerNewBranchMarkers(oldCount: old, newCount: new)
             }
@@ -201,14 +200,18 @@ struct TerminalAreaView: View {
     }
 
     /// Registers a one-shot callback on the TerminalViewModel to pre-fill the Composer
-    /// with the previous agent's launch command when the first shell prompt is detected.
+    /// with the previous agent's resume command when the first shell prompt is detected.
     /// Only fires for restored sessions with a known agent type.
+    /// Skipped when ContextInjectionService is available — PTY injection already sends
+    /// the resume command directly to the terminal, making Composer pre-fill redundant.
     private func setupAgentResumeIfNeeded() {
+        // PTY-level injection handles resume; Composer pre-fill is the fallback path only.
+        guard !viewModel.sessionServices.hasContextInjection else { return }
         let store = sessionScope.store
         guard store.isRestoredSession(id: sessionID) else { return }
         guard let session = store.session(id: sessionID) else { return }
         let agentType = session.agentType
-        guard agentType != .unknown, !agentType.defaultLaunchCommand.isEmpty else { return }
+        guard agentType != .unknown, !agentType.resumeCommand.isEmpty else { return }
         let router = commandRouter
         let vm = viewModel
         vm.onShellPromptReadyForResume = {
@@ -225,12 +228,11 @@ struct TerminalAreaView: View {
     }
 
     private func checkContextFileExists() {
-        let dir = viewModel.currentMetadata.workingDirectory
-        guard !dir.isEmpty else {
+        guard let root = sessionScope.store.projectRoot, !root.isEmpty else {
             localUI.contextFileExists = false
             return
         }
-        let path = URL(fileURLWithPath: dir)
+        let path = URL(fileURLWithPath: root)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
             .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
         // Lifecycle: one-shot cosmetic check. fileExists is a synchronous stat(2) syscall

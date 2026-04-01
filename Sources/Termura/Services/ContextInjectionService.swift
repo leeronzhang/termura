@@ -20,13 +20,11 @@ actor ContextInjectionService: ContextInjectionServiceProtocol {
             return nil
         }
 
-        let text: String = switch context.agentType {
-        case .claudeCode:
-            formatForClaudeCode(context)
-        case .aider:
-            formatForAider(context)
-        default:
-            formatForShell(context)
+        let text: String
+        if let agentType = context.agentType, agentType != .unknown {
+            text = formatForAgent(context, agentType: agentType)
+        } else {
+            text = formatForShell(context)
         }
 
         guard !text.isEmpty else { return nil }
@@ -36,14 +34,13 @@ actor ContextInjectionService: ContextInjectionServiceProtocol {
 
     // MARK: - Formatting per agent type
 
-    /// Claude Code: launch `claude --continue` to resume the previous conversation.
-    private func formatForClaudeCode(_ context: HandoffContext) -> String {
-        "claude --continue\n"
-    }
-
-    /// Aider: launch `aider` to resume (aider auto-loads .aider.chat.history).
-    private func formatForAider(_ context: HandoffContext) -> String {
-        "aider\n"
+    /// Agents with a known resume command: send `resumeCommand` directly to PTY.
+    /// Falls back to shell context injection for agents without a resume command
+    /// or when the agent type is unknown.
+    private func formatForAgent(_ context: HandoffContext, agentType: AgentType) -> String {
+        let command = agentType.resumeCommand
+        guard !command.isEmpty else { return "" }
+        return command + "\n"
     }
 
     private func formatForShell(_ context: HandoffContext) -> String {

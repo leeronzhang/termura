@@ -123,9 +123,10 @@ extension MainView {
         }
     }
 
-    /// Pre-fills the Composer with the agent's default launch command and opens it.
-    /// No-ops if the feature is disabled, the Composer is already open, or the editor
-    /// already contains text (user may have typed something before the prompt fired).
+    /// Pre-fills the Composer with the agent's resume command and opens it.
+    /// This is the fallback path — only reached when PTY-level context injection
+    /// is unavailable (non-harness builds). No-ops if the feature is disabled,
+    /// the Composer is already open, or the editor already contains text.
     private func handleAgentResume(_ agentType: AgentType) {
         let key = AppConfig.AgentResume.autoFillEnabledKey
         let enabled = UserDefaults.standard.object(forKey: key) as? Bool
@@ -137,7 +138,7 @@ extension MainView {
         if let sid, sessionScope.agentStates.agents[sid] != nil { return }
         guard let editorVM = activeEditorViewModel else { return }
         guard editorVM.currentText.isEmpty else { return }
-        let command = agentType.defaultLaunchCommand
+        let command = agentType.resumeCommand
         guard !command.isEmpty else { return }
         editorVM.setText(command)
         commandRouter.toggleComposer()
