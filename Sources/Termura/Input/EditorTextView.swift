@@ -142,6 +142,14 @@ final class EditorTextView: NSTextView {
     // MARK: - Key handling
 
     override func keyDown(with event: NSEvent) {
+        // While IME is composing (marked text present), let the text input system
+        // handle all keys so CJK composition completes correctly (e.g. Enter to
+        // confirm a pinyin candidate must not trigger submit).
+        if hasMarkedText() {
+            super.keyDown(with: event)
+            return
+        }
+
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let isShift = flags.contains(.shift)
         let isCommand = flags.contains(.command)

@@ -3,7 +3,7 @@ import Foundation
 
 /// Protocol abstracting the terminal PTY engine.
 /// @MainActor: implementations interact with the AppKit render layer.
-/// Implementations: SwiftTermEngine (live), MockTerminalEngine (tests).
+/// Implementations: LibghosttyEngine (live), MockTerminalEngine (tests).
 @MainActor
 protocol TerminalEngine: AnyObject, Sendable {
     /// Async stream of output events from the PTY.
@@ -31,7 +31,7 @@ protocol TerminalEngine: AnyObject, Sendable {
     var terminalNSView: NSView { get }
 
     /// Text content of the terminal row where the cursor currently sits,
-    /// read from SwiftTerm's screen buffer *after* all ANSI sequences have
+    /// read from the terminal's screen buffer *after* all ANSI sequences have
     /// been applied.  More reliable than scanning raw PTY bytes for TUI apps
     /// (e.g. Claude Code) that position content with cursor-movement escapes
     /// rather than plain newlines.
@@ -52,4 +52,10 @@ protocol TerminalEngine: AnyObject, Sendable {
     /// `line` is the value previously returned by `currentScrollLine()`.
     /// No-op if the buffer has no scrollback or `line` is out of range.
     func scrollToLine(_ line: Int) async
+
+    /// Apply a color theme to the terminal renderer.
+    func applyTheme(_ theme: ThemeColors)
+
+    /// Apply a font to the terminal renderer.
+    func applyFont(family: String, size: CGFloat)
 }

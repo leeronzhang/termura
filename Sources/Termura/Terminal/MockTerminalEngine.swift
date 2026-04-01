@@ -78,6 +78,9 @@ final class MockTerminalEngine: TerminalEngine {
 
     func scrollToLine(_ line: Int) async { scrollToLineCalls.append(line) }
 
+    func applyTheme(_ theme: ThemeColors) {}
+    func applyFont(family: String, size: CGFloat) {}
+
     func terminate() async {
         isRunning = false
         terminateCallCount += 1
