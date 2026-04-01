@@ -41,9 +41,44 @@ enum TitleSanitizer {
         }
     }
 
+    /// Strips ANSI escape sequences (CSI, OSC, simple escapes) and C0 control characters
+    /// that may leak into OSC-reported terminal titles from TUI applications.
+    static func stripANSI(_ title: String) -> String {
+        var result = ""
+        result.reserveCapacity(title.count)
+        var it = title.unicodeScalars.makeIterator()
+        while let scalar = it.next() {
+            if scalar == "\u{1B}" {
+                // ESC: consume the escape sequence
+                guard let next = it.next() else { break }
+                if next == "[" {
+                    // CSI sequence: consume until 0x40-0x7E terminator
+                    while let ch = it.next() {
+                        if ch.value >= 0x40, ch.value <= 0x7E { break }
+                    }
+                } else if next == "]" {
+                    // OSC sequence: consume until ST (ESC \) or BEL
+                    var prev: Unicode.Scalar = next
+                    while let ch = it.next() {
+                        if ch == "\u{07}" { break }
+                        if prev == "\u{1B}", ch == "\\" { break }
+                        prev = ch
+                    }
+                }
+                // Other ESC sequences (e.g. ESC + single char): already consumed
+            } else if scalar.value < 0x20, scalar != "\u{09}", scalar != "\u{0A}" {
+                // Strip C0 control characters except tab and newline
+                continue
+            } else {
+                result.unicodeScalars.append(scalar)
+            }
+        }
+        return result
+    }
+
     /// Strips known agent icon prefixes from OSC terminal titles.
     static func stripAgentPrefixes(_ title: String) -> String {
-        var stripped = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var stripped = stripANSI(title).trimmingCharacters(in: .whitespacesAndNewlines)
         let multiCharPrefixes = [">_"]
         var didStrip = true
         while didStrip {
