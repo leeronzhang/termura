@@ -23,6 +23,10 @@ final class LibghosttyEngine: TerminalEngine {
     private let ghosttyView: GhosttyTerminalView
     private let outputContinuation: AsyncStream<TerminalOutputEvent>.Continuation
     private let shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
+    /// Tracks the last-applied values so surface config updates always carry the full state.
+    private var currentFontFamily: String = FontSettings.defaultFamily
+    private var currentFontSize: CGFloat = FontSettings.defaultTerminalSize
+    private var currentTheme: ThemeColors = .dark
 
     // MARK: - Init
 
@@ -48,7 +52,8 @@ final class LibghosttyEngine: TerminalEngine {
             frame: NSRect(x: 0, y: 0, width: 800, height: 600),
             app: app,
             workingDirectory: workingDirectory,
-            outputContinuation: outCont
+            outputContinuation: outCont,
+            shellContinuation: shellCont
         )
         ghosttyView = view
         terminalNSView = view
@@ -126,10 +131,54 @@ final class LibghosttyEngine: TerminalEngine {
     }
 
     func applyTheme(_ theme: ThemeColors) {
-        // TODO: inject theme via ghostty_surface_update_config
+        currentTheme = theme
+        updateSurfaceConfig()
     }
 
     func applyFont(family: String, size: CGFloat) {
-        // TODO: inject font via ghostty_surface_update_config
+        currentFontFamily = family
+        currentFontSize = size
+        updateSurfaceConfig()
+    }
+
+    // MARK: - Ghostty config update
+
+    /// Builds a full Termura config overlay (font + theme + shell-integration) and pushes
+    /// it to the surface. ghostty_surface_update_config replaces the entire config, so
+    /// every call must carry all overrides to avoid resetting unrelated settings to defaults.
+    private func updateSurfaceConfig() {
+        guard let surface = ghosttyView.surface else { return }
+        guard let cfg = ghostty_config_new() else {
+            logger.error("updateSurfaceConfig: ghostty_config_new failed")
+            return
+        }
+        defer { ghostty_config_free(cfg) }
+
+        let configString = """
+        font-family = \(currentFontFamily)
+        font-size = \(Int(currentFontSize))
+        background = \(currentTheme.background.hexRGB)
+        foreground = \(currentTheme.foreground.hexRGB)
+        shell-integration = none
+        """
+        let tmpURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("termura-ghostty-\(UUID().uuidString).conf")
+        do {
+            try configString.write(to: tmpURL, atomically: true, encoding: .utf8)
+            defer {
+                do { try FileManager.default.removeItem(at: tmpURL) } catch {
+                    logger.error("updateSurfaceConfig: failed to clean up tmp: \(error.localizedDescription)")
+                }
+            }
+            tmpURL.path.withCString { path in
+                ghostty_config_load_file(cfg, path)
+            }
+        } catch {
+            logger.error("updateSurfaceConfig: failed to write tmp config: \(error.localizedDescription)")
+            return
+        }
+        ghostty_config_finalize(cfg)
+        ghostty_surface_update_config(surface, cfg)
+        logger.debug("Surface config updated: font=\(currentFontFamily) \(Int(currentFontSize))pt")
     }
 }

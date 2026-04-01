@@ -21,6 +21,9 @@ final class GhosttyTerminalView: NSView {
     /// Raw PTY output — io-reader thread yields directly to this continuation (thread-safe).
     /// Set once before IO starts via LibghosttyEngine; never mutated after.
     nonisolated let ptyOutputContinuation: AsyncStream<TerminalOutputEvent>.Continuation?
+    /// Shell integration events parsed from raw PTY output (OSC 133 A/B/C).
+    /// D is handled by ghostty's GHOSTTY_ACTION_COMMAND_FINISHED action.
+    nonisolated let shellIntegrationContinuation: AsyncStream<ShellIntegrationEvent>.Continuation?
 
     // MARK: - Surface
 
@@ -60,10 +63,12 @@ final class GhosttyTerminalView: NSView {
         frame: NSRect,
         app: ghostty_app_t,
         workingDirectory: String? = nil,
-        outputContinuation: AsyncStream<TerminalOutputEvent>.Continuation
+        outputContinuation: AsyncStream<TerminalOutputEvent>.Continuation,
+        shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
     ) {
-        self.initialWorkingDirectory = workingDirectory
-        self.ptyOutputContinuation = outputContinuation
+        initialWorkingDirectory = workingDirectory
+        ptyOutputContinuation = outputContinuation
+        shellIntegrationContinuation = shellContinuation
         super.init(frame: frame)
         wantsLayer = true
         layer?.masksToBounds = true
