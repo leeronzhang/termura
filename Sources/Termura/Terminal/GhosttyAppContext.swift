@@ -213,6 +213,9 @@ final class GhosttyAppContext {
             guard let rawPwd = action.action.pwd.pwd else { return }
             view.onWorkingDirectoryChanged?(String(cString: rawPwd))
 
+        case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
+            view.recordChildExitCode(action.action.child_exited.exit_code)
+
         case GHOSTTY_ACTION_COMMAND_FINISHED:
             view.onCommandFinished?(action.action.command_finished.exit_code)
 

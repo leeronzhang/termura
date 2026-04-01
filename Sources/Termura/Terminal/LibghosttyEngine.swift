@@ -65,8 +65,9 @@ final class LibghosttyEngine: TerminalEngine {
         view.onWorkingDirectoryChanged = { [outCont] pwd in
             outCont.yield(.workingDirectoryChanged(pwd))
         }
-        view.onProcessExited = { [outCont] _ in
-            outCont.yield(.processExited(0))
+        view.onProcessExited = { [weak view, outCont] _ in
+            let exitCode = view?.lastExitCode ?? 0
+            outCont.yield(.processExited(exitCode))
             outCont.finish()
         }
         // ghostty OSC 133;D → shell integration event
@@ -90,6 +91,20 @@ final class LibghosttyEngine: TerminalEngine {
         }
     }
 
+    func pressReturn() async {
+        guard let surface = ghosttyView.surface else { return }
+        var key = ghostty_input_key_s()
+        key.action = GHOSTTY_ACTION_PRESS
+        key.keycode = 36
+        key.mods = GHOSTTY_MODS_NONE
+        key.composing = false
+        key.unshifted_codepoint = 0x0D
+        key.text = nil
+        _ = ghostty_surface_key(surface, key)
+        key.action = GHOSTTY_ACTION_RELEASE
+        _ = ghostty_surface_key(surface, key)
+    }
+
     func sendBytes(_ data: Data) async {
         guard let surface = ghosttyView.surface, !data.isEmpty else { return }
         data.withUnsafeBytes { buf in
@@ -107,6 +122,7 @@ final class LibghosttyEngine: TerminalEngine {
         isRunning = false
         outputContinuation.finish()
         shellContinuation.finish()
+        ghosttyView.destroySurface()
     }
 
     func cursorLineContent() -> String? {
@@ -179,6 +195,6 @@ final class LibghosttyEngine: TerminalEngine {
         }
         ghostty_config_finalize(cfg)
         ghostty_surface_update_config(surface, cfg)
-        logger.debug("Surface config updated: font=\(currentFontFamily) \(Int(currentFontSize))pt")
+        logger.debug("Surface config updated: font=\(self.currentFontFamily) \(Int(self.currentFontSize))pt")
     }
 }

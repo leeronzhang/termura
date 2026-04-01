@@ -97,8 +97,12 @@ final class EditorViewModel {
         logger.debug("Submitting command length=\(fullCommand.count)")
         onCommandSubmit?(text)  // user text only — used for agent detection
         onSubmit?()
-        // Lifecycle: single actor call — engine serializes internally; no cancellation needed.
-        Task { await engine.send(fullCommand + "\r") }
+        // ghostty_surface_text uses bracketed paste — embedded \r is literal, not "execute".
+        // Send text first, then simulate Return key press to trigger shell execution.
+        Task {
+            await engine.send(fullCommand)
+            await engine.pressReturn()
+        }
     }
 
     /// Insert a literal newline at the cursor position.

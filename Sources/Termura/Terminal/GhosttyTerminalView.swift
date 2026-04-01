@@ -18,6 +18,8 @@ final class GhosttyTerminalView: NSView {
     var onWorkingDirectoryChanged: ((String) -> Void)?
     var onCommandFinished: ((Int16) -> Void)?
     var onProcessExited: ((Bool) -> Void)?
+    /// Exit code from GHOSTTY_ACTION_SHOW_CHILD_EXITED, set before close_surface_cb fires.
+    private(set) var lastExitCode: Int32?
     /// Raw PTY output — io-reader thread yields directly to this continuation (thread-safe).
     /// Set once before IO starts via LibghosttyEngine; never mutated after.
     nonisolated let ptyOutputContinuation: AsyncStream<TerminalOutputEvent>.Continuation?
@@ -140,7 +142,9 @@ final class GhosttyTerminalView: NSView {
         logger.debug("ghostty surface created")
     }
 
-    private func destroySurface() {
+    /// Release the ghostty surface and event monitor. Idempotent — safe to call
+    /// from both processDidExit (natural exit) and LibghosttyEngine.terminate (forced).
+    func destroySurface() {
         if let s = surface {
             ghostty_surface_free(s)
             surface = nil
@@ -155,8 +159,14 @@ final class GhosttyTerminalView: NSView {
 
     // MARK: - Process exit (called by GhosttyAppContext)
 
+    /// Record the child exit code before close_surface_cb fires.
+    func recordChildExitCode(_ code: UInt32) {
+        lastExitCode = Int32(bitPattern: code)
+    }
+
     func processDidExit(processAlive: Bool) {
         onProcessExited?(processAlive)
+        destroySurface()
     }
 
     // MARK: - Cursor shape

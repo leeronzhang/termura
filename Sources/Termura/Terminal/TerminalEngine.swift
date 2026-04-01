@@ -12,11 +12,16 @@ protocol TerminalEngine: AnyObject, Sendable {
     /// Async stream of parsed OSC 133 shell integration events.
     var shellEventsStream: AsyncStream<ShellIntegrationEvent> { get }
 
-    /// Send a string to the PTY's stdin.
+    /// Send a string to the PTY's stdin (through surface text / paste API).
     func send(_ text: String) async
 
     /// Send raw bytes to the PTY's stdin.
     func sendBytes(_ data: Data) async
+
+    /// Simulate pressing the Return key.
+    /// Bracketed paste (ghostty_surface_text) treats embedded \\r as literal text;
+    /// this sends a real key event so the shell executes the pasted command.
+    func pressReturn() async
 
     /// Notify the PTY of a terminal resize.
     func resize(columns: UInt16, rows: UInt16) async

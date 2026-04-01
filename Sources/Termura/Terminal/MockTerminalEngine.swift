@@ -62,6 +62,12 @@ final class MockTerminalEngine: TerminalEngine {
         sentTexts.append(text)
     }
 
+    private(set) var pressReturnCallCount = 0
+
+    func pressReturn() async {
+        pressReturnCallCount += 1
+    }
+
     func sendBytes(_ data: Data) async {
         sentBytes.append(data)
     }
