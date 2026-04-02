@@ -154,16 +154,14 @@ final class ProjectContext {
     func flushPendingWrites() async {
         await sessionScope.store.flushPendingWrites()
         await notesViewModel.flushPendingWrites()
-        await viewStateManager.flushPendingHandoffs()
+        await viewStateManager.flushPendingSessionWork()
     }
 
-    func close() {
+    func close() async {
         viewStateManager.clearAll()
-        sessionScope.engines.terminateAll()
-        let monitor = dbHealthMonitor
-        Task { await monitor.stop() }
+        await sessionScope.engines.terminateAllAndWait()
+        await dbHealthMonitor.stop()
         let path = projectURL.path
         logger.info("Closed project at \(path)")
     }
-
 }

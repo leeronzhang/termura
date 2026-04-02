@@ -58,6 +58,10 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
         agentState: AgentState,
         projectRoot: String
     ) async throws {
+        guard !projectRoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            logger.debug("Skipping session handoff for \(session.id): empty project root")
+            return
+        }
         let context = await buildHandoffContext(
             session: session,
             chunks: chunks,

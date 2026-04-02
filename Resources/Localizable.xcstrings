@@ -4,6 +4,9 @@
     "- %@" : {
 
     },
+    ":" : {
+
+    },
     ".gitignore" : {
 
     },
@@ -149,6 +152,18 @@
         }
       }
     },
+    "Ask About This" : {
+      "comment" : "Context menu item: ask the AI about the selected text",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask About This"
+          }
+        }
+      }
+    },
     "Appends a small OSC 133 script to your shell RC file (%@). No data leaves your machine." : {
 
     },
@@ -251,6 +266,18 @@
         }
       }
     },
+    "Clear" : {
+      "comment" : "Context menu item: clear the terminal screen",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
+          }
+        }
+      }
+    },
     "Clear all problems" : {
       "comment" : "Tooltip on the Problems panel clear button",
       "extractionState" : "manual",
@@ -325,6 +352,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Corruption Detection"
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "comment" : "Context menu item: copy selected text to clipboard",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
           }
         }
       }
@@ -1080,6 +1119,18 @@
         }
       }
     },
+    "Paste" : {
+      "comment" : "Context menu item: paste text from clipboard",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste"
+          }
+        }
+      }
+    },
     "Paste from Clipboard" : {
       "comment" : "Attachment picker menu item: paste image from clipboard",
       "extractionState" : "manual",
@@ -1165,13 +1216,25 @@
       }
     },
     "Problems" : {
-      "comment" : "Sidebar tab label for the diagnostics / problems panel",
+      "comment" : "Sidebar tab label for the problems/issues panel",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Problems"
+          }
+        }
+      }
+    },
+    "Quote in Composer" : {
+      "comment" : "Context menu item: quote the current selection in the AI composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quote in Composer"
           }
         }
       }
@@ -1333,13 +1396,37 @@
       }
     },
     "Search…" : {
-      "comment" : "Menu item: open the full-text search panel",
+      "comment" : "Placeholder text in the search bar",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Search…"
+          }
+        }
+      }
+    },
+    "Select All" : {
+      "comment" : "Context menu item: select all text in the terminal",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select All"
+          }
+        }
+      }
+    },
+    "Send to Notes" : {
+      "comment" : "Context menu item: send the selected text to the notes panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send to Notes"
           }
         }
       }

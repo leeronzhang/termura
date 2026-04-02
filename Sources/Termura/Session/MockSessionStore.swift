@@ -27,7 +27,9 @@ final class MockSessionStore: SessionStoreProtocol {
     init(sessions: [SessionRecord] = [], activeID: SessionID? = nil) {
         self.sessions = sessions
         activeSessionID = activeID ?? sessions.first?.id
-        for (i, s) in sessions.enumerated() { sessionIndex[s.id] = i }
+        for (i, s) in sessions.enumerated() {
+            sessionIndex[s.id] = i
+        }
         // didSet does not fire during init; populate derived state explicitly.
         rebuildDerivedState()
     }
@@ -69,7 +71,9 @@ final class MockSessionStore: SessionStoreProtocol {
     private func rebuildSessionTitles() {
         var titles: [SessionID: String] = [:]
         titles.reserveCapacity(sessions.count)
-        for session in sessions { titles[session.id] = session.title }
+        for session in sessions {
+            titles[session.id] = session.title
+        }
         sessionTitles = titles
     }
 
@@ -87,7 +91,7 @@ final class MockSessionStore: SessionStoreProtocol {
 
     func endSession(id: SessionID) async {
         guard let idx = sessionIndex[id], !sessions[idx].isEnded else { return }
-        sessions[idx].endedAt = Date()
+        sessions[idx].status = .ended(at: Date())
         if activeSessionID == id {
             activeSessionID = sessions.last(where: { !$0.isEnded })?.id
         }
@@ -96,7 +100,7 @@ final class MockSessionStore: SessionStoreProtocol {
 
     func reopenSession(id: SessionID) async {
         guard let idx = sessionIndex[id], sessions[idx].isEnded else { return }
-        sessions[idx].endedAt = nil
+        sessions[idx].status = .active
         activeSessionID = id
         rebuildDerivedState()
     }
@@ -166,7 +170,7 @@ final class MockSessionStore: SessionStoreProtocol {
         false
     }
 
-    func ensureEngine(for id: SessionID) {
+    func ensureEngine(for id: SessionID, shell: String?) {
         // No-op in mock.
     }
 

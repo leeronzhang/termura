@@ -3,7 +3,6 @@ import Foundation
 // MARK: - Read-only queries
 
 extension SessionStore {
-
     /// Derives a human-readable session title from the project root directory basename.
     func defaultSessionTitle() -> String {
         if let root = projectRoot {
@@ -25,10 +24,13 @@ extension SessionStore {
 
     /// Creates a terminal engine for the session if one does not exist yet.
     /// Unlike `activateSession`, does NOT change `activeSessionID`.
-    func ensureEngine(for id: SessionID) {
-        if engineStore.engine(for: id) == nil {
-            engineStore.createEngine(for: id, shell: defaultShell, currentDirectory: projectRoot)
-        }
+    func ensureEngine(for id: SessionID, shell: String? = nil) {
+        guard engineStore.engine(for: id) == nil else { return }
+        let workingDirectory = session(id: id)?.workingDirectory ?? projectRoot
+        engineStore.createEngine(
+            for: id,
+            shell: shell ?? defaultShell,
+            currentDirectory: workingDirectory
+        )
     }
-
 }

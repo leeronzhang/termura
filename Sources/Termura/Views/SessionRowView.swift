@@ -285,7 +285,7 @@ struct SessionRowView: View {
             onActivate: {}, onRename: { _ in }
         )
         SessionRowView(
-            session: SessionRecord(title: "Archived session", endedAt: Date()),
+            session: SessionRecord(title: "Archived session", status: .ended(at: Date())),
             isActive: false, hasUnreadFailure: false,
             agentStatus: .completed, agentType: .gemini,
             tokenSummary: "88.0k", durationText: "12m 41s",

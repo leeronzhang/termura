@@ -15,6 +15,7 @@ final class AgentStateStore: AgentStateStoreProtocol {
 
     init(clock: any AppClock = LiveClock()) {
         self.clock = clock
+        now = clock.now()
     }
 
     // MARK: - Observable state
@@ -24,12 +25,15 @@ final class AgentStateStore: AgentStateStoreProtocol {
 
     /// Current time, ticked every `AppConfig.Runtime.agentDurationTickSeconds` while agents are
     /// active. Views bind to this instead of calling Date() in their render bodies.
-    private(set) var now: Date = Date()
+    private(set) var now: Date
 
     // MARK: - Tick
 
     /// Lifecycle slot for the duration-display ticker. nonisolated(unsafe): deinit
     @ObservationIgnored private var tickTask: Task<Void, Never>?
+    /// Per-session sidebar presentation models. Observation is handled by each row model,
+    /// not by the dictionary itself, so sidebar updates stay row-scoped.
+    @ObservationIgnored private var sidebarRowStates: [SessionID: AgentSidebarRowState] = [:]
 
     private func startTickIfNeeded() {
         guard tickTask == nil else { return }
@@ -41,6 +45,7 @@ final class AgentStateStore: AgentStateStoreProtocol {
                     break
                 }
                 store.now = store.clock.now()
+                store.refreshSidebarRowDurations(now: store.now)
             }
         }
     }
@@ -52,6 +57,7 @@ final class AgentStateStore: AgentStateStoreProtocol {
     }
 
     // MARK: - Derived state (cached)
+
     // All properties below are rebuilt via rebuildDerivedState() on each mutation.
     // This keeps per-render access O(1) instead of O(n) or O(n log n).
 
@@ -80,6 +86,7 @@ final class AgentStateStore: AgentStateStoreProtocol {
         totalEstimatedTokens += state.tokenCount - (previous?.tokenCount ?? 0)
         agents[state.sessionID] = state
         rebuildDerivedState()
+        sidebarRowState(for: state.sessionID).apply(state, now: now)
         startTickIfNeeded()
 
         if previous?.status != state.status {
@@ -92,16 +99,28 @@ final class AgentStateStore: AgentStateStoreProtocol {
     func remove(sessionID: SessionID) {
         totalEstimatedTokens -= agents[sessionID]?.tokenCount ?? 0
         agents.removeValue(forKey: sessionID)
+        sidebarRowStates.removeValue(forKey: sessionID)
         rebuildDerivedState()
         stopTickIfEmpty()
     }
 
     func clearAll() {
         agents.removeAll()
+        sidebarRowStates.removeAll()
         totalEstimatedTokens = 0
         tickTask?.cancel()
         tickTask = nil
         rebuildDerivedState()
+    }
+
+    func sidebarRowState(for sessionID: SessionID) -> AgentSidebarRowState {
+        if let existing = sidebarRowStates[sessionID] { return existing }
+        let rowState = AgentSidebarRowState(sessionID: sessionID)
+        if let state = agents[sessionID] {
+            rowState.apply(state, now: now)
+        }
+        sidebarRowStates[sessionID] = rowState
+        return rowState
     }
 
     // MARK: - Derived state rebuild
@@ -129,6 +148,12 @@ final class AgentStateStore: AgentStateStoreProtocol {
         sessionsNeedingAttention = attentionAgents.map(\.sessionID)
         nextAttentionSessionID = attentionAgents.first?.sessionID
         agentsNearingContextLimit = nearingLimit
+    }
+
+    private func refreshSidebarRowDurations(now: Date) {
+        for rowState in sidebarRowStates.values {
+            rowState.refreshDuration(now: now)
+        }
     }
 
     // MARK: - Priority

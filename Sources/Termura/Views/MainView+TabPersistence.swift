@@ -7,7 +7,9 @@ private let persistLogger = Logger(subsystem: "com.termura.app", category: "Main
 
 extension MainView {
     var tabsDefaultsKey: String {
-        AppConfig.UserDefaultsKeys.openTabs(projectRoot: sessionStore.projectRoot ?? "default")
+        AppConfig.UserDefaultsKeys.openTabs(
+            projectRoot: sessionStore.projectRoot ?? "default"
+        )
     }
 
     func persistOpenTabs() {
@@ -39,9 +41,9 @@ extension MainView {
     /// Returns the sidebar tab that owns a given content tab type.
     private func sidebarOwner(of tab: ContentTab) -> SidebarTab {
         switch tab {
-        case .terminal, .split: return .sessions
-        case .note: return .notes
-        case .file, .preview, .diff: return .project
+        case .terminal, .split: .sessions
+        case .note: .notes
+        case .file, .preview, .diff: .project
         }
     }
 
@@ -60,13 +62,14 @@ extension MainView {
         // Composer-triggered notes view is temporary — don't open a note tab in the right panel.
         if newTab == .notes && commandRouter.isComposerNotesActive { return }
         guard newTab == .sessions || newTab == .notes || newTab == .project else { return }
-        guard let last = lastContentTabBySidebarTab[newTab], allTabs.contains(last) else { return }
-        selectedContentTab = last
+        guard let last = lastContentTabBySidebarTab[newTab],
+              tabManager.openTabs.contains(last) || tabManager.terminalItems.contains(last) else { return }
+        tabManager.selectedContentTab = last
         switch last {
         case let .terminal(sid, _):
             sessionStore.activateSession(id: sid)
         case let .split(left, right, _, _):
-            sessionStore.activateSession(id: focusedSlot == .left ? left : right)
+            sessionStore.activateSession(id: tabManager.focusedSlot == .left ? left : right)
         default:
             break
         }
@@ -82,15 +85,16 @@ extension MainView {
             return
         }
         guard !restored.isEmpty else { return }
-        for tab in restored where !openTabs.contains(tab) {
-            openTabs.append(tab)
+        for tab in restored where !tabManager.openTabs.contains(tab) {
+            tabManager.openTabs.append(tab)
         }
         let selectedKey = AppConfig.UserDefaultsKeys.openTabsSelected(
             projectRoot: sessionStore.projectRoot ?? "default"
         )
         if let selectedID = UserDefaults.standard.string(forKey: selectedKey),
-           let match = allTabs.first(where: { $0.id == selectedID }) {
-            selectedContentTab = match
+           let match = tabManager.terminalItems.first(where: { $0.id == selectedID }) ??
+           tabManager.openTabs.first(where: { $0.id == selectedID }) {
+            tabManager.selectedContentTab = match
         }
     }
 }

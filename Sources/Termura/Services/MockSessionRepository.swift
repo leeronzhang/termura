@@ -11,6 +11,10 @@ actor MockSessionRepository: SessionRepositoryProtocol {
         order.compactMap { store[$0] }
     }
 
+    func fetch(id: SessionID) async throws -> SessionRecord? {
+        store[id]
+    }
+
     func save(_ record: SessionRecord) async throws {
         if store[record.id] == nil { order.append(record.id) }
         store[record.id] = record
@@ -67,7 +71,13 @@ actor MockSessionRepository: SessionRepositoryProtocol {
     }
 
     func createBranch(from parentID: SessionID, type: BranchType, title: String) async throws -> SessionRecord {
-        let record = SessionRecord(title: title, parentID: parentID, branchType: type)
+        let parent = store[parentID]
+        let record = SessionRecord(
+            title: title,
+            workingDirectory: parent?.workingDirectory,
+            parentID: parentID,
+            branchType: type
+        )
         store[record.id] = record
         order.append(record.id)
         return record
@@ -78,11 +88,11 @@ actor MockSessionRepository: SessionRepositoryProtocol {
     }
 
     func markEnded(id: SessionID, at date: Date) async throws {
-        store[id]?.endedAt = date
+        store[id]?.status = .ended(at: date)
     }
 
     func markReopened(id: SessionID) async throws {
-        store[id]?.endedAt = nil
+        store[id]?.status = .active
     }
 }
 

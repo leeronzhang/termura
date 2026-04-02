@@ -13,10 +13,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "BoundedTask
 final class BoundedTaskExecutor {
     private let semaphore: AsyncSemaphore
     private let maxConcurrent: Int
-    // nonisolated(unsafe): deinit — all mutations are on @MainActor (serially safe);
-    // nonisolated(unsafe) satisfies Swift 6 Sendability for the nonisolated deinit
-    // path only. No contention at deinit: the last reference is being released.
-    nonisolated(unsafe) private var _tracked: [UUID: Task<Void, Never>] = [:]
+    private var _tracked: [UUID: AutoCancellableTask] = [:]
     /// O(1) active-task count maintained incrementally alongside `_tracked`.
     /// Avoids calling `_tracked.count` (O(n) dictionary probe) in `activeCount`
     /// and `isAtCapacity`, which are queried on every high-frequency spawn check.
@@ -28,16 +25,13 @@ final class BoundedTaskExecutor {
         semaphore = AsyncSemaphore(value: maxConcurrent)
     }
 
-    deinit {
-        _tracked.values.forEach { $0.cancel() }
-    }
-
     /// Number of tasks currently tracked (pending + executing).
     var activeCount: Int { _trackedCount }
 
     /// True when the queue depth has reached the hard cap.
-    /// Callers can check this before spawning non-critical work to shed load
-    /// during high-throughput output bursts (e.g. large PTY floods).
+    /// Callers MUST NOT drop data when this returns true. Instead, coalesce
+    /// the new payload into a pending buffer so the next spawned task can
+    /// drain it — see `TerminalSessionController.handlePreprocessedData`.
     var isAtCapacity: Bool {
         _trackedCount >= maxConcurrent * AppConfig.Runtime.taskQueueDepthMultiplier
     }
@@ -51,16 +45,13 @@ final class BoundedTaskExecutor {
         let task = Task { [weak self] in
             await sem.wait()
             // Defer handles synchronous tracking cleanup.
-            // sem.signal() is called inline below — Swift defer cannot contain `await`,
-            // so an inner Task would be needed otherwise, but that Task would escape
-            // tracking and could signal the semaphore after deinit (CLAUDE.md §3).
             defer { self?.removeTracked(id) }
             if !Task.isCancelled {
                 await operation()
             }
             await sem.signal()
         }
-        _tracked[id] = task
+        _tracked[id] = AutoCancellableTask(task)
         _trackedCount += 1
     }
 
@@ -74,18 +65,25 @@ final class BoundedTaskExecutor {
         }
         let task = Task.detached {
             await sem.wait()
-            // Signal and hop to MainActor for cleanup are called inline — Swift defer
-            // cannot contain `await`, so a nested Task would be required otherwise.
-            // A nested Task escapes the tracked dictionary, preventing deinit from
-            // cancelling it and allowing sem.signal() to fire after executor teardown.
             if !Task.isCancelled {
                 await operation()
             }
             await sem.signal()
             await cleanup()
         }
-        _tracked[id] = task
+        _tracked[id] = AutoCancellableTask(task)
         _trackedCount += 1
+    }
+
+    /// Awaits all currently tracked tasks and any follow-on tasks they schedule until the
+    /// executor becomes idle. Useful for deterministic teardown and tests of tracked work.
+    func waitForIdle() async {
+        while !_tracked.isEmpty {
+            let snapshot = Array(_tracked.values)
+            for task in snapshot {
+                await task.value
+            }
+        }
     }
 
     private func removeTracked(_ id: UUID) {

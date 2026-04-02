@@ -71,7 +71,7 @@ actor AgentStateDetector {
         guard Self.validTransitions[currentStatus]?.contains(status) == true else {
             let sid = sessionID
             logger.warning(
-                "OSC signal '\(status.rawValue)' ignored: invalid transition from '\(currentStatus.rawValue)' in session \(sid)"
+                "OSC signal '\(status.rawValue)' ignored: invalid transition from '\(self.currentStatus.rawValue)' in session \(sid)"
             )
             return
         }

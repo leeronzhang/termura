@@ -17,7 +17,7 @@ extension MainView {
             dualPaneMetadata(focusedID: focusedPaneSessionID)
         }
         .onAppear {
-            focusedSlot = .left
+            tabManager.focusedSlot = .left
             commandRouter.focusedDualPaneID = leftPaneSessionID
         }
     }
@@ -69,7 +69,7 @@ extension MainView {
                 // pane — changing focus would move the composer and give the terminal NSView
                 // first responder, causing subsequent Cmd+V paste to land in the PTY.
                 if commandRouter.showComposer && focusedSlot != slot { return }
-                focusedSlot = slot
+                tabManager.focusedSlot = slot
                 commandRouter.focusedDualPaneID = sessionID
                 sessionStore.activateSession(id: sessionID)
             }

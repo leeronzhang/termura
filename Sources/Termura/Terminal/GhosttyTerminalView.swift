@@ -22,14 +22,15 @@ final class GhosttyTerminalView: NSView {
     private(set) var lastExitCode: Int32?
     /// Raw PTY output — io-reader thread yields directly to this continuation (thread-safe).
     /// Set once before IO starts via LibghosttyEngine; never mutated after.
-    nonisolated let ptyOutputContinuation: AsyncStream<TerminalOutputEvent>.Continuation?
+    nonisolated let ptyOutputContinuation: AsyncStream<TerminalOutputEvent>.Continuation
     /// Shell integration events parsed from raw PTY output (OSC 133 A/B/C).
     /// D is handled by ghostty's GHOSTTY_ACTION_COMMAND_FINISHED action.
-    nonisolated let shellIntegrationContinuation: AsyncStream<ShellIntegrationEvent>.Continuation?
+    nonisolated let shellIntegrationContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
 
     // MARK: - Surface
 
-    private(set) var surface: ghostty_surface_t?
+    // nonisolated(unsafe): deinit cleanup access
+    private(set) nonisolated(unsafe) var surface: ghostty_surface_t?
     // nonisolated(unsafe): deinit
     nonisolated(unsafe) var eventMonitor: Any?
 
@@ -40,6 +41,20 @@ final class GhosttyTerminalView: NSView {
     /// Non-nil during keyDown processing; accumulates text from insertText calls triggered
     /// by interpretKeyEvents. Nil at all other times.
     var keyTextAccumulator: [String]?
+
+    // MARK: - Context menu state
+
+    struct ContextMenuActions {
+        var onQuoteInComposer: ((String) -> Void)?
+        var onAskAboutThis: ((String) -> Void)?
+        var onSendToNotes: ((String) -> Void)?
+        var onClearTerminal: (() -> Void)?
+    }
+
+    /// Callbacks for context menu actions, wired by TerminalAreaView at view-appear time.
+    var contextMenuActions = ContextMenuActions()
+    /// Caches the selected text at menu-build time so async action handlers read a stable snapshot.
+    var menuCachedSelection: String?
 
     // MARK: - Link hover state
 
@@ -84,6 +99,14 @@ final class GhosttyTerminalView: NSView {
 
     deinit {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
+        if let s = surface {
+            // ghostty_surface_free must be called on main thread.
+            // Pointer is captured by value for the task.
+            Task { @MainActor in
+                ghostty_surface_free(s)
+            }
+        }
+        logger.debug("GhosttyTerminalView deinit")
     }
 
     /// Provide a CAMetalLayer so Core Animation knows this view uses Metal from the start.
@@ -218,10 +241,13 @@ final class GhosttyTerminalView: NSView {
         var text = ghostty_text_s()
         let sel = ghostty_selection_s(
             top_left: ghostty_point_s(
-                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0
+            ),
             bottom_right: ghostty_point_s(
-                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
-            rectangle: false)
+                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0
+            ),
+            rectangle: false
+        )
         guard ghostty_surface_read_text(surface, sel, &text) else { return "" }
         defer { ghostty_surface_free_text(surface, &text) }
         return String(cString: text.text)

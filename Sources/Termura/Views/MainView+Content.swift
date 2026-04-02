@@ -24,22 +24,6 @@ extension MainView {
         terminalItems + openTabs
     }
 
-    /// Resolved selected tab — nil when no tabs exist (e.g. during startup before sessions load).
-    /// Callers must handle nil rather than receiving a ghost SessionID.
-    var resolvedSelectedTab: ContentTab? {
-        if let tab = selectedContentTab, allTabs.contains(tab) { return tab }
-        if let first = terminalItems.first ?? openTabs.first { return first }
-        // Startup gap: sessions are populated in SessionStore (sidebar updates immediately) but
-        // terminalItems hasn't been synced yet — syncTerminalItems() fires in the .onChange cycle
-        // after the current render. Derive an ephemeral tab for the active session so the content
-        // area doesn't flash "No Active Session" during this one-render window.
-        if let id = sessionStore.activeSessionID,
-           let session = sessionStore.session(id: id) {
-            return .terminal(sessionID: id, title: session.title)
-        }
-        return nil
-    }
-
     @ViewBuilder
     var contentArea: some View {
         VStack(spacing: 0) {
@@ -49,7 +33,7 @@ extension MainView {
                     get: { resolvedSelectedTab },
                     set: { newTab in
                         guard let newTab else { return }
-                        selectedContentTab = newTab
+                        tabManager.selectedContentTab = newTab
                         // Sync activeSessionID when switching tabs.
                         // Also sync selectedSidebarTab for non-terminal tabs so that
                         // selectedContentView shows the correct content instead of
@@ -58,7 +42,7 @@ extension MainView {
                         case let .terminal(sid, _):
                             sessionStore.activateSession(id: sid)
                         case let .split(left, right, _, _):
-                            let sid = focusedSlot == .left ? left : right
+                            let sid = tabManager.focusedSlot == .left ? left : right
                             sessionStore.activateSession(id: sid)
                             commandRouter.isDualPaneActive = true
                         case .note:
@@ -213,11 +197,11 @@ extension MainView {
     }
 
     private func syncNoteTabTitle(noteID: NoteID, title: String) {
-        guard let idx = openTabs.firstIndex(where: {
+        guard let idx = tabManager.openTabs.firstIndex(where: {
             if case let .note(id, _) = $0 { return id == noteID }
             return false
         }) else { return }
-        openTabs[idx] = .note(noteID: noteID, title: title)
-        if case .note = selectedContentTab { selectedContentTab = openTabs[idx] }
+        tabManager.openTabs[idx] = .note(noteID: noteID, title: title)
+        if case .note = tabManager.selectedContentTab { tabManager.selectedContentTab = tabManager.openTabs[idx] }
     }
 }

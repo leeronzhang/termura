@@ -15,8 +15,10 @@ final class LibghosttyEngine: TerminalEngine {
 
     let outputStream: AsyncStream<TerminalOutputEvent>
     let shellEventsStream: AsyncStream<ShellIntegrationEvent>
-    var isRunning = false
+    private(set) var state: TerminalLifecycleState = .created
+    var isRunning: Bool { state == .running }
     let terminalNSView: NSView
+    private let sessionID: SessionID
 
     // MARK: - Internal
 
@@ -31,6 +33,7 @@ final class LibghosttyEngine: TerminalEngine {
     // MARK: - Init
 
     init(sessionID: SessionID, workingDirectory: String? = nil) {
+        self.sessionID = sessionID
         let (outStream, outCont) = AsyncStream.makeStream(
             of: TerminalOutputEvent.self,
             bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
@@ -57,6 +60,7 @@ final class LibghosttyEngine: TerminalEngine {
         )
         ghosttyView = view
         terminalNSView = view
+        state = .attached
 
         // Wire view callbacks → output stream
         view.onTitleChanged = { [outCont] title in
@@ -65,10 +69,12 @@ final class LibghosttyEngine: TerminalEngine {
         view.onWorkingDirectoryChanged = { [outCont] pwd in
             outCont.yield(.workingDirectoryChanged(pwd))
         }
-        view.onProcessExited = { [weak view, outCont] _ in
-            let exitCode = view?.lastExitCode ?? 0
-            outCont.yield(.processExited(exitCode))
+        view.onProcessExited = { [weak self, outCont] _ in
+            guard let self else { return }
+            let code = ghosttyView.lastExitCode ?? 0
+            outCont.yield(.processExited(code))
             outCont.finish()
+            state = .disposed
         }
         // ghostty OSC 133;D → shell integration event
         view.onCommandFinished = { [shellCont] exitCode in
@@ -76,7 +82,7 @@ final class LibghosttyEngine: TerminalEngine {
             shellCont.yield(.executionFinished(exitCode: code))
         }
 
-        isRunning = true
+        state = .running
         logger.debug("LibghosttyEngine created for session \(sessionID.rawValue)")
     }
 
@@ -107,10 +113,16 @@ final class LibghosttyEngine: TerminalEngine {
 
     func sendBytes(_ data: Data) async {
         guard let surface = ghosttyView.surface, !data.isEmpty else { return }
-        data.withUnsafeBytes { buf in
-            guard let ptr = buf.baseAddress else { return }
-            // ghostty_surface_text takes a UTF-8 C string; raw bytes routed via text API.
-            ghostty_surface_text(surface, ptr.assumingMemoryBound(to: CChar.self), UInt(data.count))
+        // The `ghostty_surface_text` API is text-oriented and assumes valid UTF-8,
+        // making it unsafe for raw hex, control bytes, or NUL separated payloads.
+        // We leverage Ghostty's binding action engine ("text:\xNN...") to bypass
+        // string interpretation and explicitly force the PTY to receive the raw bytes.
+        var actionStr = "text:"
+        for byte in data {
+            actionStr.append(String(format: "\\x%02x", byte))
+        }
+        actionStr.withCString { ptr in
+            _ = ghostty_surface_binding_action(surface, ptr, UInt(actionStr.utf8.count))
         }
     }
 
@@ -119,10 +131,25 @@ final class LibghosttyEngine: TerminalEngine {
     }
 
     func terminate() async {
-        isRunning = false
+        guard state != .disposed && state != .exiting else { return }
+        let sid = sessionID.rawValue
+        logger.debug("Terminating LibghosttyEngine for session \(sid)")
+        state = .exiting
+
         outputContinuation.finish()
         shellContinuation.finish()
+
+        // Force ghostty surface destruction; this triggers the child process exit
+        // and eventually calls onProcessExited which sets state to .disposed.
         ghosttyView.destroySurface()
+
+        // If the callback haven't fired yet, we wait up to a timeout or just proceed.
+        // For now, destroySurface is largely synchronous in its C-level call.
+    }
+
+    deinit {
+        let sid = sessionID.rawValue
+        logger.debug("LibghosttyEngine deinit for session \(sid)")
     }
 
     func cursorLineContent() -> String? {
@@ -145,6 +172,8 @@ final class LibghosttyEngine: TerminalEngine {
     func scrollToLine(_ line: Int) async {
         // TODO: expose ghostty scroll via C API
     }
+
+    var supportsScrollbackNavigation: Bool { false }
 
     func applyTheme(_ theme: ThemeColors) {
         currentTheme = theme
@@ -195,6 +224,8 @@ final class LibghosttyEngine: TerminalEngine {
         }
         ghostty_config_finalize(cfg)
         ghostty_surface_update_config(surface, cfg)
-        logger.debug("Surface config updated: font=\(self.currentFontFamily) \(Int(self.currentFontSize))pt")
+        let fontFamily = currentFontFamily
+        let fontSize = currentFontSize
+        logger.debug("Surface config updated: font=\(fontFamily) \(Int(fontSize))pt")
     }
 }

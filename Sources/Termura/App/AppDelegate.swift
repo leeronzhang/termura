@@ -30,10 +30,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.registerBundledFonts()
 
         let collector = MetricsCollector()
+        let environment = ProcessInfo.processInfo.environment
+        let engineFactory: any TerminalEngineFactory
+        #if DEBUG
+        if environment["UI_TESTING_MOCK_TERMINAL_ENGINE"] != nil {
+            engineFactory = MockTerminalEngineFactory()
+        } else {
+            engineFactory = LiveTerminalEngineFactory()
+        }
+        #else
+        engineFactory = LiveTerminalEngineFactory()
+        #endif
         // UI-testing: swap in a mock shell installer so tests never write to ~/.zshrc.
         let shellInstaller: any ShellHookInstallerProtocol
         #if DEBUG
-        if ProcessInfo.processInfo.environment["UI_TESTING_MOCK_SHELL_INSTALLER"] != nil {
+        if environment["UI_TESTING_MOCK_SHELL_INSTALLER"] != nil {
             shellInstaller = MockShellHookInstaller()
         } else {
             shellInstaller = ShellHookInstaller()
@@ -42,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shellInstaller = ShellHookInstaller()
         #endif
         services = AppServices(
-            engineFactory: LiveTerminalEngineFactory(),
+            engineFactory: engineFactory,
             themeManager: ThemeManager(),
             fontSettings: FontSettings(),
             tokenCountingService: TokenCountingService(),

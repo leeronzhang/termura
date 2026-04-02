@@ -44,7 +44,7 @@ actor MetricsCollector: MetricsCollectorProtocol {
 
     func increment(_ name: MetricName, by value: Int = 1) {
         counters[name, default: 0] += value
-        logger.debug("metric.counter \(name.rawValue)=\(counters[name, default: 0])")
+        logger.debug("metric.counter \(name.rawValue)=\(self.counters[name, default: 0])")
     }
 
     func recordDuration(_ name: MetricName, seconds: Double) {

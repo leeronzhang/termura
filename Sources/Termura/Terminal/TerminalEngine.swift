@@ -1,11 +1,28 @@
 import AppKit
 import Foundation
 
+/// Operational states for the terminal engine lifecycle.
+enum TerminalLifecycleState: String, Sendable {
+    /// Resources allocated, surface pending creation.
+    case created
+    /// Backing surface created and attached to NSView.
+    case attached
+    /// Child process spawned and IO stream active.
+    case running
+    /// Terminal terminating; resources being drained and child process kills pending.
+    case exiting
+    /// Resources fully released; terminal object can be safely deallocated.
+    case disposed
+}
+
 /// Protocol abstracting the terminal PTY engine.
 /// @MainActor: implementations interact with the AppKit render layer.
 /// Implementations: LibghosttyEngine (live), MockTerminalEngine (tests).
 @MainActor
 protocol TerminalEngine: AnyObject, Sendable {
+    /// Current operational state in the lifecycle.
+    var state: TerminalLifecycleState { get }
+
     /// Async stream of output events from the PTY.
     var outputStream: AsyncStream<TerminalOutputEvent> { get }
 
@@ -57,6 +74,11 @@ protocol TerminalEngine: AnyObject, Sendable {
     /// `line` is the value previously returned by `currentScrollLine()`.
     /// No-op if the buffer has no scrollback or `line` is out of range.
     func scrollToLine(_ line: Int) async
+
+    /// Whether scroll-position capture/jump is implemented by this engine.
+    /// Views use this to avoid recording fake timeline anchors for engines that
+    /// do not yet expose scrollback navigation.
+    var supportsScrollbackNavigation: Bool { get }
 
     /// Apply a color theme to the terminal renderer.
     func applyTheme(_ theme: ThemeColors)

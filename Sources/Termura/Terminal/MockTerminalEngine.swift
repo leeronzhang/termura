@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+#if DEBUG
 /// Test double for TerminalEngine. Captures all interactions for assertion.
 @MainActor
 final class MockTerminalEngine: TerminalEngine {
@@ -11,7 +12,8 @@ final class MockTerminalEngine: TerminalEngine {
 
     // MARK: - State
 
-    private(set) var isRunning = true
+    private(set) var state: TerminalLifecycleState = .running
+    var isRunning: Bool { state == .running }
     let terminalNSView: NSView = .init()
     private(set) var sentTexts: [String] = []
     private(set) var sentBytes: [Data] = []
@@ -84,13 +86,17 @@ final class MockTerminalEngine: TerminalEngine {
 
     func scrollToLine(_ line: Int) async { scrollToLineCalls.append(line) }
 
+    var supportsScrollbackNavigation: Bool { true }
+
     func applyTheme(_ theme: ThemeColors) {}
     func applyFont(family: String, size: CGFloat) {}
 
     func terminate() async {
-        isRunning = false
+        state = .exiting
         terminateCallCount += 1
         shellContinuation.finish()
         continuation.finish()
+        state = .disposed
     }
 }
+#endif

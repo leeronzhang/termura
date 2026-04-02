@@ -3,7 +3,6 @@ import Foundation
 // MARK: - Construction dependencies
 
 extension TerminalViewModel {
-
     /// Groups the 7 construction-time dependencies. Required per CLAUDE.md §5:
     /// init with more than 6 parameters must pack them into a named struct.
     struct Components {
@@ -42,5 +41,4 @@ extension TerminalViewModel {
             self.notificationService = notificationService
         }
     }
-
 }

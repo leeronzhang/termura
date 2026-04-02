@@ -1,5 +1,6 @@
 import Foundation
 
+#if DEBUG
 /// Test double for `TokenCountingServiceProtocol`.
 actor MockTokenCountingService: TokenCountingServiceProtocol {
     var stubbedTokens: [SessionID: Int] = [:]
@@ -51,3 +52,4 @@ actor MockTokenCountingService: TokenCountingServiceProtocol {
         stubbedTokens[sessionID] = tokens
     }
 }
+#endif

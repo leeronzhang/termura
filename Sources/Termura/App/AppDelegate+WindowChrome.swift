@@ -31,12 +31,6 @@ extension AppDelegate {
             disableTitlebarEffect(in: window)
             adjustTrafficLights(in: window)
 
-            if let themeFrame = window.contentView?.superview {
-                let adjuster = TrafficLightAdjuster(window: window)
-                adjuster.frame = .zero
-                themeFrame.addSubview(adjuster)
-            }
-
             observeFullScreenTransitions(window: window)
         }
     }
@@ -59,7 +53,7 @@ extension AppDelegate {
         let enterToken = NotificationCenter.default.addObserver(
             forName: NSWindow.didEnterFullScreenNotification,
             object: window,
-            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
+            queue: .main // Sync body — .main + assumeIsolated avoids a Task allocation.
         ) { [weak window] _ in
             MainActor.assumeIsolated {
                 guard let window else { return }
@@ -71,7 +65,7 @@ extension AppDelegate {
         let willExitToken = NotificationCenter.default.addObserver(
             forName: NSWindow.willExitFullScreenNotification,
             object: window,
-            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
+            queue: .main // Sync body — .main + assumeIsolated avoids a Task allocation.
         ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 guard let self, let window else { return }
@@ -86,7 +80,7 @@ extension AppDelegate {
         let didResizeToken = NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification,
             object: window,
-            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
+            queue: .main // Sync body — .main + assumeIsolated avoids a Task allocation.
         ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
                 guard let self, let window, !window.styleMask.contains(.fullScreen) else { return }
@@ -134,12 +128,14 @@ extension AppDelegate {
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window,
-            queue: .main  // Sync body — .main + assumeIsolated avoids a Task allocation.
+            queue: .main // Sync body — .main + assumeIsolated avoids a Task allocation.
         ) { [weak self] _ in
             MainActor.assumeIsolated { [weak self] in
                 guard let self else { return }
-                if let tokens = self.fullScreenObserverTokens.removeValue(forKey: key) {
-                    for token in tokens { NotificationCenter.default.removeObserver(token) }
+                if let tokens = fullScreenObserverTokens.removeValue(forKey: key) {
+                    for token in tokens {
+                        NotificationCenter.default.removeObserver(token)
+                    }
                 }
             }
         }
@@ -215,38 +211,6 @@ extension AppDelegate {
         container.frame = frame
         // Capture the real container height so SwiftUI can center the sidebar toggle
         // at trafficLightCenterY without relying on a guessed constant.
-        AppConfig.UI.trafficLightContainerHeight = frame.height
-    }
-}
-
-// MARK: - Traffic-light position keeper
-
-/// Zero-size view added to the window's themeFrame. Its `layout()` is called
-/// on every window layout pass (including live resize), so we can synchronously
-/// reposition the traffic-light buttons before the frame is rendered.
-@MainActor
-final class TrafficLightAdjuster: NSView {
-    private weak var targetWindow: NSWindow?
-
-    init(window: NSWindow) {
-        targetWindow = window
-        super.init(frame: .zero)
-        autoresizingMask = [.width, .height]
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { preconditionFailure("Use init(window:)") }
-
-    override func layout() {
-        super.layout()
-        guard let window = targetWindow,
-              let closeBtn = window.standardWindowButton(.closeButton),
-              let container = closeBtn.superview,
-              let parent = container.superview else { return }
-        var frame = container.frame
-        frame.origin.x = AppConfig.UI.trafficLightX
-        frame.origin.y = parent.frame.height - frame.height - AppConfig.UI.trafficLightTopInset
-        container.frame = frame
         AppConfig.UI.trafficLightContainerHeight = frame.height
     }
 }

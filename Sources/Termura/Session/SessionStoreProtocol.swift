@@ -38,7 +38,7 @@ protocol SessionStoreProtocol: AnyObject, Sendable {
     /// Prefer this over scanning `sessions` with `.first(where:)`.
     func session(id: SessionID) -> SessionRecord?
     func isRestoredSession(id: SessionID) -> Bool
-    func ensureEngine(for id: SessionID)
+    func ensureEngine(for id: SessionID, shell: String?)
     /// Awaits all in-flight persistence Tasks and force-saves debounced state.
     /// Call during app termination or project close to prevent data loss.
     func flushPendingWrites() async

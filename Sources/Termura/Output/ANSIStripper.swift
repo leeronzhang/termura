@@ -91,3 +91,23 @@ enum ANSIStripper {
         return i
     }
 }
+
+// MARK: - Prompt detection
+
+/// Fast-path prompt detector for terminal output.
+/// Scans the last line of the screen buffer for common prompt markers.
+enum PromptDetector {
+    /// Detects if the given line looks like an interactive shell prompt.
+    static func detect(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+
+        // Common prompt suffixes
+        let suffixes = ["> ", "$ ", "# ", "% ", "» ", "➜ ", "❯ ", ">", "$", "#"]
+        for suffix in suffixes where trimmed.hasSuffix(suffix) {
+            return true
+        }
+
+        return false
+    }
+}

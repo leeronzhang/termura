@@ -8,11 +8,9 @@ import Foundation
 /// Kept in the Session layer so SessionStore can apply sanitization without
 /// depending on the Services layer (CLAUDE.md clean-architecture rule).
 enum TitleSanitizer {
-
     /// Unicode symbols commonly used as status indicators in terminal titles.
-    private static let symbolPrefixSet: CharacterSet = {
-        CharacterSet(charactersIn:
-            "\u{2733}\u{273B}\u{2731}" + // asterisks
+    private static let symbolPrefixSet: CharacterSet = .init(charactersIn:
+        "\u{2733}\u{273B}\u{2731}" + // asterisks
             "\u{2726}\u{2605}\u{2606}" + // stars
             "\u{00B7}\u{2022}\u{2027}\u{2219}\u{22C5}\u{2024}\u{2981}" + // dots/bullets (standard)
             "\u{0387}\u{FF65}\u{30FB}\u{16EB}\u{1427}" + // dot look-alikes (Greek, halfwidth, katakana, runic, Canadian)
@@ -22,8 +20,7 @@ enum TitleSanitizer {
             "\u{2714}\u{2718}\u{23F3}" + // status
             "\u{2012}\u{2013}\u{2014}\u{2015}" + // dashes
             "\u{FEFF}\u{200B}\u{200C}\u{200D}\u{2060}\u{00AD}" // invisible/format chars
-        )
-    }()
+    )
 
     /// Returns true for non-ASCII Unicode scalars that belong to symbol or format categories
     /// and are therefore safe to strip as leading title prefixes. ASCII punctuation is excluded
@@ -78,7 +75,8 @@ enum TitleSanitizer {
 
     /// Strips known agent icon prefixes from OSC terminal titles.
     static func stripAgentPrefixes(_ title: String) -> String {
-        var stripped = stripANSI(title).trimmingCharacters(in: .whitespacesAndNewlines)
+        let original = stripANSI(title).trimmingCharacters(in: .whitespacesAndNewlines)
+        var stripped = original
         let multiCharPrefixes = [">_"]
         var didStrip = true
         while didStrip {
@@ -96,8 +94,8 @@ enum TitleSanitizer {
                 didStrip = true
             }
         }
-        // Return empty so the display layer can fall back to agent display name.
-        // Returning the original (symbols-only) title creates invisible/unreadable rows.
-        return stripped
+        // Preserve symbol-only titles so sanitization remains lossless and callers
+        // can decide their own fallback behavior.
+        return stripped.isEmpty ? original : stripped
     }
 }

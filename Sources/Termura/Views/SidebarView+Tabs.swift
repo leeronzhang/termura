@@ -11,11 +11,27 @@ extension SidebarView {
         }
     }
 
+    private var projectName: String? {
+        guard let root = sessionStore.projectRoot, !root.isEmpty else { return nil }
+        let name = (root as NSString).lastPathComponent
+        return name.isEmpty ? nil : name
+    }
+
     private var sessionsHeader: some View {
-        HStack {
+        HStack(spacing: AppUI.Spacing.sm) {
             Text("Sessions")
                 .panelHeaderStyle()
-            Spacer()
+            if let name = projectName {
+                Text(":")
+                    .panelHeaderStyle()
+                Text(name)
+                    .font(AppUI.Font.panelHeader)
+                    .foregroundColor(.primary.opacity(0.85))
+                    .textCase(.uppercase)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer(minLength: AppUI.Spacing.sm)
             Button { sessionStore.createSession(title: "Terminal") } label: {
                 Image(systemName: "plus")
                     .font(AppUI.Font.label)
@@ -84,31 +100,17 @@ extension SidebarView {
         toggleExpand: (() -> Void)? = nil,
         isExpanded: Bool = true
     ) -> some View {
-        let agentState = sessionScope.agentStates.agents[session.id]
-        let tokens: String? = {
-            guard let tokenTotal = agentState?.tokenCount, tokenTotal > 0 else { return nil }
-            return MetadataFormatter.formatTokenCount(tokenTotal)
-        }()
-        let duration: String? = {
-            guard let started = agentState?.startedAt else { return nil }
-            let elapsed = sessionScope.agentStates.now.timeIntervalSince(started)
-            guard elapsed > 0 else { return nil }
-            return MetadataFormatter.formatDuration(elapsed)
-        }()
         let isInCurrentTab = activeContentTab?.containsSession(session.id) ?? false
         let isFocused = focusedSessionID == session.id
         let activeState = isInCurrentTab && isFocused
         let splitState = isInCurrentTab && !isFocused
-        return SessionRowView(
+        let agentRowState = sessionScope.agentStates.sidebarRowState(for: session.id)
+        return SessionSidebarRowView(
             session: session,
+            agentRowState: agentRowState,
             isActive: activeState,
             isInSplit: splitState,
             hasUnreadFailure: false,
-            agentStatus: agentState?.status,
-            agentType: agentState?.agentType ?? session.agentType,
-            tokenSummary: tokens,
-            durationText: duration,
-            currentTaskSnippet: agentState?.currentTask,
             onActivate: { activateOrSplit(session: session) },
             onRename: { sessionStore.renameSession(id: session.id, title: $0) },
             onToggleExpand: toggleExpand,
@@ -199,6 +201,38 @@ extension SidebarView {
         }
         .padding(.horizontal, AppUI.Spacing.lg)
         .padding(.vertical, AppUI.Spacing.lg)
+    }
+}
+
+private struct SessionSidebarRowView: View {
+    let session: SessionRecord
+    let agentRowState: AgentSidebarRowState
+    let isActive: Bool
+    let isInSplit: Bool
+    let hasUnreadFailure: Bool
+    let onActivate: () -> Void
+    let onRename: (String) -> Void
+    let onToggleExpand: (() -> Void)?
+    let isExpanded: Bool
+    let renameTrigger: Int
+
+    var body: some View {
+        SessionRowView(
+            session: session,
+            isActive: isActive,
+            isInSplit: isInSplit,
+            hasUnreadFailure: hasUnreadFailure,
+            agentStatus: agentRowState.status,
+            agentType: agentRowState.agentType ?? session.agentType,
+            tokenSummary: agentRowState.tokenSummary,
+            durationText: agentRowState.durationText,
+            currentTaskSnippet: agentRowState.currentTaskSnippet,
+            onActivate: onActivate,
+            onRename: onRename,
+            onToggleExpand: onToggleExpand,
+            isExpanded: isExpanded,
+            renameTrigger: renameTrigger
+        )
     }
 }
 

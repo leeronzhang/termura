@@ -35,13 +35,13 @@ actor SessionServices {
 
     init(
         contextInjectionService: (any ContextInjectionServiceProtocol)? = nil, // Optional: harness feature gate
-        sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil,      // Optional: harness feature gate
+        sessionHandoffService: (any SessionHandoffServiceProtocol)? = nil, // Optional: harness feature gate
         isRestoredSession: Bool = false
     ) {
         self.contextInjectionService = contextInjectionService
         self.sessionHandoffService = sessionHandoffService
         self.isRestoredSession = isRestoredSession
-        self.hasContextInjection = isRestoredSession && contextInjectionService != nil
+        hasContextInjection = isRestoredSession && contextInjectionService != nil
     }
 
     deinit {
@@ -60,10 +60,11 @@ actor SessionServices {
         clock: any AppClock
     ) {
         guard isRestoredSession, !hasInjectedContext else { return }
-        hasInjectedContext = true
         guard !workingDirectory.isEmpty else { return }
         // contextInjectionService is nil in non-Harness builds (harness feature gate — expected early exit).
         guard let service = contextInjectionService else { return }
+        
+        hasInjectedContext = true
         injectionTask?.cancel()
         // Task { @MainActor }: engine.send requires @MainActor (TerminalEngine protocol is @MainActor).
         // The task body does not access any actor-isolated properties of self after the guard check above.
@@ -117,5 +118,12 @@ actor SessionServices {
     func flushPendingHandoff() async {
         await handoffTask?.value
         handoffTask = nil
+    }
+
+    /// Awaits the in-flight context injection task if one exists.
+    /// Allows callers to deterministically wait for restored-session initialization to settle.
+    func flushPendingInjection() async {
+        await injectionTask?.value
+        injectionTask = nil
     }
 }

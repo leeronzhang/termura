@@ -114,12 +114,14 @@ final class GhosttyAppContext {
             self,
             selector: #selector(appBecameActive),
             name: NSApplication.didBecomeActiveNotification,
-            object: nil)
+            object: nil
+        )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(appResignedActive),
             name: NSApplication.didResignActiveNotification,
-            object: nil)
+            object: nil
+        )
     }
 
     @objc private func appBecameActive() {
@@ -138,14 +140,14 @@ final class GhosttyAppContext {
     // one ghostty_app_tick is pending on the main queue at any time.
     private let tickLock = NSLock()
     // nonisolated(unsafe): deinit
-    nonisolated(unsafe) private var tickScheduled = false
+    private nonisolated(unsafe) var tickScheduled = false
 
     nonisolated func scheduleTick() {
         tickLock.lock()
         defer { tickLock.unlock() }
         guard !tickScheduled else { return }
         tickScheduled = true
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             self?.tick()
         }
     }

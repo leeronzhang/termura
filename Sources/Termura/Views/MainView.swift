@@ -25,13 +25,7 @@ struct MainView: View {
     @State var lastContentTabBySidebarTab: [SidebarTab: ContentTab] = [:]
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
     @State var showDeleteSessionConfirm = false
-    /// Explicitly managed terminal tab list (terminal + split entries).
-    @State var terminalItems: [ContentTab] = []
-    /// Which slot is focused within the current split tab.
-    @State var focusedSlot: PaneSlot = .left
-    /// Non-terminal tabs (files, notes, diffs).
-    @State var openTabs: [ContentTab] = []
-    @State var selectedContentTab: ContentTab?
+    @State var tabManager = TabManager()
     @State var isFullScreen = false
     /// The NSWindow hosting this view instance. Captured via HostingWindowCapture so that
     /// NotificationCenter observers can be filtered to this specific window only.
@@ -41,22 +35,18 @@ struct MainView: View {
 
     // MARK: - Derived split-mode helpers (computed from selected tab)
 
-    var leftPaneSessionID: SessionID? {
-        guard let resolved = resolvedSelectedTab,
-              case let .split(left, _, _, _) = resolved else { return nil }
-        return left
-    }
+    var leftPaneSessionID: SessionID? { tabManager.leftPaneSessionID }
+    var rightPaneSessionID: SessionID? { tabManager.rightPaneSessionID }
+    var isInSplitMode: Bool { tabManager.isInSplitMode }
+    var focusedPaneSessionID: SessionID? { tabManager.focusedPaneSessionID }
+    var resolvedSelectedTab: ContentTab? { tabManager.resolvedSelectedTab }
+    var terminalItems: [ContentTab] { tabManager.terminalItems }
+    var openTabs: [ContentTab] { tabManager.openTabs }
+    var focusedSlot: PaneSlot { tabManager.focusedSlot }
 
-    var rightPaneSessionID: SessionID? {
-        guard let resolved = resolvedSelectedTab,
-              case let .split(_, right, _, _) = resolved else { return nil }
-        return right
-    }
-
-    var isInSplitMode: Bool { resolvedSelectedTab?.isSplit ?? false }
-
-    var focusedPaneSessionID: SessionID? {
-        focusedSlot == .left ? leftPaneSessionID : rightPaneSessionID
+    var selectedContentTab: ContentTab? {
+        get { tabManager.selectedContentTab }
+        set { tabManager.selectedContentTab = newValue }
     }
 
     // MARK: - Convenience accessors
@@ -83,14 +73,18 @@ struct MainView: View {
         }
         .onChange(of: commandRouter.focusedDualPaneID) { _, newID in
             guard let newID, isInSplitMode else { return }
-            focusedSlot = newID == leftPaneSessionID ? .left : .right
+            tabManager.focusedSlot = newID == leftPaneSessionID ? .left : .right
         }
         .onChange(of: sessionStore.sessionTitles) { _, _ in syncTerminalItems() }
         .onChange(of: commandRouter.selectedSidebarTab) { oldTab, newTab in
             restoreContentTabOnSidebarSwitch(from: oldTab, to: newTab)
         }
-        .onChange(of: selectedContentTab) { _, newTab in onSelectedContentTabChange(newTab) }
-        .task { await ensureInitialSession(); restoreOpenTabs() }
+        .onChange(of: selectedContentTab) { oldTab, newTab in onSelectedContentTabChange(old: oldTab, new: newTab) }
+        .task {
+            tabManager.inject(sessionStore: sessionStore, commandRouter: commandRouter)
+            await ensureInitialSession()
+            restoreOpenTabs()
+        }
         .sheet(isPresented: router.showSearch) { searchSheet }
         .sheet(isPresented: router.showNotes) { notesSheet }
         .sheet(isPresented: showExportBinding) { exportSheet }
@@ -109,16 +103,24 @@ struct MainView: View {
 
     // MARK: - onChange helpers
 
-    private func onSelectedContentTabChange(_ newTab: ContentTab?) {
+    private func onSelectedContentTabChange(old oldTab: ContentTab?, new newTab: ContentTab?) {
         if let newTab { trackContentTabForSidebarTab(newTab) }
         // Sync isDualPaneActive + focusedSlot when selected tab changes externally
         // (commands, session deletion, initial load) — not just user tab taps.
         guard let tab = newTab else { return }
         let isSplit = tab.isSplit
+        let wasInDualPane = commandRouter.isDualPaneActive
         commandRouter.isDualPaneActive = isSplit
         if isSplit {
-            focusedSlot = .left
-            commandRouter.focusedDualPaneID = leftPaneSessionID
+            // Reset focus when entering split mode OR switching to a different split tab.
+            // Title-only refreshes (same tab.id, different title) must not steal pane focus —
+            // otherwise any terminal output that changes the session title
+            // (e.g. Codex running in the right pane) resets focus to .left.
+            let isSameTab = oldTab?.id == tab.id
+            if !wasInDualPane || !isSameTab {
+                tabManager.focusedSlot = .left
+                commandRouter.focusedDualPaneID = leftPaneSessionID
+            }
         } else {
             commandRouter.focusedDualPaneID = nil
         }

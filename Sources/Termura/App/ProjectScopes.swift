@@ -135,25 +135,25 @@ final class SessionViewStateManager {
     }
 
     init(_ components: Components) {
-        self.commandRouter = components.commandRouter
-        self.sessionStore = components.sessionStore
-        self.tokenCountingService = components.tokenCountingService
-        self.agentStateStore = components.agentStateStore
-        self.contextInjectionService = components.contextInjectionService
-        self.sessionHandoffService = components.sessionHandoffService
-        self.metricsCollector = components.metricsCollector
-        self.notificationService = components.notificationService
+        commandRouter = components.commandRouter
+        sessionStore = components.sessionStore
+        tokenCountingService = components.tokenCountingService
+        agentStateStore = components.agentStateStore
+        contextInjectionService = components.contextInjectionService
+        sessionHandoffService = components.sessionHandoffService
+        metricsCollector = components.metricsCollector
+        notificationService = components.notificationService
 
         sessionStore.sessionDidClose
             .receive(on: RunLoop.main)
             .sink { [weak self] id in
                 guard let self else { return }
                 removeViewState(for: id)
-                self.agentStateStore.remove(sessionID: id)
+                agentStateStore.remove(sessionID: id)
                 // Release per-session token accumulation data from the shared actor.
                 // Must be done here — TokenCountingService is a shared project-level
                 // actor, so its session entries are NOT freed by SessionViewState dealloc.
-                let service = self.tokenCountingService
+                let service = tokenCountingService
                 Task { await service.reset(for: id) }
             }
             .store(in: &cancellables)
@@ -242,10 +242,11 @@ final class SessionViewStateManager {
         outputStores[sessionID] = nil
     }
 
-    /// Awaits all in-flight handoff writes across active sessions.
-    func flushPendingHandoffs() async {
+    /// Awaits all per-session view-model work needed to produce final persisted/session
+    /// artifacts, including output analysis and handoff generation.
+    func flushPendingSessionWork() async {
         for (_, state) in sessionViewStates {
-            await state.viewModel.sessionServices.flushPendingHandoff()
+            await state.viewModel.waitForIdle()
         }
     }
 

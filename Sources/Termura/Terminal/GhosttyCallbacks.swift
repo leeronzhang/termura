@@ -60,13 +60,11 @@ func ghosttyPtyOutputCb(_ userdata: UnsafeMutableRawPointer?, _ buf: UnsafePoint
     guard let userdata, let buf, len > 0 else { return }
     let view = Unmanaged<GhosttyTerminalView>.fromOpaque(userdata).takeUnretainedValue()
     let data = Data(bytes: buf, count: len)
-    view.ptyOutputContinuation?.yield(.data(data))
+    view.ptyOutputContinuation.yield(.data(data))
     // Scan raw PTY bytes for OSC 133 shell integration sequences (A/B/C).
     // ghostty only fires GHOSTTY_ACTION_COMMAND_FINISHED for D; A/B/C have
     // no corresponding action, so we parse them from the raw stream.
-    if let shellCont = view.shellIntegrationContinuation {
-        scanOSC133ShellEvents(buf, len: len, continuation: shellCont)
-    }
+    scanOSC133ShellEvents(buf, len: len, continuation: view.shellIntegrationContinuation)
 }
 
 // OSC 133 prefix: ESC ] 1 3 3 ;  (6 bytes)

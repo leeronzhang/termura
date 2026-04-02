@@ -20,12 +20,20 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
     var branchType: BranchType
     /// Detected AI agent type running in this session (persisted for sidebar icon).
     var agentType: AgentType
-    /// When set, the session PTY has been terminated but the record is preserved.
-    /// nil = active; non-nil = ended (can be reopened).
-    var endedAt: Date?
+    /// Current lifecycle status of the session.
+    var status: SessionStatus
 
     /// True when the PTY has been terminated and the session is awaiting reopen or deletion.
-    var isEnded: Bool { endedAt != nil }
+    var isEnded: Bool {
+        if case .ended = status { return true }
+        return false
+    }
+
+    /// The date the session was ended, if applicable.
+    var endedAt: Date? {
+        if case let .ended(at) = status { return at }
+        return nil
+    }
 
     init(
         id: SessionID = SessionID(),
@@ -40,7 +48,7 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
         summary: String? = nil,
         branchType: BranchType = .main,
         agentType: AgentType = .unknown,
-        endedAt: Date? = nil
+        status: SessionStatus = .active
     ) {
         self.id = id
         self.title = title
@@ -54,8 +62,14 @@ struct SessionRecord: Identifiable, Hashable, Sendable {
         self.summary = summary
         self.branchType = branchType
         self.agentType = agentType
-        self.endedAt = endedAt
+        self.status = status
     }
+}
+
+/// Lifecycle status machine for a session.
+enum SessionStatus: Hashable, Sendable {
+    case active
+    case ended(at: Date)
 }
 
 enum SessionColorLabel: String, Sendable, Codable, CaseIterable {

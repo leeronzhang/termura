@@ -75,7 +75,8 @@ struct TerminalAreaView: View {
             ))
             .onChange(of: outputStore.chunks.count) { old, new in
                 guard new > old, let latest = outputStore.chunks.last else { return }
-                timeline.append(latest, startLine: engine.currentScrollLine())
+                let startLine = engine.supportsScrollbackNavigation ? engine.currentScrollLine() : nil
+                timeline.append(latest, startLine: startLine)
             }
             .onAppear { checkContextFileExists() }
             .onChange(of: sessionScope.store.sessions.count) { old, new in
@@ -192,11 +193,28 @@ struct TerminalAreaView: View {
     }
 
     /// Connects the terminal view's right-click context actions to the CommandRouter and NotesViewModel.
-    /// Context menu integration for ghostty will be added in a future iteration.
     private func wireTerminalContextActions() {
-        // ghostty context menu actions are not yet wired.
-        // The right-click menu was previously tied to TermuraTerminalView (SwiftTerm);
-        // a ghostty-native implementation will follow once the core migration is validated.
+        guard let ghosttyView = engine.terminalNSView as? GhosttyTerminalView else { return }
+        let router = commandRouter
+        let notes = notesViewModel
+        let eng = engine
+        ghosttyView.contextMenuActions = GhosttyTerminalView.ContextMenuActions(
+            onQuoteInComposer: { [weak router] text in
+                router?.prefillComposer(text: text)
+            },
+            onAskAboutThis: { [weak router] text in
+                router?.prefillComposer(text: text)
+            },
+            onSendToNotes: { [weak notes] text in
+                let title = String(text.prefix(40)).trimmingCharacters(in: .whitespacesAndNewlines)
+                notes?.silentlyCreateNote(title: title, body: text)
+                notes?.showToast("Saved to Notes")
+            },
+            onClearTerminal: { [weak eng] in
+                guard let eng else { return }
+                Task { await eng.send("clear\r") }
+            }
+        )
     }
 
     /// Registers a one-shot callback on the TerminalViewModel to pre-fill the Composer
@@ -242,5 +260,4 @@ struct TerminalAreaView: View {
             await MainActor.run { localUI.contextFileExists = exists }
         }
     }
-
 }

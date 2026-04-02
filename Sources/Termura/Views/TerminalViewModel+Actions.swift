@@ -3,7 +3,6 @@ import Foundation
 // MARK: - Terminal actions
 
 extension TerminalViewModel {
-
     func send(_ text: String) {
         let eng = engine
         let processor = outputProcessor
@@ -39,5 +38,4 @@ extension TerminalViewModel {
     func dismissRiskAlert() {
         pendingRiskAlert = nil
     }
-
 }

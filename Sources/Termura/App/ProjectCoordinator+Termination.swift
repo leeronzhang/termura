@@ -13,44 +13,28 @@ extension ProjectCoordinator {
         metricsFlush: (@Sendable () async -> Void)? = nil
     ) -> NSApplication.TerminateReply {
         let contexts = projectWindows.values.map(\.projectContext)
-        let handoffItems = collectHandoffItems()
-        // Even without handoff items, flush pending writes to DB before exiting.
-        guard !handoffItems.isEmpty || !contexts.isEmpty else { return .terminateNow }
-        scheduleTerminationFlush(contexts: contexts, items: handoffItems, metricsFlush: metricsFlush)
+        guard !contexts.isEmpty else { return .terminateNow }
+        scheduleTerminationFlush(contexts: contexts, metricsFlush: metricsFlush)
         return .terminateLater
-    }
-
-    private func collectHandoffItems() -> [TerminationHandoffItem] {
-        projectWindows.values.compactMap { controller in
-            let ctx = controller.projectContext
-            guard let activeID = ctx.sessionScope.store.activeSessionID,
-                  let session = ctx.sessionScope.store.session(id: activeID) else {
-                return nil
-            }
-            let chunks = ctx.viewStateManager.outputStores[activeID].map { Array($0.chunks) } ?? []
-            let agentState = ctx.sessionScope.agentStates.agents[activeID]
-                ?? AgentState(sessionID: activeID, agentType: .unknown)
-            return TerminationHandoffItem(
-                handoff: ctx.sessionHandoffService,
-                session: session,
-                chunks: chunks,
-                agentState: agentState,
-                projectRoot: ctx.projectURL.path
-            )
-        }
     }
 
     /// Races flush+handoff against a deadline so a hung DB never blocks `reply(toApplicationShouldTerminate:)`.
     private func scheduleTerminationFlush(
         contexts: [ProjectContext],
-        items: [TerminationHandoffItem],
         metricsFlush: (@Sendable () async -> Void)?
     ) {
         Task.detached {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    if let flush = metricsFlush { await flush() }
-                    for ctx in contexts { await ctx.flushPendingWrites() }
+                    if let flush = metricsFlush {
+                        await flush()
+                    }
+                    for ctx in contexts {
+                        await ctx.flushPendingWrites()
+                    }
+                    let items = await MainActor.run {
+                        contexts.compactMap { $0.makeTerminationHandoffItem() }
+                    }
                     for item in items {
                         do {
                             try await item.handoff.generateHandoff(
@@ -78,6 +62,26 @@ extension ProjectCoordinator {
             }
             Task { @MainActor in NSApp.reply(toApplicationShouldTerminate: true) }
         }
+    }
+}
+
+@MainActor
+private extension ProjectContext {
+    func makeTerminationHandoffItem() -> TerminationHandoffItem? {
+        guard let activeID = sessionScope.store.activeSessionID,
+              let session = sessionScope.store.session(id: activeID) else {
+            return nil
+        }
+        let chunks = viewStateManager.outputStores[activeID].map { Array($0.chunks) } ?? []
+        let agentState = sessionScope.agentStates.agents[activeID]
+            ?? AgentState(sessionID: activeID, agentType: .unknown)
+        return TerminationHandoffItem(
+            handoff: sessionHandoffService,
+            session: session,
+            chunks: chunks,
+            agentState: agentState,
+            projectRoot: projectURL.path
+        )
     }
 }
 

@@ -4,8 +4,10 @@ import SwiftUI
 
 extension MainView {
     func ensureInitialSession() async {
-        if !sessionStore.hasLoadedPersistedSessions {
-            for await _ in sessionStore.sessionsLoaded.values { break }
+        if sessionStore.state == .idle || sessionStore.state == .loading {
+            for await _ in sessionStore.sessionsLoaded.values {
+                break
+            }
         }
         if sessionStore.activeSessions.isEmpty {
             sessionStore.createSession(title: "Terminal")
@@ -15,8 +17,8 @@ extension MainView {
         // terminalItems.first may belong to a different session with no engine yet,
         // which causes resolvedSelectedTab to render emptyState.
         if let activeID = sessionStore.activeSessionID,
-           let activeTab = terminalItems.first(where: { $0.containsSession(activeID) }) {
-            selectedContentTab = activeTab
+           let activeTab = tabManager.terminalItems.first(where: { $0.containsSession(activeID) }) {
+            tabManager.selectedContentTab = activeTab
         }
     }
 
@@ -27,11 +29,22 @@ extension MainView {
         let activeIDs = Set(sessionStore.activeSessions.map(\.id))
         var updated = reconcileExistingTabs(activeIDs: activeIDs)
         let tabForActive = appendNewSessionTabs(into: &updated, activeIDs: activeIDs)
-        terminalItems = updated
+        tabManager.terminalItems = updated
         if let newTab = tabForActive {
-            selectedContentTab = newTab
-        } else if let sel = selectedContentTab, !allTabs.contains(sel) {
-            selectedContentTab = terminalItems.last
+            tabManager.selectedContentTab = newTab
+        } else if let sel = tabManager.selectedContentTab, !allTabs.contains(sel) {
+            // Title-only change: selectedContentTab still references the old title
+            // (ContentTab equality includes title). Find the updated tab by session ID
+            // so a rename doesn't cause an unwanted tab switch.
+            if let sid = sel.sessionID,
+               let refreshed = updated.first(where: { $0.containsSession(sid) }) {
+                tabManager.selectedContentTab = refreshed
+            } else if let ids = sel.splitSessionIDs,
+                      let refreshed = updated.first(where: { $0.containsSession(ids.left) }) {
+                tabManager.selectedContentTab = refreshed
+            } else {
+                tabManager.selectedContentTab = tabManager.terminalItems.last
+            }
         }
     }
 
@@ -39,7 +52,7 @@ extension MainView {
     private func reconcileExistingTabs(activeIDs: Set<SessionID>) -> [ContentTab] {
         let titles = sessionStore.sessionTitles
         var result: [ContentTab] = []
-        for item in terminalItems {
+        for item in tabManager.terminalItems {
             switch item {
             case let .terminal(sid, currentTitle):
                 guard activeIDs.contains(sid) else { continue }

@@ -11,7 +11,8 @@ extension GhosttyTerminalView {
             rect: bounds,
             options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
             owner: self,
-            userInfo: nil))
+            userInfo: nil
+        ))
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -27,15 +28,9 @@ extension GhosttyTerminalView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        guard let surface else { return super.rightMouseDown(with: event) }
-        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT,
-                                         event.modifierFlags.ghosttyMods)
-    }
-
-    override func rightMouseUp(with event: NSEvent) {
-        guard let surface else { return super.rightMouseUp(with: event) }
-        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT,
-                                         event.modifierFlags.ghosttyMods)
+        // Show Termura context menu instead of forwarding to ghostty.
+        guard let contextMenu = menu(for: event) else { return }
+        NSMenu.popUpContextMenu(contextMenu, with: event, for: self)
     }
 
     override func mouseMoved(with event: NSEvent) {

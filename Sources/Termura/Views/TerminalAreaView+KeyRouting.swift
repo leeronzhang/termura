@@ -38,9 +38,14 @@ extension TerminalAreaView {
     /// Processes a local key-down event; returns `nil` to consume or `event` to pass through.
     private static func handleKeyDown(_ event: NSEvent, context ctx: KeyHandlerContext) -> NSEvent? {
         dispatchPrecondition(condition: .onQueue(.main))
+        // Only handle events targeting THIS terminal's window. NSEvent local monitors
+        // fire for ALL windows; without this guard, keystrokes in window B get routed
+        // to window A's responder chain (cross-window input bleed).
+        guard let eventWindow = event.window,
+              eventWindow === ctx.termEngine.terminalNSView.window else { return event }
         // In dual-pane mode, only the focused pane handles key events.
         if ctx.router.isDualPaneActive, ctx.router.focusedDualPaneID != ctx.sid { return event }
-        guard let window = NSApp.keyWindow else { return event }
+        let window = eventWindow
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags == .command, event.charactersIgnoringModifiers == "k" { ctx.router.toggleComposer(); return nil }
         // Escape closes composer (without clearing text).
@@ -73,7 +78,7 @@ extension TerminalAreaView {
            let ch = event.charactersIgnoringModifiers,
            ch.count == 1,
            let digit = ch.first?.wholeNumberValue,
-           (1...9).contains(digit) {
+           (1 ... 9).contains(digit) {
             ctx.router.pendingCommand = .selectSession(index: digit - 1)
             return nil
         }
@@ -99,6 +104,8 @@ extension TerminalAreaView {
         let router = commandRouter
         let sid = sessionID
         mouseEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            // Only handle clicks targeting this terminal's window (same cross-window guard as key monitor).
+            guard event.window != nil, event.window === termEngine.terminalNSView.window else { return event }
             if router.isDualPaneActive {
                 let termView = termEngine.terminalNSView
                 let loc = termView.convert(event.locationInWindow, from: nil)

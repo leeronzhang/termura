@@ -90,7 +90,7 @@ actor DBHealthMonitor {
                 try Int.fetchOne(database, sql: "SELECT 1") ?? 0
             }
             if consecutiveFailures > 0 {
-                logger.info("DB health restored after \(consecutiveFailures) failure(s)")
+                logger.info("DB health restored after \(self.consecutiveFailures) failure(s)")
             }
             consecutiveFailures = 0
             status = .healthy
@@ -104,7 +104,7 @@ actor DBHealthMonitor {
             }
             if status != previous {
                 logger.warning(
-                    "DB health changed: \(status.rawValue) (failures=\(consecutiveFailures))"
+                    "DB health changed: \(self.status.rawValue) (failures=\(self.consecutiveFailures))"
                 )
             }
         }

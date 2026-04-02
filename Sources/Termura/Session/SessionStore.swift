@@ -16,9 +16,9 @@ final class SessionStore: SessionStoreProtocol {
     private(set) var sessionTreeNodes: [SessionTreeNode] = []
     private(set) var endedSessions: [SessionRecord] = []
     private(set) var sessionTitles: [SessionID: String] = [:]
-    /// Set to `true` once persisted sessions have been loaded (or skipped).
-    private(set) var hasLoadedPersistedSessions = false
-    /// User-visible error message from the last failed operation; cleared on next success.
+    /// Current lifecycle state of the store (loading, ready, or failed).
+    var state: StoreState = .idle
+    /// User-facing error message for persistence or other store-level failures.
     var errorMessage: String?
     /// IDs of sessions that were loaded from persistence (restored on launch).
     @ObservationIgnored private(set) var restoredSessionIDs: Set<SessionID> = []
@@ -30,21 +30,9 @@ final class SessionStore: SessionStoreProtocol {
     let repository: any SessionRepositoryProtocol
     let clock: any AppClock
     let metricsCollector: (any MetricsCollectorProtocol)? // Optional: observability, nil = no-op
-    /// Per-operation persistence debounce slots, keyed by "<operation>-<sessionID>"
-    /// so that concurrent rename/workingDirectory updates for the same session never
-    /// cancel each other. Only used by `scheduleDebounced` and `flushPendingWrites`.
-    /// Engine-creation debounce uses the dedicated `engineEnsureTask` below.
-    @ObservationIgnored var debounceTasks: [String: Task<Void, Never>] = [:]
-    /// Single-slot debounce for lazy PTY creation on `activateSession`.
-    ///
-    /// IMPORTANT: this MUST remain a single Task property (not keyed by session ID).
-    /// Rapid sidebar clicks cancel the previous pending fork so only the session the
-    /// user finally lands on spawns a shell. Changing this to a per-session key
-    /// (e.g. "engine-ensure-\(id)") would allow N concurrent PTY forks — do not do that.
-    @ObservationIgnored var engineEnsureTask: Task<Void, Never>?
-    /// Tracks in-flight persistence Tasks so they can be awaited during flush.
-    /// Keyed by UUID so each Task can remove itself upon completion (self-pruning).
-    @ObservationIgnored var pendingWrites: [UUID: Task<Void, Never>] = [:]
+    /// Coordinates all persistence, PTY creation, and debounced metadata updates.
+    /// Replaces scattered Task/UUID dictionaries for structural correctness.
+    @ObservationIgnored let taskCoordinator = TaskCoordinator()
     /// Fires when a session is fully closed. Subscribers (e.g. SessionViewStateManager)
     /// use this to release per-session resources without a back-reference into SessionStore.
     var sessionDidClose: AnyPublisher<SessionID, Never> { _sessionDidClose.eraseToAnyPublisher() }
@@ -54,6 +42,9 @@ final class SessionStore: SessionStoreProtocol {
     /// `hasLoadedPersistedSessions` via a Combine publisher.
     var sessionsLoaded: AnyPublisher<Void, Never> { _sessionsLoaded.eraseToAnyPublisher() }
     @ObservationIgnored private let _sessionsLoaded = PassthroughSubject<Void, Never>()
+    /// Backward-compatible flag for tests and legacy call sites that only need to know
+    /// whether the initial persistence load attempt completed, regardless of success.
+    var hasLoadedPersistedSessions: Bool { state != .idle && state != .loading }
     /// O(1) position index: maps SessionID to its position in `sessions`.
     /// Read-only externally; all writes go through `appendSession` or `rebuildSessionIndex`.
     @ObservationIgnored private(set) var sessionIndex: [SessionID: Int] = [:]
@@ -74,23 +65,18 @@ final class SessionStore: SessionStoreProtocol {
         self.metricsCollector = metricsCollector
     }
 
-    deinit {
-        engineEnsureTask?.cancel()
-        debounceTasks.values.forEach { $0.cancel() }
-        pendingWrites.values.forEach { $0.cancel() }
+    func terminateEngineAndWait(for sessionID: SessionID) async {
+        await engineStore.terminateEngine(for: sessionID)
     }
 }
 
 // MARK: - Persistence
 
 extension SessionStore {
-
     func loadPersistedSessions() async {
-        guard !hasLoadedPersistedSessions else { return }
-        defer {
-            hasLoadedPersistedSessions = true
-            _sessionsLoaded.send()
-        }
+        guard state == .idle else { return }
+        state = .loading
+        defer { _sessionsLoaded.send() }
         do {
             let loaded = try await repository.fetchAll()
             sessions = loaded
@@ -103,12 +89,12 @@ extension SessionStore {
             activeSessionID = activeSessions.max(by: { $0.lastActiveAt < $1.lastActiveAt })?.id
                 ?? activeSessions.first?.id
             if let activeID = activeSessionID {
-                engineStore.createEngine(for: activeID, shell: defaultShell, currentDirectory: projectRoot)
+                ensureEngine(for: activeID)
             }
-            errorMessage = nil
+            state = .ready
             logger.info("Loaded \(loaded.count) persisted sessions")
         } catch {
-            errorMessage = "Failed to load sessions: \(error.localizedDescription)"
+            state = .error(error.localizedDescription)
             logger.error("Failed to load sessions: \(error)")
         }
     }
@@ -122,7 +108,7 @@ extension SessionStore {
         do {
             try await repository.delete(id: id)
         } catch {
-            errorMessage = "Failed to delete session: \(error.localizedDescription)"
+            state = .error("Failed to delete session: \(error.localizedDescription)")
             logger.error("DB delete failed for session \(id): \(error)")
             return
         }
@@ -131,7 +117,7 @@ extension SessionStore {
         guard let idx = sessionIndex[id] else { return }
         sessions.remove(at: idx)
         rebuildSessionIndex()
-        engineStore.terminateEngine(for: id)
+        await engineStore.terminateEngine(for: id)
         if activeSessionID == id { activeSessionID = sessions.last(where: { !$0.isEnded })?.id }
         restoredSessionIDs.remove(id)
         _sessionDidClose.send(id)
@@ -155,31 +141,32 @@ extension SessionStore {
         } else {
             // No engine yet: debounce PTY fork so rapid sidebar clicks don't spawn N shells.
             // Only the final session the user lands on will call fork/exec.
-            engineEnsureTask?.cancel()
-            engineEnsureTask = Task { [weak self] in // inherits @MainActor from SessionStore context
-                guard let self else { return }
-                do {
-                    try await Task.sleep(for: AppConfig.Runtime.engineCreationDebounce)
-                } catch {
-                    // Task.sleep only throws CancellationError; treat any error as cancellation.
-                    return
-                }
-                guard activeSessionID == id else { return }
-                self.ensureEngine(for: id)
+            taskCoordinator.debounce(
+                key: "engine-ensure",
+                delay: AppConfig.Runtime.engineCreationDebounce,
+                clock: clock
+            ) { [weak self] in
+                guard let self, activeSessionID == id else { return }
+                ensureEngine(for: id)
                 let elapsed = ContinuousClock.now - start
-                if let collector = self.metricsCollector {
+                if let collector = metricsCollector {
                     Task { await collector.recordDuration(.sessionSwitchDuration, seconds: elapsed.totalSeconds) }
                 }
             }
         }
     }
+
+    /// Awaits the current engine-creation debounce task, if any.
+    func waitForEngineActivationIdle() async {
+        await taskCoordinator.waitForIdle()
+    }
 }
 
 // MARK: - Internal mutation helpers
+
 // Same-file extension: retains private(set) setter access to `sessions` and `sessionIndex`
 // without expanding the class body beyond the type_body_length limit.
 extension SessionStore {
-
     /// Rebuilds the full position index from `sessions`, then refreshes all derived state.
     /// O(n) — call only after structural mutations (bulk load, removal, reorder).
     func rebuildSessionIndex() {
@@ -214,7 +201,9 @@ extension SessionStore {
     /// Reorders the sessions array in place and rebuilds the index.
     func reorderSessionsInPlace(from source: IndexSet, to destination: Int) {
         sessions.move(fromOffsets: source, toOffset: destination)
-        for index in sessions.indices { sessions[index].orderIndex = index }
+        for index in sessions.indices {
+            sessions[index].orderIndex = index
+        }
         rebuildSessionIndex()
     }
 
@@ -253,7 +242,17 @@ extension SessionStore {
     private func rebuildSessionTitles() {
         var titles: [SessionID: String] = [:]
         titles.reserveCapacity(sessions.count)
-        for session in sessions { titles[session.id] = session.title }
+        for session in sessions {
+            titles[session.id] = session.title
+        }
         sessionTitles = titles
     }
+}
+
+/// Lifecycle state for the SessionStore initialization.
+enum StoreState: Equatable, Sendable {
+    case idle
+    case loading
+    case ready
+    case error(String)
 }

@@ -22,7 +22,7 @@ final class ProjectCoordinator {
         let userDefaults: any UserDefaultsStoring
         /// When set, opens this URL on launch (skips picker + history). NOT added to recents.
         /// Use cases: UI tests with temp dirs, URL-scheme "open project" deep links.
-        var openOnLaunchURL: URL?  // Optional: UI testing / URL-scheme deep link
+        var openOnLaunchURL: URL? // Optional: UI testing / URL-scheme deep link
     }
 
     private var deps: Dependencies?
@@ -36,18 +36,28 @@ final class ProjectCoordinator {
     /// Set by AppDelegate to perform launch-time work that requires a live CommandRouter.
     var onFirstProjectOpened: ((CommandRouter) -> Void)?
 
+    private var launcher: ProjectLauncher?
+
     // MARK: - Lifecycle
 
     /// Called once from `applicationDidFinishLaunching` to wire up dependencies and open projects.
     func start(with dependencies: Dependencies) {
         deps = dependencies
         observeWindowFocus()
-        restoreLastProjectOrShowPicker()
+        launcher = ProjectLauncher(
+            dependencies: .init(
+                appServices: dependencies.appServices,
+                userDefaults: dependencies.userDefaults,
+                openOnLaunchURL: dependencies.openOnLaunchURL
+            ),
+            coordinator: self
+        )
+        launcher?.restoreLastProjectOrShowPicker()
     }
 
     // MARK: - Project management
 
-    func openProject(at url: URL) {
+    func openProject(at url: URL, persist: Bool = true) {
         guard deps != nil else {
             logger.error("ProjectCoordinator not started before openProject call")
             return
@@ -56,10 +66,9 @@ final class ProjectCoordinator {
             existing.window?.makeKeyAndOrderFront(nil)
             return
         }
-        guard !openingInFlight.contains(url) else { return }
         openingInFlight.insert(url)
         // Task inherits @MainActor — DB migration in DatabaseService.init runs off main thread.
-        Task { [weak self] in await self?.performOpenProjectAsync(url: url) }
+        Task { [weak self] in await self?.performOpenProjectAsync(url: url, persist: persist) }
     }
 
     private func performOpenProjectAsync(url: URL, persist: Bool = true) async {
@@ -130,54 +139,19 @@ final class ProjectCoordinator {
         // keeps the context alive until DB writes land.
         Task { @MainActor [context] in
             await context.flushPendingWrites()
-            context.close()
+            await context.close()
             logger.info("Closed project: \(url.path)")
         }
     }
 
     func showProjectPicker() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = String(localized: "Open Project")
-        panel.message = String(localized: "Choose a project directory to open in Termura")
-
-        NSApp.activate(ignoringOtherApps: true)
-
-        if let keyWindow = NSApp.keyWindow {
-            // Attach as a sheet so the panel is always visible above the current window.
-            panel.beginSheetModal(for: keyWindow) { [weak self] response in
-                guard response == .OK, let url = panel.url else { return }
-                self?.openProject(at: url)
-            }
-        } else {
-            // No key window (e.g. first launch, all windows closed).
-            // runModal() enters a nested AppKit event loop — safe on @MainActor.
-            let response = panel.runModal()
-            if response == .OK, let url = panel.url {
-                openProject(at: url)
-            }
-        }
+        launcher?.showProjectPicker()
     }
 
     /// Restore the most recently opened project or show the picker.
     /// Called on launch and on Dock icon click.
     func restoreLastProjectOrShowPicker() {
-        // Task inherits @MainActor from the surrounding @MainActor context — no explicit annotation needed.
-        Task { [weak self] in
-            await ProjectMigrationService.migrateIfNeeded()
-            // openOnLaunchURL (UI tests / URL-scheme deep links): open without persisting to recents.
-            if let override = self?.deps?.openOnLaunchURL {
-                await self?.performOpenProjectAsync(url: override, persist: false)
-                return
-            }
-            if let lastURL = self?.deps?.appServices.recentProjects.lastOpened() {
-                self?.openProject(at: lastURL)
-            } else {
-                self?.showProjectPicker()
-            }
-        }
+        launcher?.restoreLastProjectOrShowPicker()
     }
 
     func tearDown() {
@@ -191,7 +165,10 @@ final class ProjectCoordinator {
         // Termination path: flushPendingWrites() already called by handleTermination()
         // before tearDown() is reached. Only resource cleanup needed here.
         for (_, controller) in projectWindows {
-            controller.projectContext.close()
+            let context = controller.projectContext
+            Task { @MainActor in
+                await context.close()
+            }
         }
     }
 
@@ -201,7 +178,7 @@ final class ProjectCoordinator {
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: nil,
-            queue: .main  // AppKit delivers on main; .main makes it explicit and avoids a Task hop.
+            queue: .main // AppKit delivers on main; .main makes it explicit and avoids a Task hop.
         ) { [weak self] notification in
             guard let window = notification.object as? NSWindow else { return }
             // Already on the main queue — assumeIsolated avoids a redundant Task allocation.
@@ -231,5 +208,4 @@ final class ProjectCoordinator {
             Task { await notification?.notifyIfLong(chunk) }
         }
     }
-
 }

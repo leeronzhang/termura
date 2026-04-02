@@ -55,8 +55,10 @@ extension SessionRepository {
         guard ancestors.count < AppConfig.SessionTree.maxDepth else {
             throw RepositoryError.branchDepthExceeded(currentDepth: ancestors.count)
         }
+        let parent = try await fetch(id: parentID)
         let record = SessionRecord(
             title: title,
+            workingDirectory: parent?.workingDirectory,
             parentID: parentID,
             branchType: type
         )

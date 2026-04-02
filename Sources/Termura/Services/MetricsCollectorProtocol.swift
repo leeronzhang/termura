@@ -11,6 +11,10 @@ enum MetricName: String, Sendable {
     case dbRead = "db.read"
     case searchQuery = "search.query"
     case agentDetected = "agent.detected"
+    /// Incremented each time a PTY output batch is coalesced into the pending
+    /// buffer rather than spawning a new task (executor at capacity).
+    /// Sustained high values indicate the queue depth multiplier needs tuning.
+    case outputCoalesced = "output.coalesced"
 
     // MARK: - Histograms (duration distributions)
 

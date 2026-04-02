@@ -24,6 +24,7 @@ actor NullNoteRepository: NoteRepositoryProtocol {
 
 actor NullSessionRepository: SessionRepositoryProtocol {
     func fetchAll() async throws -> [SessionRecord] { [] }
+    func fetch(id: SessionID) async throws -> SessionRecord? { nil }
     func save(_ record: SessionRecord) async throws {}
     func delete(id: SessionID) async throws {}
     func archive(id: SessionID) async throws {}
@@ -36,8 +37,9 @@ actor NullSessionRepository: SessionRepositoryProtocol {
     func fetchChildren(of parentID: SessionID) async throws -> [SessionRecord] { [] }
     func fetchAncestors(of sessionID: SessionID) async throws -> [SessionRecord] { [] }
     func createBranch(from parentID: SessionID, type: BranchType, title: String) async throws -> SessionRecord {
-        SessionRecord(title: title, parentID: parentID, branchType: type)
+        SessionRecord(title: title, workingDirectory: nil, parentID: parentID, branchType: type)
     }
+
     func updateSummary(_ sessionID: SessionID, summary: String) async throws {}
 }
 
@@ -83,6 +85,7 @@ actor NullTokenCountingService: TokenCountingServiceProtocol {
     func tokenBreakdown(for sessionID: SessionID) -> TokenEstimateBreakdown {
         TokenEstimateBreakdown(inputTokens: 0, outputTokens: 0, cachedTokens: 0)
     }
+
     func applyParsedStats(for sessionID: SessionID, inputTokens: Int, outputTokens: Int, cachedTokens: Int) {}
     func reset(for sessionID: SessionID) {}
 }

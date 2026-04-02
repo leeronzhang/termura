@@ -2,6 +2,7 @@ import Foundation
 
 protocol SessionRepositoryProtocol: Actor {
     func fetchAll() async throws -> [SessionRecord]
+    func fetch(id: SessionID) async throws -> SessionRecord?
     func save(_ record: SessionRecord) async throws
     func delete(id: SessionID) async throws
     func archive(id: SessionID) async throws

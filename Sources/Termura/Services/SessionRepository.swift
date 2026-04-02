@@ -123,7 +123,7 @@ struct SessionRow: FetchableRecord, PersistableRecord, Sendable {
             summary: summary.isEmpty ? nil : summary,
             branchType: branch,
             agentType: agent,
-            endedAt: endedAt.map { Date(timeIntervalSince1970: $0) }
+            status: endedAt.map { .ended(at: Date(timeIntervalSince1970: $0)) } ?? .active
         )
     }
 }
@@ -157,6 +157,14 @@ actor SessionRepository: SessionRepositoryProtocol {
                 record.title = TitleSanitizer.stripAgentPrefixes(record.title)
                 return record
             }
+        }
+    }
+
+    func fetch(id: SessionID) async throws -> SessionRecord? {
+        let idStr = id.rawValue.uuidString
+        return try await db.read { database in
+            let row = try SessionRow.fetchOne(database, key: idStr)
+            return try row?.toRecord()
         }
     }
 
@@ -224,8 +232,12 @@ actor SessionRepository: SessionRepositoryProtocol {
                 let cases = batch.map { _ in "WHEN id = ? THEN ?" }.joined(separator: " ")
                 let holders = batch.map { _ in "?" }.joined(separator: ", ")
                 var vals: [DatabaseValue] = []
-                for pair in batch { vals.append(pair.idStr.databaseValue); vals.append(pair.index.databaseValue) }
-                for pair in batch { vals.append(pair.idStr.databaseValue) }
+                for pair in batch {
+                    vals.append(pair.idStr.databaseValue); vals.append(pair.index.databaseValue)
+                }
+                for pair in batch {
+                    vals.append(pair.idStr.databaseValue)
+                }
                 let sql = "UPDATE sessions SET order_index = CASE \(cases) END WHERE id IN (\(holders))"
                 try database.execute(sql: sql, arguments: StatementArguments(vals))
             }
@@ -273,5 +285,4 @@ actor SessionRepository: SessionRepositoryProtocol {
             )
         }
     }
-
 }
