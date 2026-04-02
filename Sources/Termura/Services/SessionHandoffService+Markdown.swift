@@ -93,7 +93,7 @@ extension SessionHandoffService {
             errors: [],
             agentType: agentType,
             sessionDuration: 0,
-            lastUpdated: self.clock.now()
+            lastUpdated: clock.now()
         )
     }
 

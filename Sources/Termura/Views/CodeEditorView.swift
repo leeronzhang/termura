@@ -81,7 +81,7 @@ struct CodeEditorView: View {
 
     /// Checks whether `filePath` resolves within `rootPath` after symlink resolution.
     /// Must be called off-MainActor (resolvingSymlinksInPath performs I/O).
-    nonisolated private static func isContained(filePath: String, inRoot rootPath: String) -> Bool {
+    private nonisolated static func isContained(filePath: String, inRoot rootPath: String) -> Bool {
         let resolvedFile = URL(fileURLWithPath: filePath).resolvingSymlinksInPath().path
         let resolvedRoot = URL(fileURLWithPath: rootPath).resolvingSymlinksInPath().path
         return resolvedFile.hasPrefix(resolvedRoot + "/") || resolvedFile == resolvedRoot

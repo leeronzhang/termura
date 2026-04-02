@@ -2,6 +2,7 @@ import AppKit
 import GhosttyKit
 
 // MARK: - NSTextInputClient (IME / CJK composition support)
+
 //
 // All methods are `nonisolated` to satisfy the non-actor-isolated protocol
 // from a @MainActor class (Swift 6 strict concurrency). AppKit always calls
@@ -126,5 +127,5 @@ extension GhosttyTerminalView: NSTextInputClient {
 
     /// Prevent NSBeep for unhandled selectors during IME composition.
     /// Empty body — no actor state access, so nonisolated override is safe.
-    nonisolated override func doCommand(by selector: Selector) {}
+    override nonisolated func doCommand(by selector: Selector) {}
 }

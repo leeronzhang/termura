@@ -71,7 +71,7 @@ actor MetricsPersistenceService {
     ) {
         self.metrics = metrics
         self.clock = clock
-        self.sessionStartTime = ContinuousClock.now
+        sessionStartTime = ContinuousClock.now
         metricsDirectory = homeDirectory
             .appendingPathComponent(AppConfig.Persistence.directoryName)
             .appendingPathComponent(AppConfig.Metrics.metricsDirectoryName)

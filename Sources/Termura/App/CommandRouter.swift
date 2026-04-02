@@ -147,7 +147,7 @@ final class CommandRouter {
     }
 
     func toggleDualPane() {
-        logger.info("[DIAG] toggleDualPane called, pendingCommand was \(String(describing: self.pendingCommand))")
+        logger.info("[DIAG] toggleDualPane called, pendingCommand was \(String(describing: pendingCommand))")
         pendingCommand = .toggleDualPane
     }
 

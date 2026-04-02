@@ -1,12 +1,12 @@
 import Foundation
 
 // MARK: - Session metadata mutations with optimistic-update + rollback
+
 // Low-level index/array helpers (rebuildSessionIndex, appendSession, mutateSession,
 // reorderSessionsInPlace, replaceAllSessions) live in SessionStore.swift because they
 // write to private(set) properties — Swift restricts setters to the declaring file.
 
 extension SessionStore {
-
     func renameSession(id: SessionID, title: String) {
         guard let updated = mutateSession(id: id, { $0.title = TitleSanitizer.stripAgentPrefixes(title) }) else { return }
         scheduleDebounced(key: "rename-\(id)") { try await $0.save(updated) }
@@ -70,5 +70,4 @@ extension SessionStore {
             onFailure: { [weak self] in self?.replaceAllSessions(originalSessions) }
         )
     }
-
 }

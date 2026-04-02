@@ -35,13 +35,13 @@ func estimateTokens(in text: String) -> Int {
 /// Returns true for CJK unified ideographs and CJK-adjacent scripts
 /// (Hiragana, Katakana, Hangul) whose token density is ~1 char/token.
 private func isCJKScalar(_ codepoint: UInt32) -> Bool {
-    (0x4E00...0x9FFF).contains(codepoint)     // CJK Unified Ideographs
-        || (0x3400...0x4DBF).contains(codepoint)   // CJK Extension A
-        || (0xF900...0xFAFF).contains(codepoint)   // CJK Compatibility Ideographs
-        || (0x3040...0x309F).contains(codepoint)   // Hiragana
-        || (0x30A0...0x30FF).contains(codepoint)   // Katakana
-        || (0xAC00...0xD7AF).contains(codepoint)   // Hangul Syllables
-        || (0x20000...0x2A6DF).contains(codepoint) // CJK Extension B (Supplementary)
+    (0x4E00 ... 0x9FFF).contains(codepoint) // CJK Unified Ideographs
+        || (0x3400 ... 0x4DBF).contains(codepoint) // CJK Extension A
+        || (0xF900 ... 0xFAFF).contains(codepoint) // CJK Compatibility Ideographs
+        || (0x3040 ... 0x309F).contains(codepoint) // Hiragana
+        || (0x30A0 ... 0x30FF).contains(codepoint) // Katakana
+        || (0xAC00 ... 0xD7AF).contains(codepoint) // Hangul Syllables
+        || (0x20000 ... 0x2A6DF).contains(codepoint) // CJK Extension B (Supplementary)
 }
 
 // MARK: - TokenCountingService

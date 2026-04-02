@@ -9,7 +9,6 @@ import Observation
 @Observable
 @MainActor
 final class DiagnosticsStore {
-
     // MARK: - State
 
     private(set) var items: [DiagnosticItem] = []

@@ -27,10 +27,10 @@ actor AgentCoordinator {
 
     /// Continuation for riskAlerts. nonisolated let so analyzeOutput (nonisolated) can yield
     /// without crossing the actor boundary. AsyncStream.Continuation is Sendable.
-    nonisolated private let riskAlertContinuation: AsyncStream<RiskAlert>.Continuation
+    private nonisolated let riskAlertContinuation: AsyncStream<RiskAlert>.Continuation
     /// Continuation for contextWindowAlerts. Actor-isolated callers (applyAgentStateUpdate)
     /// may also use nonisolated access — Continuation is designed for concurrent yield calls.
-    nonisolated private let contextAlertContinuation: AsyncStream<ContextWindowAlert>.Continuation
+    private nonisolated let contextAlertContinuation: AsyncStream<ContextWindowAlert>.Continuation
 
     // MARK: - Dependencies
 

@@ -64,10 +64,10 @@ extension ThemeDefinition {
     }
 
     private enum BuiltinID {
-        static let termuraDark   = builtinUUID("A1000001-0000-0000-0000-000000000001")
-        static let termuraLight  = builtinUUID("A1000001-0000-0000-0000-000000000002")
+        static let termuraDark = builtinUUID("A1000001-0000-0000-0000-000000000001")
+        static let termuraLight = builtinUUID("A1000001-0000-0000-0000-000000000002")
         static let solarizedDark = builtinUUID("A1000001-0000-0000-0000-000000000003")
-        static let monokai       = builtinUUID("A1000001-0000-0000-0000-000000000004")
+        static let monokai = builtinUUID("A1000001-0000-0000-0000-000000000004")
     }
 
     static let termuraDark = ThemeDefinition(

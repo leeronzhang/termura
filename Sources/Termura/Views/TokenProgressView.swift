@@ -62,7 +62,7 @@ struct TokenProgressView: View {
     VStack(spacing: 24) {
         Group {
             TokenProgressView(estimatedTokens: 0, contextLimit: 200_000)
-            TokenProgressView(estimatedTokens: 50_000, contextLimit: 200_000)
+            TokenProgressView(estimatedTokens: 50000, contextLimit: 200_000)
             TokenProgressView(estimatedTokens: 160_000, contextLimit: 200_000)
             TokenProgressView(estimatedTokens: 195_000, contextLimit: 200_000)
         }

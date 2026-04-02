@@ -20,11 +20,10 @@ actor ContextInjectionService: ContextInjectionServiceProtocol {
             return nil
         }
 
-        let text: String
-        if let agentType = context.agentType, agentType != .unknown {
-            text = formatForAgent(context, agentType: agentType)
+        let text: String = if let agentType = context.agentType, agentType != .unknown {
+            formatForAgent(context, agentType: agentType)
         } else {
-            text = formatForShell(context)
+            formatForShell(context)
         }
 
         guard !text.isEmpty else { return nil }

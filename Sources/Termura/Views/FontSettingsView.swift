@@ -39,8 +39,8 @@ struct FontSettingsView: View {
                         FontSettings.minSize
                     )
                 }
-                    .disabled(fontSettings.terminalFontSize <= FontSettings.minSize)
-                    .accessibilityLabel("Decrease terminal font size")
+                .disabled(fontSettings.terminalFontSize <= FontSettings.minSize)
+                .accessibilityLabel("Decrease terminal font size")
                 Text("\(Int(fontSettings.terminalFontSize)) pt")
                     .frame(width: AppConfig.UI.settingsFontSizeFieldWidth, alignment: .center)
                     .monospacedDigit()
@@ -50,13 +50,13 @@ struct FontSettingsView: View {
                         FontSettings.maxSize
                     )
                 }
-                    .disabled(fontSettings.terminalFontSize >= FontSettings.maxSize)
-                    .accessibilityLabel("Increase terminal font size")
+                .disabled(fontSettings.terminalFontSize >= FontSettings.maxSize)
+                .accessibilityLabel("Increase terminal font size")
                 Button("Reset") {
                     fontSettings.terminalFontSize = FontSettings.defaultTerminalSize
                 }
-                    .foregroundColor(.secondary)
-                    .accessibilityLabel("Reset terminal font size")
+                .foregroundColor(.secondary)
+                .accessibilityLabel("Reset terminal font size")
             }
         }
     }

@@ -5,11 +5,11 @@ import SwiftUI
     SessionMetadataBarView(
         metadata: SessionMetadata(
             sessionID: SessionID(),
-            estimatedTokenCount: 42_100,
+            estimatedTokenCount: 42100,
             totalCharacterCount: 168_400,
-            inputTokenCount: 28_000,
-            outputTokenCount: 12_000,
-            cachedTokenCount: 2_100,
+            inputTokenCount: 28000,
+            outputTokenCount: 12000,
+            cachedTokenCount: 2100,
             estimatedCostUSD: 0.087,
             sessionDuration: 263,
             commandCount: 14,

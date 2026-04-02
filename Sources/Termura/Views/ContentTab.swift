@@ -51,11 +51,11 @@ enum ContentTab: Identifiable, Hashable, Codable {
     /// Returns nil for terminal/split tabs which use SF Symbols.
     var fileTypeIconName: String? {
         switch self {
-        case .terminal, .split: return nil
-        case .note: return "readme.md"
-        case let .diff(path, _, _): return URL(fileURLWithPath: path).lastPathComponent
-        case let .file(_, name): return name
-        case let .preview(_, name): return name
+        case .terminal, .split: nil
+        case .note: "readme.md"
+        case let .diff(path, _, _): URL(fileURLWithPath: path).lastPathComponent
+        case let .file(_, name): name
+        case let .preview(_, name): name
         }
     }
 
@@ -102,9 +102,9 @@ enum ContentTab: Identifiable, Hashable, Codable {
     /// Whether either slot of this tab contains the given session.
     func containsSession(_ id: SessionID) -> Bool {
         switch self {
-        case let .terminal(sid, _): return sid == id
-        case let .split(left, right, _, _): return left == id || right == id
-        case .note, .diff, .file, .preview: return false
+        case let .terminal(sid, _): sid == id
+        case let .split(left, right, _, _): left == id || right == id
+        case .note, .diff, .file, .preview: false
         }
     }
 

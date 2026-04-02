@@ -247,5 +247,4 @@ enum AppConfig {
         /// Any URL whose scheme is not in this set is silently blocked.
         static let allowedTerminalSchemes: Set<String> = ["https", "http", "file", "mailto"]
     }
-
 }

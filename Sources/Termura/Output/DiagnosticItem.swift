@@ -44,7 +44,7 @@ struct DiagnosticItem: Identifiable, Sendable {
         self.source = source
         self.sessionID = sessionID
         self.producedAt = producedAt
-        self.fileName = URL(fileURLWithPath: file).lastPathComponent
+        fileName = URL(fileURLWithPath: file).lastPathComponent
     }
 
     /// One-line location string for display (e.g., "ContentView.swift:42").

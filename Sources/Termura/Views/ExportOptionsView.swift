@@ -21,7 +21,7 @@ struct ExportOptionsView: View {
     ) {
         self.session = session
         self.chunks = chunks
-        self._isPresented = isPresented
+        _isPresented = isPresented
         self.exportService = exportService
     }
 

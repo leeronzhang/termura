@@ -102,7 +102,7 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         // allow the window to close normally. When triggered by Cmd+W
         // (keyboard shortcut via performClose), TabAwareWindow routes it
         // to tab closure instead, and this delegate method is never reached.
-        return true
+        true
     }
 
     func windowWillClose(_ notification: Notification) {

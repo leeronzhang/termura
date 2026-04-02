@@ -40,7 +40,7 @@ final class MockAgentStateStore: AgentStateStoreProtocol {
     }
 
     private(set) var totalEstimatedTokens: Int = 0
-    var now: Date = Date()
+    var now: Date = .init()
 
     func update(state: AgentState) {
         updateCallCount += 1

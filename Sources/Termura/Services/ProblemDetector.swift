@@ -9,7 +9,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ProblemDete
 /// Patterns cover Swift/SwiftLint (same output format), TypeScript, and a generic fallback.
 /// Additional language patterns can be added as static properties without changing the API.
 enum ProblemDetector {
-
     // MARK: - Pre-compiled patterns
 
     // Swift compiler / Xcode / SwiftLint: /path/File.swift:10:5: error: message
@@ -153,7 +152,7 @@ enum ProblemDetector {
         let nsLine = line as NSString
         let range = NSRange(location: 0, length: nsLine.length)
         guard let match = pattern.firstMatch(in: line, range: range) else { return nil }
-        return (1..<match.numberOfRanges).map { nsLine.substring(with: match.range(at: $0)) }
+        return (1 ..< match.numberOfRanges).map { nsLine.substring(with: match.range(at: $0)) }
     }
 
     /// Strips the project root prefix from absolute paths so the UI shows relative paths.

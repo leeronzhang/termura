@@ -171,7 +171,7 @@ struct AppCommands: Commands {
     /// Ctrl+1~9: activate the session at the given position in the visible session list.
     @ViewBuilder
     private var sessionIndexShortcuts: some View {
-        ForEach(0..<9, id: \.self) { index in
+        ForEach(0 ..< 9, id: \.self) { index in
             Button("Switch to Session \(index + 1)") {
                 dispatcher.selectSession(at: index)
             }

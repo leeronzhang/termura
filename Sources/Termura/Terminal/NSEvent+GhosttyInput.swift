@@ -13,7 +13,7 @@ extension NSEvent {
         key.consumed_mods = modifierFlags.subtracting([.control, .command]).ghosttyMods
         key.text = nil
         key.composing = false
-        if self.type == .keyDown || self.type == .keyUp,
+        if type == .keyDown || type == .keyUp,
            let chars = characters(byApplyingModifiers: []),
            let cp = chars.unicodeScalars.first {
             key.unshifted_codepoint = cp.value

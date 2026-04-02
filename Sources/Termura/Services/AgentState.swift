@@ -40,13 +40,13 @@ enum AgentType: String, Sendable, Codable, CaseIterable {
     /// Empty for `.unknown`; callers must guard against an empty result.
     var defaultLaunchCommand: String {
         switch self {
-        case .claudeCode: return "claude"
-        case .codex:      return "codex"
-        case .aider:      return "aider"
-        case .openCode:   return "opencode"
-        case .gemini:     return "gemini"
-        case .pi:         return "pi"
-        case .unknown:    return ""
+        case .claudeCode: "claude"
+        case .codex: "codex"
+        case .aider: "aider"
+        case .openCode: "opencode"
+        case .gemini: "gemini"
+        case .pi: "pi"
+        case .unknown: ""
         }
     }
 
@@ -55,8 +55,8 @@ enum AgentType: String, Sendable, Codable, CaseIterable {
     /// Claude Code uses `--continue` to resume the last conversation.
     var resumeCommand: String {
         switch self {
-        case .claudeCode: return "claude --continue"
-        default:          return defaultLaunchCommand
+        case .claudeCode: "claude --continue"
+        default: defaultLaunchCommand
         }
     }
 }

@@ -32,7 +32,7 @@ actor DBHealthMonitor {
     private(set) var status: DBHealthStatus = .healthy
     // nonisolated(unsafe): deinit is nonisolated; last-reference guarantee makes
     // the access free of data races — no concurrent mutation is possible at deinit time.
-    nonisolated(unsafe) private var monitorTask: Task<Void, Never>?
+    private nonisolated(unsafe) var monitorTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -90,7 +90,7 @@ actor DBHealthMonitor {
                 try Int.fetchOne(database, sql: "SELECT 1") ?? 0
             }
             if consecutiveFailures > 0 {
-                logger.info("DB health restored after \(self.consecutiveFailures) failure(s)")
+                logger.info("DB health restored after \(consecutiveFailures) failure(s)")
             }
             consecutiveFailures = 0
             status = .healthy
@@ -104,7 +104,7 @@ actor DBHealthMonitor {
             }
             if status != previous {
                 logger.warning(
-                    "DB health changed: \(self.status.rawValue) (failures=\(self.consecutiveFailures))"
+                    "DB health changed: \(status.rawValue) (failures=\(consecutiveFailures))"
                 )
             }
         }

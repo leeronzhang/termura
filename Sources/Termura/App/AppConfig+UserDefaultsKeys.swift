@@ -61,14 +61,14 @@ extension AppConfig {
         private static func sanitized(_ path: String) -> String {
             path.unicodeScalars.map { scalar -> String in
                 let value = scalar.value
-                let isSafe = (value >= 65 && value <= 90)    // A-Z
-                          || (value >= 97 && value <= 122)   // a-z
-                          || (value >= 48 && value <= 57)    // 0-9
-                          || value == 47    // /
-                          || value == 46    // .
-                          || value == 45    // -
-                          || value == 95    // _
-                          || value == 32    // space
+                let isSafe = (value >= 65 && value <= 90) // A-Z
+                    || (value >= 97 && value <= 122) // a-z
+                    || (value >= 48 && value <= 57) // 0-9
+                    || value == 47 // /
+                    || value == 46 // .
+                    || value == 45 // -
+                    || value == 95 // _
+                    || value == 32 // space
                 return isSafe ? String(scalar) : "_"
             }.joined()
         }

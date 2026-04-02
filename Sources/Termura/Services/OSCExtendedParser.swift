@@ -19,7 +19,6 @@ enum OSC777Event: Sendable, Equatable {
 /// Stateless parsers for OSC 9, 99, and 777 payloads.
 /// Follows the same pattern as `OSC133Parser`.
 enum OSCExtendedParser {
-
     private static let maxTitleLength = 80
     private static let maxBodyLength = 200
     private static let sourceAttribution = " \u{2014} via Termura Terminal"

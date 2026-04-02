@@ -127,12 +127,12 @@ extension SessionMetadataBarView {
 
     func contentTypeIcon(_ type: OutputContentType) -> String {
         switch type {
-        case .toolCall:      return "wrench"
-        case .diff:          return "arrow.left.arrow.right"
-        case .error:         return "xmark.circle"
-        case .code:          return "chevron.left.forwardslash.chevron.right"
-        case .text:          return "text.alignleft"
-        case .commandOutput: return "terminal"
+        case .toolCall: "wrench"
+        case .diff: "arrow.left.arrow.right"
+        case .error: "xmark.circle"
+        case .code: "chevron.left.forwardslash.chevron.right"
+        case .text: "text.alignleft"
+        case .commandOutput: "terminal"
         }
     }
 }

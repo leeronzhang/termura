@@ -88,7 +88,7 @@ final class TerminalDragContainerView: NSView {
     // wrong-sized layout pass followed immediately by the correct-sized pass.
     // nonisolated(unsafe): deinit is nonisolated; last-reference guarantee makes
     // the access free of data races — no concurrent mutation is possible at deinit time.
-    nonisolated(unsafe) private var pendingResizeTask: Task<Void, Never>?
+    private nonisolated(unsafe) var pendingResizeTask: Task<Void, Never>?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         isPassthrough ? nil : super.hitTest(point)
@@ -188,5 +188,4 @@ final class TerminalDragContainerView: NSView {
         }
         return false
     }
-
 }

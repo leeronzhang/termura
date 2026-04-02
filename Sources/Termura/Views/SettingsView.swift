@@ -46,8 +46,8 @@ struct GeneralSettingsView: View {
             } footer: {
                 Text(
                     "When enabled, reopening a project pre-fills the Composer with the previous"
-                    + " session\u{2019}s agent command (e.g. \u{201C}claude\u{201D})."
-                    + " Press Enter to launch or edit before confirming."
+                        + " session\u{2019}s agent command (e.g. \u{201C}claude\u{201D})."
+                        + " Press Enter to launch or edit before confirming."
                 )
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -60,8 +60,8 @@ struct GeneralSettingsView: View {
             } footer: {
                 Text(
                     "Enable when using Claude Max or another subscription plan."
-                    + " Hides the cost row in the Inspector \u{2014} token counts"
-                    + " (Input, Output, Cache) are still shown for context window monitoring."
+                        + " Hides the cost row in the Inspector \u{2014} token counts"
+                        + " (Input, Output, Cache) are still shown for context window monitoring."
                 )
                 .font(.caption)
                 .foregroundColor(.secondary)

@@ -83,7 +83,7 @@ extension AgentStateDetector {
 
     /// Evaluates reachable rules; one scalar walk gates all rare-char rules, skipping their contains() on ~95% of packets.
     /// Accepts any `StringProtocol` so callers can pass a `Substring` without materializing a `String` copy.
-    func evaluateRules<S: StringProtocol>(_ text: S, lowercased lowercasedText: String) -> AgentStatus? {
+    func evaluateRules(_ text: some StringProtocol, lowercased lowercasedText: String) -> AgentStatus? {
         let rules = Self.reachableRules[currentStatus] ?? Self.statusRules
         let hasRareScalar = text.unicodeScalars.contains(where: StatusRule.agentRareScalars.contains)
         for rule in rules {

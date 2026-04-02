@@ -11,7 +11,6 @@ import Observation
 @Observable
 @MainActor
 final class MockDiagnosticsStore {
-
     // MARK: - State (mirrors DiagnosticsStore)
 
     private(set) var items: [DiagnosticItem] = []

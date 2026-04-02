@@ -71,7 +71,7 @@ actor AgentStateDetector {
         guard Self.validTransitions[currentStatus]?.contains(status) == true else {
             let sid = sessionID
             logger.warning(
-                "OSC signal '\(status.rawValue)' ignored: invalid transition from '\(self.currentStatus.rawValue)' in session \(sid)"
+                "OSC signal '\(status.rawValue)' ignored: invalid transition from '\(currentStatus.rawValue)' in session \(sid)"
             )
             return
         }
@@ -98,7 +98,7 @@ actor AgentStateDetector {
         // extractCurrentTask has its own fast-path literal guard (O(1) when no anchor keyword).
         let sampleString = String(sample)
         if currentStatus == .toolRunning || currentStatus == .thinking {
-            if let task = self.extractCurrentTask(from: sampleString) {
+            if let task = extractCurrentTask(from: sampleString) {
                 currentTask = task
             }
         }
@@ -120,7 +120,7 @@ actor AgentStateDetector {
         // Guard with a cheap contains() before running the regex to avoid unnecessary
         // regex execution when toolRunning was triggered by a different rule (e.g. "Running:").
         if matched == .toolRunning && sample.contains("Writing to") {
-            activeFilePath = self.extractActiveFilePath(from: sampleString) ?? activeFilePath
+            activeFilePath = extractActiveFilePath(from: sampleString) ?? activeFilePath
         } else if matched == .idle || matched == .completed || matched == .error {
             activeFilePath = nil
         }

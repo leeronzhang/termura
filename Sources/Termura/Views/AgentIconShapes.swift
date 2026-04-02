@@ -1,6 +1,7 @@
 import SwiftUI
 
 // MARK: - SVG path data from RemixIcon (Apache 2.0), viewBox 0 0 24 24
+
 // Path string data lives in AgentSVGPathData.swift (excluded from line_length linting).
 
 enum AgentSVGPaths {

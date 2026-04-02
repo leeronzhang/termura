@@ -24,7 +24,7 @@ struct ComposerAttachment: Identifiable, Sendable {
         self.kind = kind
         self.isTemporary = isTemporary
         let name = url.lastPathComponent
-        self.displayName = name.count > AppConfig.Attachments.pillNameMaxLength
+        displayName = name.count > AppConfig.Attachments.pillNameMaxLength
             ? String(name.prefix(AppConfig.Attachments.pillNameMaxLength)) + "..."
             : name
     }
@@ -32,8 +32,8 @@ struct ComposerAttachment: Identifiable, Sendable {
     /// SF Symbol name for the attachment kind indicator.
     var symbolName: String {
         switch kind {
-        case .image: return "photo"
-        case .textFile: return "doc.text"
+        case .image: "photo"
+        case .textFile: "doc.text"
         }
     }
 }

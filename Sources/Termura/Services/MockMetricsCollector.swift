@@ -37,14 +37,18 @@ actor MockMetricsCollector: MetricsCollectorProtocol {
     private func buildCounters() -> [MetricName: Int] {
         // Counters: cumulative sum of all increments per metric.
         var counters: [MetricName: Int] = [:]
-        for (name, value) in incrementCalls { counters[name, default: 0] += value }
+        for (name, value) in incrementCalls {
+            counters[name, default: 0] += value
+        }
         return counters
     }
 
     private func buildGauges() -> [MetricName: Double] {
         // Gauges: last-write-wins, matching MetricsCollector semantics.
         var gauges: [MetricName: Double] = [:]
-        for (name, value) in gaugeCalls { gauges[name] = value }
+        for (name, value) in gaugeCalls {
+            gauges[name] = value
+        }
         return gauges
     }
 

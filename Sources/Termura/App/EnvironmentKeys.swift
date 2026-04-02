@@ -1,6 +1,7 @@
 import SwiftUI
 
 // MARK: - Mock Preview Context
+
 //
 // Centralises the mock objects that must be shared across EnvironmentKey defaults,
 // mirroring the single-instance wiring in ProjectContext.open(at:).

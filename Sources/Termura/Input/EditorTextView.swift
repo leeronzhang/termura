@@ -63,7 +63,7 @@ final class EditorTextView: NSTextView {
         ) as? [URL], !urls.isEmpty {
             if let handler = attachmentDropHandler {
                 let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"]
-                urls.forEach { url in
+                for url in urls {
                     let kind: ComposerAttachment.Kind = imageExtensions.contains(url.pathExtension.lowercased()) ? .image : .textFile
                     handler(url, kind, false)
                 }

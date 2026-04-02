@@ -19,9 +19,9 @@ struct StatusRule: Sendable {
         if case let .contains(needle) = pattern,
            needle.unicodeScalars.count == 1,
            let scalar = needle.unicodeScalars.first {
-            self.isRareUnicodeRule = StatusRule.agentRareScalars.contains(scalar)
+            isRareUnicodeRule = StatusRule.agentRareScalars.contains(scalar)
         } else {
-            self.isRareUnicodeRule = false
+            isRareUnicodeRule = false
         }
     }
 
@@ -33,7 +33,7 @@ struct StatusRule: Sendable {
     /// Fast-path variant that accepts any `StringProtocol` value (e.g. `Substring`) so callers
     /// can avoid materializing a `String` copy. Also accepts a pre-lowercased `String` copy
     /// to avoid repeated lowercasing for `.containsCaseInsensitive` rules.
-    func matchesFast<S: StringProtocol>(_ text: S, lowercased lowercasedText: String) -> Bool {
+    func matchesFast(_ text: some StringProtocol, lowercased lowercasedText: String) -> Bool {
         pattern.evaluateFast(text, lowercased: lowercasedText)
     }
 
@@ -46,7 +46,7 @@ struct StatusRule: Sendable {
         "\u{2713}", // check mark        (completed)
         "\u{280B}", // braille spinner   (thinking)
         "\u{2819}", // braille spinner   (thinking)
-        "\u{2839}"  // braille spinner   (thinking)
+        "\u{2839}" // braille spinner   (thinking)
     ]
 
     /// Pattern types for flexible matching.
@@ -71,7 +71,7 @@ struct StatusRule: Sendable {
         /// materializing a `String` copy first. For `.containsCaseInsensitive`, all needles
         /// in `statusRules` are lowercase literals, so `contains` on the pre-lowercased text
         /// is equivalent and avoids re-normalising.
-        func evaluateFast<S: StringProtocol>(_ text: S, lowercased lowercasedText: String) -> Bool {
+        func evaluateFast(_ text: some StringProtocol, lowercased lowercasedText: String) -> Bool {
             switch self {
             case let .contains(needle):
                 return text.contains(needle)

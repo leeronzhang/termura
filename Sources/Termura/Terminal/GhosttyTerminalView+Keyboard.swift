@@ -121,9 +121,9 @@ extension GhosttyTerminalView {
     }
 
     func setupEventMonitor() {
-        self.eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyUp]) { [weak self] event in
-            guard let self, self.window?.firstResponder === self else { return event }
-            self.keyUp(with: event)
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyUp]) { [weak self] event in
+            guard let self, window?.firstResponder === self else { return event }
+            keyUp(with: event)
             return nil
         }
     }

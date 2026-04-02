@@ -24,7 +24,7 @@ actor GitService: GitServiceProtocol {
     private let signposter = OSSignposter(subsystem: "com.termura.app", category: "GitService")
 
     func status(at directory: String) async throws -> GitStatusResult {
-        let traceLabel = TraceLocal.current.map { $0.spanName } ?? "untraced"
+        let traceLabel = TraceLocal.current.map(\.spanName) ?? "untraced"
         let signpostID = signposter.makeSignpostID()
         let state = signposter.beginInterval("GitStatus", id: signpostID)
         defer { signposter.endInterval("GitStatus", state) }
@@ -49,7 +49,7 @@ actor GitService: GitServiceProtocol {
         let output: String
         do {
             output = try await statusFuture
-        } catch GitServiceError.commandFailed(_, let code, _) where Self.isNotARepoExitCode(code) {
+        } catch let GitServiceError.commandFailed(_, code, _) where Self.isNotARepoExitCode(code) {
             return .notARepo
         }
         var result = Self.parse(porcelain: output)
@@ -75,7 +75,7 @@ actor GitService: GitServiceProtocol {
     }
 
     func diff(file: String, staged: Bool, at directory: String) async throws -> String {
-        let traceLabel = TraceLocal.current.map { $0.spanName } ?? "untraced"
+        let traceLabel = TraceLocal.current.map(\.spanName) ?? "untraced"
         let signpostID = signposter.makeSignpostID()
         let state = signposter.beginInterval("GitDiff", id: signpostID)
         defer { signposter.endInterval("GitDiff", state) }
@@ -87,7 +87,7 @@ actor GitService: GitServiceProtocol {
         args.append(file)
         do {
             return try await run(args, at: directory)
-        } catch GitServiceError.commandFailed(_, let code, _) where Self.isNotARepoExitCode(code) {
+        } catch let GitServiceError.commandFailed(_, code, _) where Self.isNotARepoExitCode(code) {
             throw GitServiceError.notARepo
         }
     }
@@ -96,7 +96,7 @@ actor GitService: GitServiceProtocol {
         let output: String
         do {
             output = try await run(["ls-files"], at: directory)
-        } catch GitServiceError.commandFailed(_, let code, _) where Self.isNotARepoExitCode(code) {
+        } catch let GitServiceError.commandFailed(_, code, _) where Self.isNotARepoExitCode(code) {
             throw GitServiceError.notARepo
         }
         return Set(output.split(separator: "\n").map(String.init))

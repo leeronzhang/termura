@@ -77,13 +77,13 @@ enum InterventionService {
                 i = scalars.index(after: i)
                 guard i < scalars.endIndex else { break }
                 switch scalars[i].value {
-                case 0x5B:  // '[' — CSI: skip until final byte 0x40-0x7E
+                case 0x5B: // '[' — CSI: skip until final byte 0x40-0x7E
                     i = scalars.index(after: i)
-                    while i < scalars.endIndex, !(0x40...0x7E).contains(scalars[i].value) {
+                    while i < scalars.endIndex, !(0x40 ... 0x7E).contains(scalars[i].value) {
                         i = scalars.index(after: i)
                     }
                     if i < scalars.endIndex { i = scalars.index(after: i) }
-                case 0x5D:  // ']' — OSC: skip until BEL or ESC '\'
+                case 0x5D: // ']' — OSC: skip until BEL or ESC '\'
                     i = scalars.index(after: i)
                     while i < scalars.endIndex {
                         let scalar = scalars[i].value
@@ -97,7 +97,7 @@ enum InterventionService {
                         }
                         i = scalars.index(after: i)
                     }
-                default:  // bare ESC + single char
+                default: // bare ESC + single char
                     i = scalars.index(after: i)
                 }
             } else if sv < 32 || sv == 127 {

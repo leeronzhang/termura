@@ -236,5 +236,4 @@ enum DatabaseMigrations {
             logger.info("v9 migration complete: ended_at column on sessions")
         }
     }
-
 }

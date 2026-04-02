@@ -102,14 +102,14 @@ extension AgentStateDetector {
     func parseTokenStats(_ text: String) -> ParsedTokenStats? {
         switch detectedType {
         case .aider:
-            return parseAiderStats(text)
+            parseAiderStats(text)
         case .codex:
-            return parseCodexStats(text) ?? parseClaudeFormatStats(text)
+            parseCodexStats(text) ?? parseClaudeFormatStats(text)
         case .gemini:
-            return parseGeminiStats(text) ?? parseClaudeFormatStats(text)
+            parseGeminiStats(text) ?? parseClaudeFormatStats(text)
         default:
             // Claude Code, OpenCode, and unrecognised agents all use the same summary format.
-            return parseClaudeFormatStats(text)
+            parseClaudeFormatStats(text)
         }
     }
 

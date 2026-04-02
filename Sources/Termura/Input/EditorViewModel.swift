@@ -82,20 +82,19 @@ final class EditorViewModel {
     func submit() {
         let text = currentText
         let pathPrefix = attachments.map(\.url.path.shellEscaped).joined(separator: " ")
-        let fullCommand: String
-        if pathPrefix.isEmpty {
-            fullCommand = text
+        let fullCommand: String = if pathPrefix.isEmpty {
+            text
         } else if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            fullCommand = pathPrefix
+            pathPrefix
         } else {
-            fullCommand = pathPrefix + " " + text
+            pathPrefix + " " + text
         }
         history.push(text)
         currentText = ""
         clearAttachments()
         modeController.switchToPassthrough()
         logger.debug("Submitting command length=\(fullCommand.count)")
-        onCommandSubmit?(text)  // user text only — used for agent detection
+        onCommandSubmit?(text) // user text only — used for agent detection
         onSubmit?()
         // ghostty_surface_text uses bracketed paste — embedded \r is literal, not "execute".
         // Send text first, then simulate Return key press to trigger shell execution.

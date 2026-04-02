@@ -6,15 +6,18 @@ import Foundation
 @MainActor
 protocol AppCommandDispatcher: AnyObject {
     // MARK: - Session commands
+
     func createNewSession()
     func exportActiveSession()
     func createBranch(type: BranchType)
     func jumpToNextAlert()
 
     // MARK: - Project commands
+
     func showProjectPicker()
 
     // MARK: - CommandRouter forwarding
+
     func requestSearch()
     func createNote()
     func requestHarness()
@@ -31,6 +34,7 @@ protocol AppCommandDispatcher: AnyObject {
     func requestBranchMerge()
 
     // MARK: - Font zoom
+
     func zoomIn()
     func zoomOut()
     func resetZoom()

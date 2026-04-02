@@ -56,7 +56,7 @@ extension GhosttyAppContext {
     ) {
         guard let content, len > 0 else { return }
         var texts: [String] = []
-        for idx in 0..<len {
+        for idx in 0 ..< len {
             let item = content[idx]
             guard let mime = item.mime,
                   String(cString: mime) == "text/plain",
