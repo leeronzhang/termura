@@ -1,0 +1,7 @@
+#!/bin/bash
+# Termura Pre-commit Quality Gate
+# Install: cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+set -euo pipefail
+
+bash scripts/quality-gate.sh --staged

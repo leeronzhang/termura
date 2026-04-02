@@ -26,8 +26,13 @@ Sources/Termura/Harness/*
 
 # CI/CD and internal build tooling
 .github/
+!.github/workflows/
+!.github/workflows/ci.yml
 Makefile
 scripts/
+!scripts/check-xcstrings-coverage.sh
+!scripts/pre-commit
+!scripts/quality-gate.sh
 project.yml
 .swiftlint.yml
 .swiftformat
