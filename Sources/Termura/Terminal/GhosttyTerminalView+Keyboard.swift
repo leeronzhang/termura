@@ -13,6 +13,10 @@ extension GhosttyTerminalView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if mods == .command, event.charactersIgnoringModifiers == "v" {
+            // In dual-pane mode, only the focused pane should handle Cmd+V.
+            // performKeyEquivalent traverses the view hierarchy depth-first,
+            // so the left pane would always win without this guard.
+            guard window?.firstResponder === self else { return false }
             paste(nil)
             return true
         }

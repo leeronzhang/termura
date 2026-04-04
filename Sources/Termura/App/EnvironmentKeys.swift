@@ -105,7 +105,7 @@ private struct SessionScopeKey: EnvironmentKey {
     }
     #else
     static let defaultValue: SessionScope = MainActor.assumeIsolated {
-        let engineStore = TerminalEngineStore(factory: MockTerminalEngineFactory())
+        let engineStore = TerminalEngineStore(factory: LiveTerminalEngineFactory())
         let store = SessionStore(engineStore: engineStore, repository: NullSessionRepository())
         return SessionScope(store: store, engines: engineStore, agentStates: AgentStateStore())
     }
@@ -211,7 +211,7 @@ private struct ViewStateManagerKey: EnvironmentKey {
     }
     #else
     static let defaultValue: SessionViewStateManager = MainActor.assumeIsolated {
-        let engineStore = TerminalEngineStore(factory: MockTerminalEngineFactory())
+        let engineStore = TerminalEngineStore(factory: LiveTerminalEngineFactory())
         let store = SessionStore(engineStore: engineStore, repository: NullSessionRepository())
         return SessionViewStateManager(.init(
             commandRouter: CommandRouter(),

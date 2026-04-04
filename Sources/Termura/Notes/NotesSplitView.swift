@@ -79,6 +79,7 @@ struct NotesSplitView: View {
                     title: viewModel.editingTitle,
                     text: $viewModel.editingBody
                 )
+                .id(noteID)
             }
         } else {
             VStack(spacing: AppUI.Spacing.smMd) {

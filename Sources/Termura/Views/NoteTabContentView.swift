@@ -33,7 +33,12 @@ struct NoteTabContentView: View {
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
+        .task {
+            // Ensure notes are loaded before selecting — covers the startup tab-restore
+            // scenario where this view appears before NotesSplitView triggers loadNotes().
+            if notesViewModel.notes.isEmpty {
+                await notesViewModel.loadNotes()
+            }
             notesViewModel.selectNote(id: noteID)
             if notesViewModel.editingTitle == "Untitled" {
                 isTitleFocused = true

@@ -23,6 +23,10 @@ struct MainView: View {
     var notes: Bindable<NotesViewModel> { Bindable(notesViewModel) }
 
     @State var lastContentTabBySidebarTab: [SidebarTab: ContentTab] = [:]
+    /// Sidebar tabs that should show their empty state because no content was restored
+    /// on the last sidebar switch. Cleared when the user explicitly selects a content tab
+    /// or when a restore succeeds.
+    @State var sidebarShowsEmpty: Set<SidebarTab> = []
     @State private var sidebarWidth: Double = AppConfig.UI.sidebarDefaultWidth
     @State var showDeleteSessionConfirm = false
     @State var tabManager = TabManager()
@@ -105,6 +109,9 @@ struct MainView: View {
 
     private func onSelectedContentTabChange(old oldTab: ContentTab?, new newTab: ContentTab?) {
         if let newTab { trackContentTabForSidebarTab(newTab) }
+        // A content tab was selected (user click, restore, or programmatic open) —
+        // clear the empty-state flag for the current sidebar so the tab is shown.
+        sidebarShowsEmpty.remove(commandRouter.selectedSidebarTab)
         // Sync isDualPaneActive + focusedSlot when selected tab changes externally
         // (commands, session deletion, initial load) — not just user tab taps.
         guard let tab = newTab else { return }

@@ -10,6 +10,12 @@ private enum ContentDisplay {
     case empty
     /// Notes tab is active but no note is selected — show the notes empty state.
     case notesEmpty
+    /// Project tab is active but no file is open.
+    case projectEmpty
+    /// Harness tab is active but no rule file is open.
+    case harnessEmpty
+    /// Agents tab is active — content lives in the sidebar.
+    case agentsEmpty
     /// Render the specified tab normally.
     case tab(ContentTab)
 }
@@ -71,10 +77,11 @@ extension MainView {
     var selectedContentView: some View {
         if let tab = resolvedSelectedTab {
             switch resolveContentDisplay(selectedTab: tab) {
-            case .empty:
-                emptyState
-            case .notesEmpty:
-                notesEmptyState
+            case .empty: emptyState
+            case .notesEmpty: notesEmptyState
+            case .projectEmpty: projectEmptyState
+            case .harnessEmpty: harnessEmptyState
+            case .agentsEmpty: agentsEmptyState
             case let .tab(contentTab):
                 tabContent(for: contentTab)
             }
@@ -85,15 +92,16 @@ extension MainView {
 
     /// Determines which display state the content area should render.
     ///
-    /// Encoding the three-way branch here keeps `selectedContentView` linear:
-    /// - Sessions sidebar + non-terminal tab → redirect to the active terminal.
-    /// - Notes sidebar + no note selected → show notes empty state.
-    /// - Everything else → show the resolved tab normally.
+    /// Content tabs span freely across sidebar tabs — clicking any tab in the tab bar
+    /// always shows that tab. Empty states are only shown when `restoreContentTabOnSidebarSwitch`
+    /// failed to find content for the newly selected sidebar (tracked via `sidebarShowsEmpty`).
     private func resolveContentDisplay(selectedTab: ContentTab) -> ContentDisplay {
         let sidebar = commandRouter.selectedSidebarTab
 
-        // Sessions sidebar with a stale non-terminal tab selected (e.g. a note was
-        // left open from the previous run): redirect to the active terminal, if any.
+        // Agents: always empty state (content lives in the sidebar dashboard).
+        if sidebar == .agents { return .agentsEmpty }
+
+        // Sessions: redirect non-terminal to the active terminal, or show empty.
         if sidebar == .sessions, !selectedTab.isTerminal, !selectedTab.isSplit {
             let best = sessionStore.activeSessionID.flatMap { activeID in
                 terminalItems.first(where: { $0.containsSession(activeID) })
@@ -101,10 +109,8 @@ extension MainView {
             return best.map { .tab($0) } ?? .empty
         }
 
-        // Composer notes mode: the Composer overlay renders inside TerminalAreaView, so the
-        // content area must show a terminal/split tab — otherwise the overlay has no host.
-        // A stale non-terminal selectedContentTab (e.g. a note restored at startup) would
-        // leave the Composer invisible even though showComposer is true.
+        // Composer notes mode: the overlay renders inside TerminalAreaView, so the
+        // content area must show a terminal/split tab as the host.
         if sidebar == .notes, commandRouter.isComposerNotesActive,
            !selectedTab.isTerminal, !selectedTab.isSplit {
             let best = sessionStore.activeSessionID.flatMap { activeID in
@@ -113,17 +119,24 @@ extension MainView {
             return best.map { .tab($0) } ?? .tab(selectedTab)
         }
 
-        // Notes sidebar with no note tab selected and the Composer overlay not active.
-        // Tab navigation takes priority for window display: if a terminal/split tab is
-        // explicitly selected in the tab bar, honour it rather than showing notesEmpty.
-        if sidebar == .notes, !commandRouter.isComposerNotesActive, !selectedTab.isNote {
-            if selectedTab.isTerminal || selectedTab.isSplit {
-                return .tab(selectedTab)
-            }
-            return .notesEmpty
+        // Sidebar switched but no content was restored — show the appropriate empty state.
+        // This flag is set by restoreContentTabOnSidebarSwitch when no saved tab exists,
+        // and cleared by onSelectedContentTabChange when the user explicitly selects a tab.
+        if sidebarShowsEmpty.contains(sidebar) {
+            return emptyDisplayFor(sidebar)
         }
 
         return .tab(selectedTab)
+    }
+
+    private func emptyDisplayFor(_ sidebar: SidebarTab) -> ContentDisplay {
+        switch sidebar {
+        case .sessions: .empty
+        case .notes: .notesEmpty
+        case .project: .projectEmpty
+        case .harness: .harnessEmpty
+        case .agents: .agentsEmpty
+        }
     }
 
     @ViewBuilder

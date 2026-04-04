@@ -7,6 +7,16 @@ final class SaveableTextView: NSTextView {
     var onSave: (() -> Void)?
     /// Number of spaces per indent level for drawing indent guides.
     var indentWidth: Int = AppConfig.UI.editorIndentWidth
+    /// When true, the text view requests first responder once it is added to a window.
+    /// Reset to false after firing so subsequent window moves do not re-steal focus.
+    var shouldAutoFocus = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard shouldAutoFocus, let window else { return }
+        shouldAutoFocus = false
+        window.makeFirstResponder(self)
+    }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.modifierFlags.contains(.command) else {

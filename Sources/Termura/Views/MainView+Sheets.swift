@@ -141,4 +141,48 @@ extension MainView {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(themeManager.current.background)
     }
+
+    var projectEmptyState: some View {
+        sidebarEmptyState(
+            icon: SidebarTab.project.icon,
+            title: "No File Open",
+            subtitle: "Select a file from the Project sidebar"
+        )
+    }
+
+    var harnessEmptyState: some View {
+        sidebarEmptyState(
+            icon: SidebarTab.harness.icon,
+            title: "No Rule Open",
+            subtitle: "Select a rule from the Harness sidebar"
+        )
+    }
+
+    var agentsEmptyState: some View {
+        sidebarEmptyState(
+            icon: SidebarTab.agents.icon,
+            title: "Agent Dashboard",
+            subtitle: "Agent activity is shown in the sidebar"
+        )
+    }
+
+    /// Shared layout for sidebar empty states (icon + title + subtitle).
+    private func sidebarEmptyState(icon: String, title: String, subtitle: String) -> some View {
+        VStack(spacing: 0) {
+            Image(systemName: icon)
+                .font(AppUI.Font.sheetIcon)
+                .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.muted))
+                .padding(.bottom, AppUI.Spacing.lg)
+            VStack(spacing: AppUI.Spacing.xs) {
+                Text(title)
+                    .font(AppUI.Font.title1)
+                    .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.dimmed))
+                Text(subtitle)
+                    .font(AppUI.Font.label)
+                    .foregroundColor(themeManager.current.foreground.opacity(AppUI.Opacity.tertiary))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(themeManager.current.background)
+    }
 }

@@ -150,6 +150,9 @@ extension MainView {
     }
 
     func openProjectFile(relativePath: String, mode: FileOpenMode) {
+        // Capture the originating sidebar before the tab is created, because
+        // TabManager.selectedContentTab triggers sidebar sync via onSelectedContentTabChange.
+        let originSidebar = commandRouter.selectedSidebarTab
         let name = URL(fileURLWithPath: relativePath).lastPathComponent
         switch mode {
         case let .diff(staged, untracked):
@@ -158,6 +161,12 @@ extension MainView {
             openFileTab(path: relativePath, name: name)
         case .preview:
             openPreviewTab(path: relativePath, name: name)
+        }
+        // If opened from the harness sidebar, explicitly track under .harness since
+        // sidebarOwner(.file) returns .project. This allows restoreContentTabOnSidebarSwitch
+        // to bring back the rule file when the user returns to the harness tab.
+        if originSidebar == .harness, let tab = tabManager.selectedContentTab {
+            lastContentTabBySidebarTab[.harness] = tab
         }
     }
 

@@ -151,7 +151,7 @@ struct NoteEditorView: View {
                 onSave: {},
                 fontFamily: fontSettings.terminalFontFamily,
                 fontSize: fontSettings.editorFontSize,
-                autoFocus: false
+                language: "markdown"
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

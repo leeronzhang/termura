@@ -87,6 +87,14 @@ enum ContentTab: Identifiable, Hashable, Codable {
         return false
     }
 
+    /// Whether this tab is a project-level content tab (file, diff, or preview).
+    var isProjectContent: Bool {
+        switch self {
+        case .file, .preview, .diff: true
+        case .terminal, .split, .note: false
+        }
+    }
+
     /// The session ID if this is a single terminal tab.
     var sessionID: SessionID? {
         if case let .terminal(sessionID, _) = self { return sessionID }
