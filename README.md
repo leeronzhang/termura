@@ -1,10 +1,19 @@
-# Termura `/ter-MU-ra/`
-
-A native macOS terminal built for power users of AI coding tools (Claude Code, Codex, Aider, etc.). No login required. Lightweight. Open Core.
-
-**[Download latest release (macOS Universal)](https://github.com/leeronzhang/termura/releases/latest/download/Termura-v0.2.0-universal.dmg)** | [All releases](https://github.com/leeronzhang/termura/releases)
-
-[中文版](#termura-中文)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.png">
+    <img alt="Termura" src="assets/logo-light.png" width="320">
+  </picture>
+  <br>
+  <code>/ter-MU-ra/</code>
+  <br><br>
+  A native macOS terminal built for power users of AI coding tools (Claude Code, Codex, Aider, etc.).<br>
+  No login required. Lightweight. Open Core.
+  <br><br>
+  <a href="https://github.com/leeronzhang/termura/releases/latest/download/Termura-v0.2.0-universal.dmg"><strong>Download latest release (macOS Universal)</strong></a> · <a href="https://github.com/leeronzhang/termura/releases">All releases</a>
+  <br><br>
+  <a href="#termura-中文">中文版</a>
+</p>
 
 ---
 
@@ -152,11 +161,20 @@ Contributions are welcome! Please read the project guidelines before submitting 
 
 <a id="termura-中文"></a>
 
-# Termura `/ter-MU-ra/` (中文)
-
-一款为 AI 编程工具（Claude Code、Codex、Aider 等）深度用户打造的原生 macOS 终端。无需登录，轻量级，Open Core 开源。
-
-**[下载最新版本 (macOS 通用版)](https://github.com/leeronzhang/termura/releases/latest/download/Termura-v0.2.0-universal.dmg)** | [所有版本](https://github.com/leeronzhang/termura/releases)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.png">
+    <img alt="Termura" src="assets/logo-light.png" width="320">
+  </picture>
+  <br>
+  <code>/ter-MU-ra/</code>
+  <br><br>
+  一款为 AI 编程工具（Claude Code、Codex、Aider 等）深度用户打造的原生 macOS 终端。<br>
+  无需登录，轻量级，Open Core 开源。
+  <br><br>
+  <a href="https://github.com/leeronzhang/termura/releases/latest/download/Termura-v0.2.0-universal.dmg"><strong>下载最新版本 (macOS 通用版)</strong></a> · <a href="https://github.com/leeronzhang/termura/releases">所有版本</a>
+</p>
 
 ## 功能特性
 
