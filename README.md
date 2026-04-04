@@ -1,20 +1,12 @@
-# Termura
-
-> Terminal UX, redesigned. Editor-grade input · Structured output · Knowledge persistence
+# Termura `/ter-MU-ra/`
 
 A native macOS terminal built for power users of AI coding tools (Claude Code, Codex, Aider, etc.). No login required. Lightweight. Open Core.
+
+**[Download latest release (macOS Universal)](https://github.com/leeronzhang/termura/releases/latest/download/Termura-v0.2.0-universal.dmg)** | [All releases](https://github.com/leeronzhang/termura/releases)
 
 [中文版](#termura-中文)
 
 ---
-
-## Why Termura
-
-Traditional terminals dump thousands of lines of unstructured text. AI coding tools make this worse — massive diffs, long explanations, streaming output. Termura fixes this with three pillars:
-
-- **Editor-grade Input** — TextKit 2 powered composer with click-to-position cursor, multi-line editing, word-level navigation, and syntax highlighting
-- **Structured Output** — Command output rendered as collapsible, independently scrollable blocks with one-click copy, exit code display, and execution metadata
-- **Knowledge Persistence** — Sessions auto-saved with full-text search, integrated Markdown notes, token usage tracking, and session export
 
 ## Features
 
@@ -160,19 +152,11 @@ Contributions are welcome! Please read the project guidelines before submitting 
 
 <a id="termura-中文"></a>
 
-# Termura (中文)
-
-> 重新设计终端体验。编辑器级输入 · 结构化输出 · 知识持久化
+# Termura `/ter-MU-ra/` (中文)
 
 一款为 AI 编程工具（Claude Code、Codex、Aider 等）深度用户打造的原生 macOS 终端。无需登录，轻量级，Open Core 开源。
 
-## 为什么选择 Termura
-
-传统终端将数千行非结构化文本一股脑倾泻到屏幕上。AI 编程工具让这个问题更加严重 — 大量 diff、冗长解释、流式输出。Termura 通过三大核心理念解决这一问题：
-
-- **编辑器级输入** — 基于 TextKit 2 的输入组件，支持点击定位光标、多行编辑、词级导航和语法高亮
-- **结构化输出** — 命令输出以可折叠、独立滚动的卡片呈现，支持一键复制、退出码显示和执行元数据
-- **知识持久化** — 会话自动保存，支持全文搜索、集成 Markdown 笔记、Token 用量追踪和会话导出
+**[下载最新版本 (macOS 通用版)](https://github.com/leeronzhang/termura/releases/latest/download/Termura-v0.2.0-universal.dmg)** | [所有版本](https://github.com/leeronzhang/termura/releases)
 
 ## 功能特性
 
