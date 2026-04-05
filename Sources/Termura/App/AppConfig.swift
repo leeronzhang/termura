@@ -94,6 +94,12 @@ enum AppConfig {
 
     enum Notes {
         static let maxTitleLength = 200
+        /// Subdirectory under .termura/ for Markdown note files.
+        static let notesDirectoryName = "notes"
+        /// Maximum slug length in note filenames.
+        static let maxSlugLength = 50
+        /// Debounce window for file-system watcher events on the notes directory.
+        static let fileWatchDebounce: Duration = .milliseconds(500)
     }
 
     enum Persistence {

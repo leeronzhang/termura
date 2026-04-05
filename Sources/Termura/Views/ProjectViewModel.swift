@@ -145,7 +145,12 @@ final class ProjectViewModel {
 
         gitResult = data.status
         isLoading = false
-        errorMessage = nil
+        // Only clear errorMessage when git actually succeeded (status has repo data).
+        // fetchGitStatus sets errorMessage on infrastructure failure; clearing it here
+        // would hide infra errors from the user.
+        if data.status.isGitRepo {
+            errorMessage = nil
+        }
         commandRouter?.hasUncommittedChanges = !data.status.files.isEmpty
     }
 
@@ -167,15 +172,30 @@ final class ProjectViewModel {
     }
 
     private func fetchGitStatus() async -> GitStatusResult {
-        do { return try await gitService.status(at: projectRoot) } catch {
-            logger.warning("Git status failed: \(error.localizedDescription)")
+        do {
+            return try await gitService.status(at: projectRoot)
+        } catch {
+            // GitService.status already maps exit-128 to .notARepo and returns it
+            // (no throw). Any error reaching here is an infrastructure problem
+            // (timeout, launch failure, decode error, permission denied) — not "not a repo".
+            logger.error("Git status infrastructure failure: \(error.localizedDescription)")
+            errorMessage = "Git: \(error.localizedDescription)"
             return .notARepo
         }
     }
 
     private func fetchTrackedFiles() async -> Set<String> {
-        do { return try await gitService.trackedFiles(at: projectRoot) } catch {
-            logger.warning("Tracked files fetch failed: \(error.localizedDescription)")
+        do {
+            return try await gitService.trackedFiles(at: projectRoot)
+        } catch let gitError as GitServiceError {
+            if case .notARepo = gitError {
+                // Non-critical: not a git repo means no tracked files, expected state.
+                return []
+            }
+            logger.error("Tracked files infrastructure failure: \(gitError.localizedDescription)")
+            return []
+        } catch {
+            logger.error("Tracked files unexpected error: \(error.localizedDescription)")
             return []
         }
     }

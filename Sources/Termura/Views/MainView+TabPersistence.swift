@@ -71,8 +71,27 @@ extension MainView {
         }
         // Composer-triggered notes view is temporary — don't open a note tab in the right panel.
         if newTab == .notes, commandRouter.isComposerNotesActive { return }
+
+        // Notes sidebar: auto-open the most recent note if no saved tab exists.
+        if newTab == .notes {
+            if let last = lastContentTabBySidebarTab[newTab],
+               tabManager.openTabs.contains(where: { $0.id == last.id }) {
+                sidebarShowsEmpty.remove(newTab)
+                tabManager.selectedContentTab = last
+                return
+            }
+            if let recent = notesViewModel.notes.first {
+                tabManager.openNoteTab(noteID: recent.id, title: recent.title)
+                sidebarShowsEmpty.remove(newTab)
+                return
+            }
+            sidebarShowsEmpty.insert(newTab)
+            return
+        }
+
         guard let last = lastContentTabBySidebarTab[newTab],
-              tabManager.openTabs.contains(last) || tabManager.terminalItems.contains(last) else {
+              tabManager.openTabs.contains(where: { $0.id == last.id })
+              || tabManager.terminalItems.contains(where: { $0.id == last.id }) else {
             // No restorable content for this sidebar tab — mark it for empty state display.
             // Cleared by onSelectedContentTabChange when the user explicitly selects a tab.
             sidebarShowsEmpty.insert(newTab)
@@ -100,8 +119,12 @@ extension MainView {
             return
         }
         guard !restored.isEmpty else { return }
-        for tab in restored where !tabManager.openTabs.contains(tab) {
-            tabManager.openTabs.append(tab)
+        for tab in restored {
+            if let idx = tabManager.openTabs.firstIndex(where: { $0.id == tab.id }) {
+                tabManager.openTabs[idx] = tab
+            } else {
+                tabManager.openTabs.append(tab)
+            }
         }
         let selectedKey = AppConfig.UserDefaultsKeys.openTabsSelected(
             projectRoot: sessionStore.projectRoot ?? "default"

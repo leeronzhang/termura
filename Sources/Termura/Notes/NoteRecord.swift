@@ -18,4 +18,11 @@ struct NoteRecord: Identifiable, Hashable, Sendable {
         createdAt = Date()
         updatedAt = Date()
     }
+
+    /// Canonical sort order for notes: favorites first, then by updatedAt descending.
+    /// Single source of truth — used by repository and ViewModel.
+    static func displayOrder(lhs: NoteRecord, rhs: NoteRecord) -> Bool {
+        if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
+        return lhs.updatedAt > rhs.updatedAt
+    }
 }

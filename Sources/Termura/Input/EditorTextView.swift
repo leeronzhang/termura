@@ -94,6 +94,7 @@ final class EditorTextView: NSTextView {
                 insertText(insertion, replacementRange: selectedRange())
                 return true
             } catch {
+                logger.error("Fallback attachment save failed: \(error.localizedDescription)")
                 return false
             }
         }

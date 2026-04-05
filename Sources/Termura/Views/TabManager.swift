@@ -52,7 +52,9 @@ final class TabManager {
 
     func openNoteTab(noteID: NoteID, title: String) {
         let tab = ContentTab.note(noteID: noteID, title: title)
-        if !openTabs.contains(tab) {
+        if let idx = openTabs.firstIndex(where: { $0.id == tab.id }) {
+            openTabs[idx] = tab
+        } else {
             openTabs.append(tab)
         }
         selectedContentTab = tab
@@ -60,7 +62,9 @@ final class TabManager {
 
     func openDiffTab(path: String, staged: Bool, untracked: Bool = false) {
         let tab = ContentTab.diff(path: path, isStaged: staged, isUntracked: untracked)
-        if !openTabs.contains(tab) {
+        if let idx = openTabs.firstIndex(where: { $0.id == tab.id }) {
+            openTabs[idx] = tab
+        } else {
             openTabs.append(tab)
         }
         selectedContentTab = tab
@@ -68,7 +72,9 @@ final class TabManager {
 
     func openFileTab(path: String, name: String) {
         let tab = ContentTab.file(path: path, name: name)
-        if !openTabs.contains(tab) {
+        if let idx = openTabs.firstIndex(where: { $0.id == tab.id }) {
+            openTabs[idx] = tab
+        } else {
             openTabs.append(tab)
         }
         selectedContentTab = tab
@@ -76,7 +82,9 @@ final class TabManager {
 
     func openPreviewTab(path: String, name: String) {
         let tab = ContentTab.preview(path: path, name: name)
-        if !openTabs.contains(tab) {
+        if let idx = openTabs.firstIndex(where: { $0.id == tab.id }) {
+            openTabs[idx] = tab
+        } else {
             openTabs.append(tab)
         }
         selectedContentTab = tab
@@ -132,7 +140,11 @@ final class TabManager {
             Task { @MainActor in
                 await sessionStore?.reopenSession(id: session.id)
                 let tab = ContentTab.terminal(sessionID: session.id, title: session.title)
-                if !terminalItems.contains(tab) { terminalItems.append(tab) }
+                if let idx = terminalItems.firstIndex(where: { $0.containsSession(session.id) }) {
+                    terminalItems[idx] = tab
+                } else {
+                    terminalItems.append(tab)
+                }
                 selectedContentTab = tab
             }
             return

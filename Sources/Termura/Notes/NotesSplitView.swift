@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct NotesSplitView: View {
@@ -63,17 +64,7 @@ struct NotesSplitView: View {
     private var editorPane: some View {
         if let noteID = viewModel.selectedNoteID {
             VStack(spacing: 0) {
-                HStack(spacing: AppUI.Spacing.md) {
-                    TextField("Title", text: $viewModel.editingTitle)
-                        .font(AppUI.Font.title1Semibold)
-                        .textFieldStyle(.plain)
-                        .focused($isTitleFocused)
-                    Spacer()
-                    splitFavoriteButton(noteID: noteID)
-                }
-                .padding(.horizontal, AppUI.Spacing.xl)
-                .padding(.top, AppUI.Spacing.xl)
-                .padding(.bottom, AppUI.Spacing.md)
+                noteHeader(noteID: noteID)
                 Divider()
                 NoteEditorView(
                     title: viewModel.editingTitle,
@@ -92,6 +83,35 @@ struct NotesSplitView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func noteHeader(noteID: NoteID) -> some View {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
+            HStack(spacing: AppUI.Spacing.md) {
+                TextField("Title", text: $viewModel.editingTitle)
+                    .font(AppUI.Font.title1Semibold)
+                    .textFieldStyle(.plain)
+                    .focused($isTitleFocused)
+                Spacer()
+                splitFavoriteButton(noteID: noteID)
+            }
+            if let filePath = viewModel.selectedNoteFilePath {
+                Button {
+                    NSWorkspace.shared.selectFile(filePath, inFileViewerRootedAtPath: "")
+                } label: {
+                    Text(filePath)
+                        .font(AppUI.Font.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .buttonStyle(.plain)
+                .help("Show in Finder")
+            }
+        }
+        .padding(.horizontal, AppUI.Spacing.xxl)
+        .padding(.top, AppUI.Spacing.md)
+        .padding(.bottom, AppUI.Spacing.smMd)
     }
 
     private func splitFavoriteButton(noteID: NoteID) -> some View {

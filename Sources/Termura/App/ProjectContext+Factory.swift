@@ -64,7 +64,26 @@ extension ProjectContext {
         // filesystem + SQLite work on the cooperative thread pool (CLAUDE.md §6, Principle 6).
         let pool = try await DatabaseService.makePool(at: projectURL)
         let db = try await DatabaseService(pool: pool, metrics: fallbackMetrics)
-        let repos = makeRepositories(db: db)
+        let repos = makeRepositories(db: db, projectURL: projectURL)
+
+        // One-time migration: export legacy GRDB notes to Markdown files.
+        let notesDir = projectURL
+            .appendingPathComponent(AppConfig.Persistence.directoryName)
+            .appendingPathComponent(AppConfig.Notes.notesDirectoryName)
+        let migration = NoteMigrationService(
+            db: db, fileService: NoteFileService(), notesDirectory: notesDir
+        )
+        do {
+            _ = try await migration.migrateIfNeeded()
+        } catch let migrationError as NoteMigrationService.MigrationError {
+            // Partial failure: some notes failed to export. The sentinel was NOT written,
+            // so the next launch will retry. Log and continue opening the project.
+            logger.error("Note migration partial failure; will retry next launch: \(migrationError.localizedDescription)")
+        }
+
+        // Start file-system watcher for external note changes.
+        try await repos.note.startWatching()
+
         let services = makeServices(
             repos: repos, projectURL: projectURL,
             engineFactory: engineFactory, metricsCollector: fallbackMetrics
@@ -109,15 +128,24 @@ extension ProjectContext {
         let snapshot: any SessionSnapshotRepositoryProtocol
     }
 
-    private static func makeRepositories(db: any DatabaseServiceProtocol) -> ProjectRepositories {
+    private static func makeRepositories(
+        db: any DatabaseServiceProtocol,
+        projectURL: URL
+    ) -> ProjectRepositories {
         #if HARNESS_ENABLED
         let ruleRepo: any RuleFileRepositoryProtocol = RuleFileRepository(db: db)
         #else
         let ruleRepo: any RuleFileRepositoryProtocol = NullRuleFileRepository()
         #endif
+        let notesDir = projectURL
+            .appendingPathComponent(AppConfig.Persistence.directoryName)
+            .appendingPathComponent(AppConfig.Notes.notesDirectoryName)
+        let noteRepo = FileBackedNoteRepository(
+            notesDirectory: notesDir, fileService: NoteFileService(), db: db
+        )
         return ProjectRepositories(
             session: SessionRepository(db: db),
-            note: NoteRepository(db: db),
+            note: noteRepo,
             message: SessionMessageRepository(db: db),
             harness: HarnessEventRepository(db: db),
             rule: ruleRepo,
@@ -189,7 +217,12 @@ extension ProjectContext {
         services: ProjectServices,
         scopes: ProjectScopes
     ) -> Components {
-        let notesVM = NotesViewModel(repository: repos.note)
+        let notesDir = projectURL
+            .appendingPathComponent(AppConfig.Persistence.directoryName)
+            .appendingPathComponent(AppConfig.Notes.notesDirectoryName)
+        let notesVM = NotesViewModel(
+            repository: repos.note, notesDirectoryURL: notesDir
+        )
         return Components(
             projectURL: projectURL,
             infrastructure: infra,

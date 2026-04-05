@@ -159,6 +159,8 @@ final class ProjectContext {
 
     func close() async {
         viewStateManager.clearAll()
+        // Stop file-system watcher for notes (life-cycle symmetry with startWatching in open).
+        await noteRepository.stopWatching()
         await sessionScope.engines.terminateAllAndWait()
         await dbHealthMonitor.stop()
         let path = projectURL.path

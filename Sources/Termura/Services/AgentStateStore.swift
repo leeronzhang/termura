@@ -99,13 +99,19 @@ final class AgentStateStore: AgentStateStoreProtocol {
     func remove(sessionID: SessionID) {
         totalEstimatedTokens -= agents[sessionID]?.tokenCount ?? 0
         agents.removeValue(forKey: sessionID)
-        sidebarRowStates.removeValue(forKey: sessionID)
+        // Row views observe the row-state object directly, not the dictionary entry.
+        // Clear the existing object in-place so stale error/waiting badges disappear
+        // immediately when an agent exits or a session is ended.
+        sidebarRowStates[sessionID]?.clear()
         rebuildDerivedState()
         stopTickIfEmpty()
     }
 
     func clearAll() {
         agents.removeAll()
+        for rowState in sidebarRowStates.values {
+            rowState.clear()
+        }
         sidebarRowStates.removeAll()
         totalEstimatedTokens = 0
         tickTask?.cancel()

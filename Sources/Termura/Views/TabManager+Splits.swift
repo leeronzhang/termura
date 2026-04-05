@@ -75,6 +75,12 @@ extension TabManager {
             leftTitle: leftTitle,
             rightTitle: secondary.title
         )
+        // Remove the secondary session's standalone tab before inserting the split,
+        // otherwise two entries contain the same sessionID and sidebar click finds the wrong one.
+        terminalItems.removeAll { tab in
+            if case let .terminal(sid, _) = tab { return sid == secondary.id }
+            return false
+        }
         if let idx = terminalItems.firstIndex(where: { $0.containsSession(leftID) }) {
             terminalItems[idx] = splitTab
         } else {

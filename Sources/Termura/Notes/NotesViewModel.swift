@@ -42,9 +42,14 @@ final class NotesViewModel {
     /// ID of the most recently silently-created note. Used by the toast tap-to-navigate action.
     @ObservationIgnored private(set) var lastSilentNoteID: NoteID?
 
-    init(repository: any NoteRepositoryProtocol, clock: any AppClock = LiveClock()) {
+    /// Directory URL where note Markdown files are stored. Nil for legacy GRDB-only repositories.
+    let notesDirectoryURL: URL?
+
+    init(repository: any NoteRepositoryProtocol, clock: any AppClock = LiveClock(),
+         notesDirectoryURL: URL? = nil) { // Optional: nil for legacy/mock repositories
         self.repository = repository
         self.clock = clock
+        self.notesDirectoryURL = notesDirectoryURL
     }
 
     deinit {
@@ -57,6 +62,14 @@ final class NotesViewModel {
     var selectedNote: NoteRecord? {
         guard let id = selectedNoteID else { return nil }
         return notes.first { $0.id == id }
+    }
+
+    /// File path of the currently selected note, if backed by a Markdown file.
+    /// Delegates to `NoteFileService.filename(for:)` — single source of truth for slug logic.
+    var selectedNoteFilePath: String? {
+        guard let note = selectedNote, let dir = notesDirectoryURL else { return nil }
+        let filename = NoteFileService.filename(for: note)
+        return dir.appendingPathComponent(filename).path
     }
 
     func loadNotes() async {
@@ -183,12 +196,9 @@ final class NotesViewModel {
         }
     }
 
-    /// Re-sorts notes array: favorites first, then by updatedAt descending.
+    /// Re-sorts notes array using canonical display order (favorites first, then by updatedAt).
     private func resortNotes() {
-        notes.sort { lhs, rhs in
-            if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
-            return lhs.updatedAt > rhs.updatedAt
-        }
+        notes.sort(by: NoteRecord.displayOrder)
     }
 
     private func persistCurrentNote(title: String, body: String) {

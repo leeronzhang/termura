@@ -95,12 +95,15 @@ final class EditorViewModel {
         modeController.switchToPassthrough()
         logger.debug("Submitting command length=\(fullCommand.count)")
         onCommandSubmit?(text) // user text only — used for agent detection
-        onSubmit?()
+        // Send text to PTY and press Return BEFORE dismissing the composer.
         // ghostty_surface_text uses bracketed paste — embedded \r is literal, not "execute".
-        // Send text first, then simulate Return key press to trigger shell execution.
+        // Dismiss must happen after send+pressReturn so the ghostty surface is in a stable
+        // state (dismissComposer triggers SwiftUI view tree changes that could race).
+        let capturedEngine = engine
         Task {
-            await engine.send(fullCommand)
-            await engine.pressReturn()
+            await capturedEngine.send(fullCommand)
+            await capturedEngine.pressReturn()
+            onSubmit?()
         }
     }
 

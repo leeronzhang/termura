@@ -149,17 +149,22 @@ actor SessionHandoffService: SessionHandoffServiceProtocol {
     }
 
     func readExistingContext(projectRoot: String) async -> HandoffContext? {
-        let filePath = URL(fileURLWithPath: projectRoot)
+        let fileURL = URL(fileURLWithPath: projectRoot)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
-            .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
-        let content: String?
-        do {
-            content = try String(contentsOfFile: filePath, encoding: .utf8)
-        } catch {
-            logger.debug("No existing context file at \(filePath): \(error.localizedDescription)")
-            content = nil
+            .appendingPathComponent(AppConfig.SessionHandoff.contextFileName)
+        guard fileManager.fileExists(atPath: fileURL.path) else {
+            // Non-critical: first handoff for this project, no prior context to merge.
+            return nil
         }
-        guard let content else { return nil }
+        let content: String
+        do {
+            content = try String(contentsOf: fileURL, encoding: .utf8)
+        } catch {
+            // File exists but cannot be read — infrastructure failure (permission, I/O error).
+            // Log as error, not debug, so the problem is observable.
+            logger.error("Failed to read existing context file at \(fileURL.path): \(error.localizedDescription)")
+            return nil
+        }
         return parseContextMarkdown(content)
     }
 
