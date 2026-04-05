@@ -68,7 +68,7 @@ extension MainView {
         } else if let tab = resolvedSelectedTab {
             tabContent(for: tab)
         } else {
-            emptyState
+            emptyStateFor(sidebar)
         }
     }
 
