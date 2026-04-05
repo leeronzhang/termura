@@ -29,6 +29,11 @@ extension AppConfig {
             "\(openTabs(projectRoot: projectRoot)).selected"
         }
 
+        /// Persisted per-sidebar last-active content tab mapping for a given project root.
+        static func sidebarTabMemory(projectRoot: String) -> String {
+            "\(openTabs(projectRoot: projectRoot)).sidebarMemory"
+        }
+
         /// Persisted file-tree expanded node IDs for a given project root.
         static func fileTreeExpandedIDs(projectRoot: String) -> String {
             "fileTree.expandedIDs-\(sanitized(projectRoot))"

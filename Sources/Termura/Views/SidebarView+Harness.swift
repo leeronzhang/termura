@@ -11,6 +11,7 @@ extension SidebarView {
         SidebarHarnessContent(
             repository: dataScope.ruleFileRepository,
             projectRoot: projectRoot,
+            activeContentTab: activeContentTab,
             onOpenFile: onOpenFile
         )
         #else
@@ -30,14 +31,16 @@ extension SidebarView {
 /// Harness content following the Agent tab structure: header → divider → content.
 struct SidebarHarnessContent: View {
     @StateObject private var viewModel: HarnessViewModel
+    var activeContentTab: ContentTab?
     var onOpenFile: ((String, FileOpenMode) -> Void)?
-
     init(
         repository: any RuleFileRepositoryProtocol,
         projectRoot: String,
+        activeContentTab: ContentTab? = nil,
         onOpenFile: ((String, FileOpenMode) -> Void)? = nil
     ) {
         _viewModel = StateObject(wrappedValue: HarnessViewModel(repository: repository, projectRoot: projectRoot))
+        self.activeContentTab = activeContentTab
         self.onOpenFile = onOpenFile
     }
 
@@ -80,6 +83,7 @@ struct SidebarHarnessContent: View {
         LazyVStack(spacing: 0) {
             ForEach(viewModel.ruleFiles) { file in
                 let isSelected = viewModel.selectedFilePath == file.filePath
+                    || activeContentTab?.filePath == file.filePath
                 Button {
                     Task { await viewModel.selectFile(file.filePath) }
                     onOpenFile?(file.filePath, .edit)

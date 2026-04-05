@@ -130,7 +130,11 @@ extension MainView {
 
 extension MainView {
     func openNoteTab(noteID: NoteID, title: String) {
+        let originSidebar = commandRouter.selectedSidebarTab
         tabManager.openNoteTab(noteID: noteID, title: title)
+        if let tab = tabManager.selectedContentTab, isTabAppropriate(tab, for: originSidebar) {
+            lastContentTabBySidebarTab[originSidebar] = tab
+        }
         persistOpenTabs()
     }
 
@@ -162,11 +166,12 @@ extension MainView {
         case .preview:
             openPreviewTab(path: relativePath, name: name)
         }
-        // If opened from the harness sidebar, explicitly track under .harness since
-        // sidebarOwner(.file) returns .project. This allows restoreContentTabOnSidebarSwitch
-        // to bring back the rule file when the user returns to the harness tab.
-        if originSidebar == .harness, let tab = tabManager.selectedContentTab {
-            lastContentTabBySidebarTab[.harness] = tab
+        // Synchronously track under the originating sidebar. The deferred onChange-based
+        // trackContentTabForSidebarTab is unreliable because selectedSidebarTab may have
+        // already auto-switched (e.g. ContentTabBar setter changes sidebar to .project
+        // for file tabs) by the time the onChange fires.
+        if let tab = tabManager.selectedContentTab, isTabAppropriate(tab, for: originSidebar) {
+            lastContentTabBySidebarTab[originSidebar] = tab
         }
     }
 
@@ -207,7 +212,11 @@ extension MainView {
     /// Called when the user taps a session in the sidebar.
     /// Ended sessions are reopened; active sessions jump to or open their tab.
     func activateSessionFromSidebar(_ session: SessionRecord) {
+        let originSidebar = commandRouter.selectedSidebarTab
         tabManager.activateSessionFromSidebar(session)
+        if let tab = tabManager.selectedContentTab, isTabAppropriate(tab, for: originSidebar) {
+            lastContentTabBySidebarTab[originSidebar] = tab
+        }
         persistOpenTabs()
     }
 }

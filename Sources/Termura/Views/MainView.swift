@@ -88,6 +88,10 @@ struct MainView: View {
             tabManager.inject(sessionStore: sessionStore, commandRouter: commandRouter)
             await ensureInitialSession()
             restoreOpenTabs()
+            // Ensure selected tab matches the startup sidebar (.sessions).
+            // restoreOpenTabs may have restored a file/note tab from the last session,
+            // which would mismatch the sessions sidebar.
+            ensureSelectedTabMatchesSidebar()
         }
         .sheet(isPresented: router.showSearch) { searchSheet }
         .sheet(isPresented: router.showNotes) { notesSheet }
@@ -108,9 +112,7 @@ struct MainView: View {
     // MARK: - onChange helpers
 
     private func onSelectedContentTabChange(old oldTab: ContentTab?, new newTab: ContentTab?) {
-        if let newTab { trackContentTabForSidebarTab(newTab) }
-        // A content tab was selected (user click, restore, or programmatic open) —
-        // clear the empty-state flag for the current sidebar so the tab is shown.
+        // Clear the empty-state flag for the current sidebar so the tab is shown.
         sidebarShowsEmpty.remove(commandRouter.selectedSidebarTab)
         // Sync isDualPaneActive + focusedSlot when selected tab changes externally
         // (commands, session deletion, initial load) — not just user tab taps.

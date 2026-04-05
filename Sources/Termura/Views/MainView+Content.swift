@@ -1,25 +1,5 @@
 import SwiftUI
 
-// MARK: - Content display kind
-
-/// Resolved display state for the content area.
-/// Computed by `resolveContentDisplay(selectedTab:)` to avoid multi-dimensional
-/// if/else chains directly inside `@ViewBuilder` bodies.
-private enum ContentDisplay {
-    /// No sessions exist or no matching terminal found — show the empty placeholder.
-    case empty
-    /// Notes tab is active but no note is selected — show the notes empty state.
-    case notesEmpty
-    /// Project tab is active but no file is open.
-    case projectEmpty
-    /// Harness tab is active but no rule file is open.
-    case harnessEmpty
-    /// Agents tab is active — content lives in the sidebar.
-    case agentsEmpty
-    /// Render the specified tab normally.
-    case tab(ContentTab)
-}
-
 // MARK: - Content area views
 
 extension MainView {
@@ -36,14 +16,15 @@ extension MainView {
             ContentTabBar(
                 tabs: allTabs,
                 selectedTab: Binding(
-                    get: { resolvedSelectedTab },
+                    get: {
+                        if sidebarShowsEmpty.contains(commandRouter.selectedSidebarTab) {
+                            return nil
+                        }
+                        return resolvedSelectedTab
+                    },
                     set: { newTab in
                         guard let newTab else { return }
                         tabManager.selectedContentTab = newTab
-                        // Sync activeSessionID when switching tabs.
-                        // Also sync selectedSidebarTab for non-terminal tabs so that
-                        // selectedContentView shows the correct content instead of
-                        // falling into the "Sessions tab + non-terminal = show terminal" branch.
                         switch newTab {
                         case let .terminal(sid, _):
                             sessionStore.activateSession(id: sid)
@@ -73,69 +54,32 @@ extension MainView {
         }
     }
 
+    /// Content area renders whatever `selectedContentTab` points to.
+    /// No display-only overrides — `selectedContentTab` is the single source of truth.
+    /// `restoreContentTabOnSidebarSwitch` is responsible for setting it correctly.
     @ViewBuilder
     var selectedContentView: some View {
-        if let tab = resolvedSelectedTab {
-            switch resolveContentDisplay(selectedTab: tab) {
-            case .empty: emptyState
-            case .notesEmpty: notesEmptyState
-            case .projectEmpty: projectEmptyState
-            case .harnessEmpty: harnessEmptyState
-            case .agentsEmpty: agentsEmptyState
-            case let .tab(contentTab):
-                tabContent(for: contentTab)
-            }
+        let sidebar = commandRouter.selectedSidebarTab
+
+        if sidebar == .agents {
+            agentsEmptyState
+        } else if sidebarShowsEmpty.contains(sidebar) {
+            emptyStateFor(sidebar)
+        } else if let tab = resolvedSelectedTab {
+            tabContent(for: tab)
         } else {
             emptyState
         }
     }
 
-    /// Determines which display state the content area should render.
-    ///
-    /// Content tabs span freely across sidebar tabs — clicking any tab in the tab bar
-    /// always shows that tab. Empty states are only shown when `restoreContentTabOnSidebarSwitch`
-    /// failed to find content for the newly selected sidebar (tracked via `sidebarShowsEmpty`).
-    private func resolveContentDisplay(selectedTab: ContentTab) -> ContentDisplay {
-        let sidebar = commandRouter.selectedSidebarTab
-
-        // Agents: always empty state (content lives in the sidebar dashboard).
-        if sidebar == .agents { return .agentsEmpty }
-
-        // Sessions: redirect non-terminal to the active terminal, or show empty.
-        if sidebar == .sessions, !selectedTab.isTerminal, !selectedTab.isSplit {
-            let best = sessionStore.activeSessionID.flatMap { activeID in
-                terminalItems.first(where: { $0.containsSession(activeID) })
-            } ?? terminalItems.first
-            return best.map { .tab($0) } ?? .empty
-        }
-
-        // Composer notes mode: the overlay renders inside TerminalAreaView, so the
-        // content area must show a terminal/split tab as the host.
-        if sidebar == .notes, commandRouter.isComposerNotesActive,
-           !selectedTab.isTerminal, !selectedTab.isSplit {
-            let best = sessionStore.activeSessionID.flatMap { activeID in
-                terminalItems.first(where: { $0.containsSession(activeID) })
-            } ?? terminalItems.first
-            return best.map { .tab($0) } ?? .tab(selectedTab)
-        }
-
-        // Sidebar switched but no content was restored — show the appropriate empty state.
-        // This flag is set by restoreContentTabOnSidebarSwitch when no saved tab exists,
-        // and cleared by onSelectedContentTabChange when the user explicitly selects a tab.
-        if sidebarShowsEmpty.contains(sidebar) {
-            return emptyDisplayFor(sidebar)
-        }
-
-        return .tab(selectedTab)
-    }
-
-    private func emptyDisplayFor(_ sidebar: SidebarTab) -> ContentDisplay {
+    @ViewBuilder
+    private func emptyStateFor(_ sidebar: SidebarTab) -> some View {
         switch sidebar {
-        case .sessions: .empty
-        case .notes: .notesEmpty
-        case .project: .projectEmpty
-        case .harness: .harnessEmpty
-        case .agents: .agentsEmpty
+        case .sessions: emptyState
+        case .notes: notesEmptyState
+        case .project: projectEmptyState
+        case .harness: harnessEmptyState
+        case .agents: agentsEmptyState
         }
     }
 

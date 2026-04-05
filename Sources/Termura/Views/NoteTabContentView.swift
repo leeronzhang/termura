@@ -20,6 +20,7 @@ struct NoteTabContentView: View {
             Divider()
             NoteEditorView(
                 title: notesViewModel.editingTitle,
+                filePath: notesViewModel.selectedNoteFilePath,
                 text: notes.editingBody
             )
         }
@@ -41,28 +42,13 @@ struct NoteTabContentView: View {
     }
 
     private var noteHeader: some View {
-        VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
-            HStack(spacing: AppUI.Spacing.md) {
-                TextField("Title", text: notes.editingTitle)
-                    .font(AppUI.Font.title1Semibold)
-                    .textFieldStyle(.plain)
-                    .focused($isTitleFocused)
-                Spacer()
-                noteFavoriteButton
-            }
-            if let filePath = notesViewModel.selectedNoteFilePath {
-                Button {
-                    NSWorkspace.shared.selectFile(filePath, inFileViewerRootedAtPath: "")
-                } label: {
-                    Text(filePath)
-                        .font(AppUI.Font.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .buttonStyle(.plain)
-                .help("Show in Finder")
-            }
+        HStack(spacing: AppUI.Spacing.md) {
+            TextField("Title", text: notes.editingTitle)
+                .font(AppUI.Font.title1Semibold)
+                .textFieldStyle(.plain)
+                .focused($isTitleFocused)
+            Spacer()
+            noteFavoriteButton
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.top, AppUI.Spacing.md)

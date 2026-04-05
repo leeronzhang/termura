@@ -15,7 +15,7 @@ struct CodeEditorView: View {
     @Environment(\.fontSettings) var fontSettings
 
     @State private var content = ""
-    @State private var isLoading = true
+    @State private var isLoading = false
     @State private var isModified = false
     @State private var errorMessage: String?
 
@@ -24,11 +24,12 @@ struct CodeEditorView: View {
         return URL(fileURLWithPath: projectRoot).appendingPathComponent(filePath).standardized.path
     }
 
-    private var displayPath: String {
-        if filePath.hasPrefix("/") {
-            return URL(fileURLWithPath: filePath).lastPathComponent
-        }
-        return filePath
+    /// Full breadcrumb path: "Sources > Termura > Views > CodeEditorView.swift"
+    private var breadcrumbComponents: [String] {
+        let raw = filePath.hasPrefix("/")
+            ? MetadataFormatter.abbreviateDirectory(filePath)
+            : filePath
+        return raw.split(separator: "/").map(String.init)
     }
 
     /// Map file extension to highlight.js language identifier.
@@ -57,7 +58,7 @@ struct CodeEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            editorHeader(title: displayPath, isModified: isModified, onSave: saveFile)
+            fileEditorPathBar
             Divider()
             if isLoading {
                 ProgressView()
@@ -77,6 +78,40 @@ struct CodeEditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await loadFile() }
+    }
+
+    private var fileEditorPathBar: some View {
+        HStack(spacing: AppUI.Spacing.sm) {
+            ForEach(Array(breadcrumbComponents.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Image(systemName: "chevron.right")
+                        .font(AppUI.Font.chevron)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
+                }
+                Text(part)
+                    .font(AppUI.Font.pathMono)
+                    .foregroundColor(
+                        index == breadcrumbComponents.count - 1
+                            ? .secondary.opacity(AppUI.Opacity.strong)
+                            : .secondary.opacity(AppUI.Opacity.dimmed)
+                    )
+                    .lineLimit(1)
+            }
+            if isModified {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
+            }
+            Spacer()
+            if isModified {
+                Button("Save") { saveFile() }
+                    .font(AppUI.Font.label)
+                    .buttonStyle(.plain)
+                    .foregroundColor(.accentColor)
+            }
+        }
+        .padding(.horizontal, AppUI.Spacing.xxl)
+        .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
     /// Checks whether `filePath` resolves within `rootPath` after symlink resolution.
@@ -136,6 +171,7 @@ struct CodeEditorView: View {
 /// Used for notes whose content lives in the database.
 struct NoteEditorView: View {
     let title: String
+    let filePath: String?
     @Binding var text: String
     @Environment(\.fontSettings) var fontSettings
 
@@ -143,7 +179,7 @@ struct NoteEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            editorHeader(title: title, isModified: false, onSave: nil)
+            noteEditorPathBar
             Divider()
             CodeEditorTextViewRepresentable(
                 text: $text,
@@ -156,36 +192,30 @@ struct NoteEditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
 
-// MARK: - Shared header & error
-
-@MainActor
-private func editorHeader(title: String, isModified: Bool, onSave: (() -> Void)?) -> some View {
-    HStack(spacing: AppUI.Spacing.md) {
-        Image(systemName: "doc.text")
-            .font(AppUI.Font.label)
-            .foregroundColor(.secondary)
-        Text(title)
-            .font(AppUI.Font.labelMono)
-            .lineLimit(1)
-            .truncationMode(.head)
-        if isModified {
-            Circle()
-                .fill(Color.orange)
-                .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
-        }
-        Spacer()
-        if isModified, let onSave {
-            Button("Save") { onSave() }
-                .font(AppUI.Font.label)
+    private var noteEditorPathBar: some View {
+        HStack(spacing: AppUI.Spacing.md) {
+            if let filePath {
+                Button {
+                    NSWorkspace.shared.selectFile(filePath, inFileViewerRootedAtPath: "")
+                } label: {
+                    Text(MetadataFormatter.abbreviateDirectory(filePath))
+                        .font(AppUI.Font.pathMono)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.strong))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
                 .buttonStyle(.plain)
-                .foregroundColor(.accentColor)
+                .help("Show in Finder")
+            }
+            Spacer()
         }
+        .padding(.horizontal, AppUI.Spacing.xxl)
+        .padding(.vertical, AppUI.Spacing.mdLg)
     }
-    .padding(.horizontal, AppUI.Spacing.xxxl)
-    .padding(.vertical, AppUI.Spacing.mdLg)
 }
+
+// MARK: - Shared error view
 
 private func editorErrorView(_ message: String) -> some View {
     VStack(spacing: AppUI.Spacing.md) {
