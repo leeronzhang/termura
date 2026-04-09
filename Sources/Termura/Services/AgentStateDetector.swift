@@ -70,8 +70,9 @@ actor AgentStateDetector {
     func applyStructuredSignal(_ status: AgentStatus) {
         guard Self.validTransitions[currentStatus]?.contains(status) == true else {
             let sid = sessionID
+            let current = currentStatus.rawValue
             logger.warning(
-                "OSC signal '\(status.rawValue)' ignored: invalid transition from '\(self.currentStatus.rawValue)' in session \(sid)"
+                "OSC signal '\(status.rawValue)' ignored: invalid transition from '\(current)' in session \(sid)"
             )
             return
         }

@@ -112,10 +112,11 @@ final class SessionMetadataObserver {
         )
 
         guard metadata.estimatedTokenCount != viewModel.currentMetadata.estimatedTokenCount ||
-              metadata.sessionDuration != viewModel.currentMetadata.sessionDuration ||
-              metadata.workingDirectory != viewModel.currentMetadata.workingDirectory else { return }
+            metadata.sessionDuration != viewModel.currentMetadata.sessionDuration ||
+            metadata.workingDirectory != viewModel.currentMetadata.workingDirectory else { return }
 
-        logger.debug("Updating ViewModel metadata for session \(self.sessionID.rawValue)")
+        let sidValue = sessionID.rawValue
+        logger.debug("Updating ViewModel metadata for session \(sidValue)")
         viewModel.currentMetadata = metadata
     }
 }

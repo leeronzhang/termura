@@ -8,6 +8,7 @@ private let rulerLogger = Logger(subsystem: "com.termura.app", category: "LineNu
 @MainActor
 final class LineNumberRulerView: NSRulerView {
     private weak var textView: NSTextView?
+    private let notificationCenter: any NotificationCenterObserving
     private var fontFamily: String
     private var fontSize: CGFloat
     private var lineSpacing: CGFloat
@@ -16,9 +17,11 @@ final class LineNumberRulerView: NSRulerView {
         textView: NSTextView,
         fontFamily: String,
         fontSize: CGFloat,
-        lineSpacing: CGFloat
+        lineSpacing: CGFloat,
+        notificationCenter: any NotificationCenterObserving = GlobalEnvironmentDefaults.notificationCenter
     ) {
         self.textView = textView
+        self.notificationCenter = notificationCenter
         self.fontFamily = fontFamily
         self.fontSize = fontSize
         self.lineSpacing = lineSpacing
@@ -26,13 +29,21 @@ final class LineNumberRulerView: NSRulerView {
         ruleThickness = AppConfig.UI.lineNumberRulerWidth
         clientView = textView
 
-        NotificationCenter.default.addObserver(
+        // WHY: Line numbers must redraw on text edits and scroll-bounds changes.
+        // OWNER: LineNumberRulerView registers itself as the NotificationCenter observer.
+        // TEARDOWN: deinit removes self from NotificationCenter.
+        // TEST: Cover redraw on text mutation and scroll changes without leaking observers.
+        notificationCenter.addObserver(
             self,
             selector: #selector(needsRedraw),
             name: NSText.didChangeNotification,
             object: textView
         )
-        NotificationCenter.default.addObserver(
+        // WHY: Bounds changes from scrolling need a second observer so the ruler stays in sync.
+        // OWNER: LineNumberRulerView registers itself as the NotificationCenter observer.
+        // TEARDOWN: deinit removes self from NotificationCenter.
+        // TEST: Cover redraw on text mutation and scroll changes without leaking observers.
+        notificationCenter.addObserver(
             self,
             selector: #selector(needsRedraw),
             name: NSView.boundsDidChangeNotification,
@@ -43,6 +54,10 @@ final class LineNumberRulerView: NSRulerView {
     @available(*, unavailable)
     required init(coder _: NSCoder) {
         preconditionFailure("init(coder:) is not supported")
+    }
+
+    deinit {
+        notificationCenter.removeObserver(self)
     }
 
     func updateFont(family: String, size: CGFloat) {

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 // MARK: - Protocol
 
@@ -9,6 +10,7 @@ import Foundation
 protocol FileManagerProtocol: Sendable {
     /// The temporary directory for the current user.
     var temporaryDirectory: URL { get }
+    var homeDirectoryForCurrentUser: URL { get }
 
     /// Returns whether a file (or directory) exists at the given path.
     func fileExists(atPath path: String) -> Bool
@@ -28,6 +30,10 @@ protocol FileManagerProtocol: Sendable {
 
     /// Removes the file or directory at the given path.
     func removeItem(atPath path: String) throws
+    func removeItem(at url: URL) throws
+
+    /// Atomically move a file or directory to a new location (e.g. for migrations).
+    func moveItem(at srcURL: URL, to dstURL: URL) throws
 }
 
 // MARK: - FileManager conformance
@@ -39,5 +45,16 @@ extension FileManager: FileManagerProtocol {
 
     func createDirectory(atPath path: String, withIntermediateDirectories createIntermediates: Bool) throws {
         try createDirectory(atPath: path, withIntermediateDirectories: createIntermediates, attributes: nil)
+    }
+}
+
+private struct FileManagerKey: EnvironmentKey {
+    static let defaultValue: any FileManagerProtocol = GlobalEnvironmentDefaults.fileManager
+}
+
+extension EnvironmentValues {
+    var fileManager: any FileManagerProtocol {
+        get { self[FileManagerKey.self] }
+        set { self[FileManagerKey.self] = newValue }
     }
 }

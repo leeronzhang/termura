@@ -39,7 +39,8 @@ extension TerminalSessionController {
                 pendingOutputBuffer = (text: text, stripped: stripped)
             }
             armPendingOutputDrainIfNeeded()
-            logger.debug("output batch coalesced (capacity=\(self.taskExecutor.activeCount))")
+            let activeCount = taskExecutor.activeCount
+            logger.debug("output batch coalesced (capacity=\(activeCount))")
             return
         }
 

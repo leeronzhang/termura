@@ -34,11 +34,15 @@ actor NoteDirectoryWatcher: NoteDirectoryWatcherProtocol {
     init(directoryURL: URL, debounce: Duration = AppConfig.Notes.fileWatchDebounce) {
         self.directoryURL = directoryURL
         self.debounce = debounce
+        // WHY: File watcher events must cross from DispatchSource into async consumers as a buffered stream.
+        // OWNER: NoteDirectoryWatcher owns the AsyncStream continuation for its full actor lifetime.
+        // TEARDOWN: stop() finishes the continuation and cancels the DispatchSource/debounce work.
+        // TEST: Cover debounced change delivery and stop() shutting the stream down cleanly.
         let (stream, continuation) = AsyncStream.makeStream(
             of: NoteDirectoryEvent.self,
             bufferingPolicy: .bufferingNewest(1)
         )
-        self.noteEvents = stream
+        noteEvents = stream
         self.continuation = continuation
     }
 
@@ -49,10 +53,11 @@ actor NoteDirectoryWatcher: NoteDirectoryWatcherProtocol {
     func start() throws {
         guard source == nil else { return }
 
-        let openedFD = open(directoryURL.path, O_EVTONLY)
+        let dirPath = directoryURL.path
+        let openedFD = open(dirPath, O_EVTONLY)
         guard openedFD >= 0 else {
-            logger.error("Failed to open directory for watching: \(self.directoryURL.path)")
-            throw NoteFileError.fileReadFailed(path: directoryURL.path,
+            logger.error("Failed to open directory for watching: \(dirPath)")
+            throw NoteFileError.fileReadFailed(path: dirPath,
                                                underlying: POSIXError(.ENOENT))
         }
         fileDescriptor = openedFD
@@ -88,7 +93,8 @@ actor NoteDirectoryWatcher: NoteDirectoryWatcherProtocol {
 
         source = src
         src.resume()
-        logger.debug("Started watching notes directory: \(self.directoryURL.lastPathComponent)")
+        let dirName = directoryURL.lastPathComponent
+        logger.debug("Started watching notes directory: \(dirName)")
     }
 
     func stop() {

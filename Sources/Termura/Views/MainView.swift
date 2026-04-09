@@ -17,6 +17,7 @@ struct MainView: View {
     @Environment(\.themeManager) var themeManager
     @Environment(\.commandRouter) var commandRouter
     @Environment(\.notesViewModel) var notesViewModel
+    @Environment(\.userDefaults) var userDefaults
 
     /// Bindable accessors for creating two-way bindings to @Observable environment objects.
     var router: Bindable<CommandRouter> { Bindable(commandRouter) }
@@ -188,20 +189,26 @@ struct MainView: View {
 private struct FullScreenObservingModifier: ViewModifier {
     @Binding var isFullScreen: Bool
     @Binding var hostingWindow: NSWindow?
+    private var notificationCenter: NotificationCenter? {
+        GlobalEnvironmentDefaults.notificationCenter as? NotificationCenter
+    }
 
     func body(content: Content) -> some View {
-        content
+        let center = notificationCenter ?? .default
+        let enterPublisher = center.publisher(for: NSWindow.didEnterFullScreenNotification)
+        let exitPublisher = center.publisher(for: NSWindow.didExitFullScreenNotification)
+        return content
             // Capture the hosting NSWindow so observers are filtered per-window.
             // Required for correctness when multiple project windows are open.
             .background(HostingWindowCapture { window in
                 hostingWindow = window
                 isFullScreen = window.styleMask.contains(.fullScreen)
             })
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { n in
+            .onReceive(enterPublisher) { n in
                 guard (n.object as? NSWindow) === hostingWindow else { return }
                 isFullScreen = true
             }
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { n in
+            .onReceive(exitPublisher) { n in
                 guard (n.object as? NSWindow) === hostingWindow else { return }
                 isFullScreen = false
             }
