@@ -110,6 +110,10 @@ final class GhosttyAppContext {
     }
 
     private func registerNotifications() {
+        // WHY: Ghostty focus state must stay aligned with NSApplication active/inactive transitions.
+        // OWNER: GhosttyAppContext registers itself as the NotificationCenter observer.
+        // TEARDOWN: deinit removes self from NotificationCenter.
+        // TEST: Cover app activate/resign notifications updating ghostty_app_set_focus.
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(appBecameActive),
@@ -160,88 +164,19 @@ final class GhosttyAppContext {
         ghostty_app_tick(app)
     }
 
-    // MARK: - Static C Callbacks (nonisolated: called from ghostty threads)
-
-    // Wakeup: userdata = app userdata (GhosttyAppContext).
-    // Fires thousands of times/sec from IO thread — coalesced via scheduleTick().
-    nonisolated static func cWakeup(_ userdata: UnsafeMutableRawPointer?) {
-        guard let userdata else { return }
-        let ctx = Unmanaged<GhosttyAppContext>.fromOpaque(userdata).takeUnretainedValue()
-        ctx.scheduleTick()
-    }
-
-    // Action: routes UI actions to main actor.
-    // ghostty's renderer thread manages its own draw loop via CVDisplayLink —
-    // the macOS apprt does NOT handle GHOSTTY_ACTION_RENDER in the action callback.
-    @discardableResult
-    nonisolated static func cAction(
-        _ app: ghostty_app_t,
-        target: ghostty_target_s,
-        action: ghostty_action_s
-    ) -> Bool {
-        // Surface-targeted UI actions need the main actor.
-        if target.tag == GHOSTTY_TARGET_SURFACE,
-           let surface = target.target.surface {
-            Task { @MainActor in
-                Self.handleSurfaceAction(surface: surface, action: action)
-            }
-            return true
-        }
-
-        // App-targeted actions that Termura handles.
-        switch action.tag {
-        case GHOSTTY_ACTION_OPEN_URL:
-            Task { @MainActor in
-                Self.openURL(action.action.open_url)
-            }
-            return true
-        default:
-            return false
-        }
-    }
-
-    @MainActor
-    private static func handleSurfaceAction(surface: ghostty_surface_t, action: ghostty_action_s) {
-        guard let ud = ghostty_surface_userdata(surface) else { return }
-        let view = Unmanaged<GhosttyTerminalView>.fromOpaque(ud).takeUnretainedValue()
-
-        switch action.tag {
-        case GHOSTTY_ACTION_SET_TITLE:
-            guard let rawTitle = action.action.set_title.title,
-                  let title = String(cString: rawTitle, encoding: .utf8) else { return }
-            view.onTitleChanged?(title)
-
-        case GHOSTTY_ACTION_PWD:
-            guard let rawPwd = action.action.pwd.pwd else { return }
-            view.onWorkingDirectoryChanged?(String(cString: rawPwd))
-
-        case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
-            view.recordChildExitCode(action.action.child_exited.exit_code)
-
-        case GHOSTTY_ACTION_COMMAND_FINISHED:
-            view.onCommandFinished?(action.action.command_finished.exit_code)
-
-        case GHOSTTY_ACTION_OPEN_URL:
-            openURL(action.action.open_url)
-
-        case GHOSTTY_ACTION_MOUSE_OVER_LINK:
-            let link = action.action.mouse_over_link
-            if link.len > 0, let ptr = link.url {
-                let data = Data(bytes: ptr, count: Int(link.len))
-                view.hoverUrl = String(data: data, encoding: .utf8)
-            } else {
-                view.hoverUrl = nil
-            }
-
-        default:
-            break
-        }
-    }
-
     // MARK: - URL opening
 
+    /// Set by `ProjectCoordinator` when opening a project. When non-nil, terminal
+    /// link clicks are routed through this router instead of going directly to NSWorkspace.
+    /// Static because GhosttyAppContext is a process-wide singleton bridged to C callbacks.
+    static var linkRouter: (any LinkRouterProtocol)?
+
+    /// Working directory used for resolving relative paths in terminal links.
+    /// Updated by ProjectCoordinator when the active project changes.
+    static var currentWorkingDirectory: String = AppConfig.Paths.homeDirectory
+
     /// Open a URL or file path detected by ghostty's link recognizer.
-    /// URLs with schemes open in the default handler; bare paths open as files.
+    /// Routes through LinkRouter when set; falls back to NSWorkspace otherwise.
     @MainActor
     static func openURL(_ urlAction: ghostty_action_open_url_s) {
         guard urlAction.len > 0, let ptr = urlAction.url else { return }
@@ -256,6 +191,12 @@ final class GhosttyAppContext {
             url = URL(filePath: expanded)
         }
 
-        NSWorkspace.shared.open(url)
+        let forceExternal = NSEvent.modifierFlags.contains(.option)
+
+        if let router = linkRouter {
+            router.route(url: url, workingDirectory: currentWorkingDirectory, forceExternal: forceExternal)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
     }
 }

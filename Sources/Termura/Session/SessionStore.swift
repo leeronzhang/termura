@@ -7,15 +7,15 @@ private let logger = Logger(subsystem: "com.termura.app", category: "SessionStor
 @Observable
 @MainActor
 final class SessionStore: SessionStoreProtocol {
-    private(set) var sessions: [SessionRecord] = []
+    var sessions: [SessionRecord] = []
     var activeSessionID: SessionID?
     // Cached derived state — rebuilt in a single O(n) pass on every sessions mutation.
     // Views must consume these instead of filtering `sessions` inline (see §3 perf rules).
-    private(set) var activeSessions: [SessionRecord] = []
-    private(set) var pinnedSessions: [SessionRecord] = []
-    private(set) var sessionTreeNodes: [SessionTreeNode] = []
-    private(set) var endedSessions: [SessionRecord] = []
-    private(set) var sessionTitles: [SessionID: String] = [:]
+    var activeSessions: [SessionRecord] = []
+    var pinnedSessions: [SessionRecord] = []
+    var sessionTreeNodes: [SessionTreeNode] = []
+    var endedSessions: [SessionRecord] = []
+    var sessionTitles: [SessionID: String] = [:]
     /// Current lifecycle state of the store (loading, ready, or failed).
     var state: StoreState = .idle
     /// User-facing error message for persistence or other store-level failures.
@@ -47,7 +47,7 @@ final class SessionStore: SessionStoreProtocol {
     var hasLoadedPersistedSessions: Bool { state != .idle && state != .loading }
     /// O(1) position index: maps SessionID to its position in `sessions`.
     /// Read-only externally; all writes go through `appendSession` or `rebuildSessionIndex`.
-    @ObservationIgnored private(set) var sessionIndex: [SessionID: Int] = [:]
+    @ObservationIgnored var sessionIndex: [SessionID: Int] = [:]
 
     init(
         engineStore: TerminalEngineStore,
@@ -159,93 +159,6 @@ extension SessionStore {
     /// Awaits the current engine-creation debounce task, if any.
     func waitForEngineActivationIdle() async {
         await taskCoordinator.waitForIdle()
-    }
-}
-
-// MARK: - Internal mutation helpers
-
-// Same-file extension: retains private(set) setter access to `sessions` and `sessionIndex`
-// without expanding the class body beyond the type_body_length limit.
-extension SessionStore {
-    /// Rebuilds the full position index from `sessions`, then refreshes all derived state.
-    /// O(n) — call only after structural mutations (bulk load, removal, reorder).
-    func rebuildSessionIndex() {
-        sessionIndex.removeAll(keepingCapacity: true)
-        for (i, session) in sessions.enumerated() {
-            sessionIndex[session.id] = i
-        }
-        rebuildDerivedState()
-        rebuildSessionTitles()
-    }
-
-    /// Appends a session record, updates the O(1) position index, and refreshes derived state.
-    func appendSession(_ record: SessionRecord) {
-        sessions.append(record)
-        sessionIndex[record.id] = sessions.count - 1
-        sessionTitles[record.id] = record.title
-        rebuildDerivedState()
-    }
-
-    /// Mutates a session in place by ID, then refreshes derived state.
-    /// Returns the updated record, or nil if not found.
-    @discardableResult
-    func mutateSession(id: SessionID, _ update: (inout SessionRecord) -> Void) -> SessionRecord? {
-        guard let idx = sessionIndex[id] else { return nil }
-        update(&sessions[idx])
-        // O(1) incremental title update — rebuildDerivedState never touches sessionTitles.
-        sessionTitles[id] = sessions[idx].title
-        rebuildDerivedState()
-        return sessions[idx]
-    }
-
-    /// Reorders the sessions array in place and rebuilds the index.
-    func reorderSessionsInPlace(from source: IndexSet, to destination: Int) {
-        sessions.move(fromOffsets: source, toOffset: destination)
-        for index in sessions.indices {
-            sessions[index].orderIndex = index
-        }
-        rebuildSessionIndex()
-    }
-
-    /// Replaces all sessions and rebuilds the index. Use only for rollback in onFailure closures.
-    func replaceAllSessions(_ newSessions: [SessionRecord]) {
-        sessions = newSessions
-        rebuildSessionIndex()
-    }
-
-    /// Single O(n) pass over `sessions` that refreshes the filtered derived arrays.
-    /// Does NOT touch `sessionTitles` — title maintenance is a separate responsibility:
-    ///   - In-place mutations: caller writes `sessionTitles[id] = ...` directly (O(1)).
-    ///   - Structural mutations: `rebuildSessionIndex` calls `rebuildSessionTitles()` after this.
-    func rebuildDerivedState() {
-        var active: [SessionRecord] = []
-        var pinned: [SessionRecord] = []
-        var activeTree: [SessionRecord] = []
-        var ended: [SessionRecord] = []
-        for session in sessions {
-            if session.isEnded {
-                ended.append(session)
-            } else {
-                active.append(session)
-                if session.isPinned { pinned.append(session) } else { activeTree.append(session) }
-            }
-        }
-        activeSessions = active
-        pinnedSessions = pinned
-        sessionTreeNodes = SessionTreeNode.buildForest(from: activeTree)
-        endedSessions = ended
-    }
-
-    /// Full O(n) rebuild of `sessionTitles`.
-    /// Called only from `rebuildSessionIndex` (structural mutations: delete, reorder, bulk replace).
-    /// In-place mutations skip this and update the affected entry directly.
-    private func rebuildSessionTitles() {
-        var titles: [SessionID: String] = [:]
-        titles.reserveCapacity(sessions.count)
-        for session in sessions {
-            titles[session.id] = session.title
-        }
-        sessionTitles = titles
     }
 }
 

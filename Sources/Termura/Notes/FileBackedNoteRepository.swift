@@ -9,22 +9,22 @@ private let logger = Logger(subsystem: "com.termura.app", category: "FileBackedN
 /// Notes stored as Markdown files in `<project>/.termura/notes/`.
 /// GRDB is used only as a rebuild-able FTS5 search cache.
 actor FileBackedNoteRepository: NoteRepositoryProtocol {
-    private let notesDirectory: URL
-    private let fileService: any NoteFileServiceProtocol
-    private let db: any DatabaseServiceProtocol
+    let notesDirectory: URL
+    let fileService: any NoteFileServiceProtocol
+    let db: any DatabaseServiceProtocol
     private let clock: any AppClock
-    private let fileManager: any FileManagerProtocol
+    let fileManager: any FileManagerProtocol
 
     /// In-memory index: NoteID -> (record, file URL).
-    private var index: [NoteID: IndexEntry] = [:]
-    private var isLoaded = false
+    var index: [NoteID: IndexEntry] = [:]
+    var isLoaded = false
     /// Set during writes to suppress file-watcher events from our own changes.
     private(set) var isWriting = false
     /// File-system watcher task — cancelled on stopWatching().
-    private var watchTask: Task<Void, Never>?
-    private var watcher: (any NoteDirectoryWatcherProtocol)?
+    var watchTask: Task<Void, Never>?
+    var watcher: (any NoteDirectoryWatcherProtocol)?
 
-    private struct IndexEntry {
+    struct IndexEntry {
         var record: NoteRecord
         var url: URL
         /// File modification date at last read — used by incrementalSync to skip unchanged files.
@@ -118,104 +118,6 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
         }
     }
 
-    // MARK: - Disk Sync
-
-    /// Full scan from disk — used on first load; subsequent changes use `incrementalSync`.
-    func reloadFromDisk() async throws {
-        let urls = try await fileService.listNoteFiles(in: notesDirectory)
-        var newIndex: [NoteID: IndexEntry] = [:]
-        for url in urls {
-            do {
-                let record = try await fileService.readNote(at: url)
-                newIndex[record.id] = IndexEntry(record: record, url: url, modificationDate: fileModDate(at: url))
-            } catch {
-                logger.warning("Skipping malformed note file \(url.lastPathComponent): \(error.localizedDescription)")
-            }
-        }
-        index = newIndex
-        isLoaded = true
-    }
-
-    func rebuildCache() async throws {
-        try await db.write { database in
-            try database.execute(sql: "DELETE FROM notes")
-        }
-        for entry in index.values {
-            try await upsertCache(entry.record)
-        }
-    }
-
-    /// Incrementally sync index with disk: only reads new/modified files, removes deleted entries.
-    private func incrementalSync() async throws {
-        let diskURLs = try await fileService.listNoteFiles(in: notesDirectory)
-        var diskMap: [String: (url: URL, modDate: Date?)] = [:]
-        for url in diskURLs {
-            diskMap[url.lastPathComponent] = (url, fileModDate(at: url))
-        }
-
-        var indexByFilename: [String: NoteID] = [:]
-        for (id, entry) in index {
-            indexByFilename[entry.url.lastPathComponent] = id
-        }
-
-        // Remove entries whose files no longer exist on disk.
-        let removed = Set(indexByFilename.keys).subtracting(diskMap.keys)
-        for filename in removed {
-            guard let id = indexByFilename[filename] else { continue }
-            index[id] = nil
-            try await deleteCache(id: id)
-        }
-
-        // Read only new or modified files (modDate changed).
-        var upsertCount = 0
-        for (filename, disk) in diskMap {
-            if let id = indexByFilename[filename], let entry = index[id],
-               let diskMod = disk.modDate, let indexMod = entry.modificationDate, diskMod == indexMod {
-                continue
-            }
-            do {
-                let record = try await fileService.readNote(at: disk.url)
-                index[record.id] = IndexEntry(record: record, url: disk.url, modificationDate: disk.modDate)
-                try await upsertCache(record)
-                upsertCount += 1
-            } catch {
-                logger.warning("Skipping malformed note file \(filename): \(error.localizedDescription)")
-            }
-        }
-        if !removed.isEmpty || upsertCount > 0 {
-            logger.debug("Incremental sync: \(upsertCount) upserted, \(removed.count) removed")
-        }
-    }
-
-    // MARK: - File Watching
-
-    func startWatching() async throws {
-        guard watchTask == nil else { return }
-        let watcher = NoteDirectoryWatcher(directoryURL: notesDirectory)
-        try await watcher.start()
-        self.watcher = watcher
-        watchTask = Task { [weak self] in
-            guard let self else { return }
-            for await _ in watcher.events() {
-                guard !Task.isCancelled else { break }
-                let writing = await isWriting
-                guard !writing else { continue }
-                do {
-                    try await incrementalSync()
-                } catch {
-                    logger.error("Failed to sync notes after file change: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-
-    func stopWatching() async {
-        watchTask?.cancel()
-        watchTask = nil
-        await watcher?.stop()
-        watcher = nil
-    }
-
     // MARK: - Private
 
     private func ensureLoaded() async throws {
@@ -227,7 +129,7 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
         try await rebuildCache()
     }
 
-    private func fileModDate(at url: URL) -> Date? {
+    func fileModDate(at url: URL) -> Date? {
         do {
             return try url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         } catch {
@@ -237,7 +139,7 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
         }
     }
 
-    private func upsertCache(_ note: NoteRecord) async throws {
+    func upsertCache(_ note: NoteRecord) async throws {
         let id = note.id.rawValue.uuidString
         let fav = note.isFavorite ? 1 : 0
         let created = note.createdAt.timeIntervalSince1970
@@ -250,7 +152,7 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
         }
     }
 
-    private func deleteCache(id: NoteID) async throws {
+    func deleteCache(id: NoteID) async throws {
         try await db.write { db in
             try db.execute(sql: "DELETE FROM notes WHERE id = ?", arguments: [id.rawValue.uuidString])
         }

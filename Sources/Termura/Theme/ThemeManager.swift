@@ -19,7 +19,7 @@ final class ThemeManager {
     }
 
     private let userDefaults: any UserDefaultsStoring
-    private var extendedColors: [ThemeToken: SwiftUI.Color] = [:]
+    var extendedColors: [ThemeToken: SwiftUI.Color] = [:]
     private var appearanceObservation: NSKeyValueObservation?
 
     // MARK: - Font zoom
@@ -60,13 +60,6 @@ final class ThemeManager {
         }
     }
 
-    // MARK: - Color Lookup
-
-    func color(for token: ThemeToken) -> SwiftUI.Color {
-        if let extended = extendedColors[token] { return extended }
-        return uiColor(for: token) ?? syntaxColor(for: token) ?? ansiColor(for: token)
-    }
-
     // MARK: - Theme Application
 
     func apply(definition: ThemeDefinition) {
@@ -89,95 +82,21 @@ final class ThemeManager {
         }
         apply(definition: definition)
         let def = definition
-        // Lifecycle: fire-and-forget persistence — theme is already applied in memory.
+        // WHY: Persisting a theme should not block the in-memory apply path on disk I/O.
+        // OWNER: ThemeManager launches this detached save during applyTheme.
+        // TEARDOWN: One-shot detached persistence ends after saveTheme(def) completes.
+        // TEST: Cover immediate in-memory apply plus eventual persistence of the selected theme.
         Task.detached { await ThemeManager.saveTheme(def) }
-    }
-
-    // MARK: - Private — Color helpers
-
-    private func uiColor(for token: ThemeToken) -> SwiftUI.Color? {
-        if let core = uiCoreColor(for: token) { return core }
-        return uiStatusColor(for: token)
-    }
-
-    private func uiCoreColor(for token: ThemeToken) -> SwiftUI.Color? {
-        switch token {
-        case .background: current.background
-        case .foreground: current.foreground
-        case .selectionBackground: current.selectionBackground
-        case .cursor: current.cursorColor
-        case .sidebarBackground: current.sidebarBackground
-        case .sidebarText: current.sidebarText
-        case .activeSessionHighlight: current.activeSessionHighlight
-        case .statusBarBackground: current.sidebarBackground
-        case .inputBackground: current.background
-        case .inputBorder: current.foreground.opacity(0.2)
-        default: nil
-        }
-    }
-
-    private func uiStatusColor(for token: ThemeToken) -> SwiftUI.Color? {
-        switch token {
-        case .statusSuccess: current.green
-        case .statusError: current.red
-        case .statusWarning: current.yellow
-        case .statusInfo: current.blue
-        case .borderSubtle: current.foreground.opacity(AppUI.Opacity.border)
-        case .surfaceOverlay: current.background.opacity(AppUI.Opacity.secondary)
-        default: nil
-        }
-    }
-
-    private func syntaxColor(for token: ThemeToken) -> SwiftUI.Color? {
-        switch token {
-        case .keyword: current.blue
-        case .string: current.green
-        case .comment: current.brightBlack
-        case .number: current.magenta
-        case .function: current.yellow
-        case .type: current.cyan
-        default: nil
-        }
-    }
-
-    private func ansiColor(for token: ThemeToken) -> SwiftUI.Color {
-        ansiColorMap[token] ?? current.foreground
-    }
-
-    private var ansiColorMap: [ThemeToken: SwiftUI.Color] {
-        [
-            .ansiBlack: current.black, .ansiRed: current.red,
-            .ansiGreen: current.green, .ansiYellow: current.yellow,
-            .ansiBlue: current.blue, .ansiMagenta: current.magenta,
-            .ansiCyan: current.cyan, .ansiWhite: current.white,
-            .ansiBrightBlack: current.brightBlack, .ansiBrightRed: current.brightRed,
-            .ansiBrightGreen: current.brightGreen, .ansiBrightYellow: current.brightYellow,
-            .ansiBrightBlue: current.brightBlue, .ansiBrightMagenta: current.brightMagenta,
-            .ansiBrightCyan: current.brightCyan, .ansiBrightWhite: current.brightWhite
-        ]
-    }
-
-    // MARK: - Private — Extended colors
-
-    private func buildExtendedColors(from definition: ThemeDefinition) {
-        let tokenMap: [(String, ThemeToken)] = [
-            ("keyword", .keyword), ("string", .string), ("comment", .comment),
-            ("number", .number), ("function", .function), ("type", .type),
-            ("statusBarBackground", .statusBarBackground),
-            ("inputBackground", .inputBackground), ("inputBorder", .inputBorder)
-        ]
-        extendedColors = [:]
-        for (key, token) in tokenMap {
-            if let parsed = ThemeDefinition.color(fromHex: definition.colors[key]) {
-                extendedColors[token] = parsed
-            }
-        }
     }
 
     // MARK: - Private — Persistence
 
     private func restoreSelectedTheme() async {
         let dir = Self.themesDirectory
+        // WHY: Reading custom themes hits disk and should not run on the caller's actor.
+        // OWNER: restoreSelectedTheme owns this detached read and awaits it inline.
+        // TEARDOWN: Awaiting .value ensures the read finishes before restoring availableDefinitions.
+        // TEST: Cover restoring built-in + custom themes from persisted state.
         let customThemes: [ThemeDefinition] = await Task.detached {
             Self.readCustomThemes(from: dir)
         }.value
