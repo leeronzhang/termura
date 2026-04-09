@@ -7,7 +7,8 @@ struct ContentView: View {
     let projectContext: ProjectContext
     let themeManager: ThemeManager
     let fontSettings: FontSettings
-
+    let webViewPool: any WebViewPoolProtocol
+    let webRendererBridge: any WebRendererBridgeProtocol
     var body: some View {
         MainView()
             .environment(\.sessionScope, projectContext.sessionScope)
@@ -18,6 +19,8 @@ struct ContentView: View {
             .environment(\.notesViewModel, projectContext.notesViewModel)
             .environment(\.themeManager, themeManager)
             .environment(\.fontSettings, fontSettings)
+            .environment(\.webViewPool, webViewPool)
+            .environment(\.webRendererBridge, webRendererBridge)
             .toolbarBackground(.hidden, for: .windowToolbar)
             .ignoresSafeArea(edges: .top)
     }

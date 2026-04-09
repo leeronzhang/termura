@@ -47,6 +47,31 @@ record_warning() {
     WARNINGS=$((WARNINGS + 1))
 }
 
+run_gate_check() {
+    local label="$1"
+    shift
+
+    echo "-> ${label}..."
+    set +e
+    "$@"
+    local status=$?
+    set -e
+
+    case "$status" in
+        0)
+            return 0
+            ;;
+        3)
+            record_warning
+            return 0
+            ;;
+        *)
+            record_failure
+            return 0
+            ;;
+    esac
+}
+
 run_required_tool() {
     local tool="$1"
     local install_hint="$2"
@@ -146,40 +171,15 @@ if run_required_tool "swiftformat" "brew install swiftformat"; then
     fi
 fi
 
-echo "-> Redundant import check..."
-if ! bash scripts/check-redundant-imports.sh Sources/Termura; then
-    record_failure
-fi
-
-echo "-> Hardcoded AppKit string check..."
-if ! bash scripts/check-hardcoded-strings.sh Sources/Termura; then
-    record_failure
-fi
-
-echo "-> xcstrings coverage check..."
-if ! bash scripts/check-xcstrings-coverage.sh; then
-    record_failure
-fi
-
-echo "-> TextEditor accessibility check..."
-if ! bash scripts/check-texteditor-accessibility.sh Sources/Termura/Views; then
-    record_failure
-fi
-
-echo "-> Bare Date() check..."
-if ! bash scripts/check-bare-date.sh; then
-    record_failure
-fi
-
-echo "-> Layer dependency check..."
-if ! bash scripts/check-layer-deps.sh; then
-    record_failure
-fi
-
-echo "-> Mock #if DEBUG guard audit..."
-if ! bash scripts/mock-guard-audit.sh; then
-    record_failure
-fi
+echo "Fast Gate"
+echo "--------------------------------------"
+run_gate_check "Suppression check" bash scripts/check-suppressions.sh
+run_gate_check "Redundant import check" bash scripts/check-redundant-imports.sh Sources/Termura
+run_gate_check "Hardcoded AppKit string check" bash scripts/check-hardcoded-strings.sh Sources/Termura
+run_gate_check "xcstrings coverage check" bash scripts/check-xcstrings-coverage.sh
+run_gate_check "TextEditor accessibility check" bash scripts/check-texteditor-accessibility.sh Sources/Termura/Views
+run_gate_check "Bare Date() check" bash scripts/check-bare-date.sh
+run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
 
 echo "-> Forbidden Swift pattern checks..."
 if ! FORBIDDEN_OUTPUT="$(python3 - "$MODE" <<'PYEOF'
@@ -255,6 +255,21 @@ then
     record_failure
 else
     echo "$FORBIDDEN_OUTPUT"
+fi
+
+echo ""
+echo "Design Gate"
+echo "--------------------------------------"
+if [[ "$MODE" == "staged" ]]; then
+    run_gate_check "Legacy Mock placement audit" bash scripts/mock-guard-audit.sh --staged
+    run_gate_check "File-size budget check" bash scripts/check-file-size.sh --staged Sources/Termura
+    run_gate_check "View/ViewModel global access advisory" bash scripts/check-view-global-access.sh --staged
+    run_gate_check "Background task ownership advisory" bash scripts/check-task-ownership.sh --staged Sources/Termura
+else
+    run_gate_check "Legacy Mock placement audit" bash scripts/mock-guard-audit.sh
+    run_gate_check "File-size budget check" bash scripts/check-file-size.sh Sources/Termura
+    run_gate_check "View/ViewModel global access advisory" bash scripts/check-view-global-access.sh
+    run_gate_check "Background task ownership advisory" bash scripts/check-task-ownership.sh Sources/Termura
 fi
 
 echo "-> Harness private file leak check..."

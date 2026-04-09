@@ -63,7 +63,7 @@ actor SessionServices {
         guard !workingDirectory.isEmpty else { return }
         // contextInjectionService is nil in non-Harness builds (harness feature gate — expected early exit).
         guard let service = contextInjectionService else { return }
-        
+
         hasInjectedContext = true
         injectionTask?.cancel()
         // Task { @MainActor }: engine.send requires @MainActor (TerminalEngine protocol is @MainActor).
@@ -99,6 +99,10 @@ actor SessionServices {
         // sessionHandoffService is nil in non-Harness builds (harness feature gate — expected early exit).
         guard let handoffService = sessionHandoffService else { return }
 
+        // WHY: Handoff generation may perform I/O and parsing after session updates, so it must leave the caller's actor.
+        // OWNER: SessionServices stores the detached task in handoffTask.
+        // TEARDOWN: flushPendingHandoff() awaits and clears handoffTask during close/flush.
+        // TEST: Cover successful generation, error logging, and flushPendingHandoff waiting for in-flight work.
         handoffTask = Task.detached {
             do {
                 try await handoffService.generateHandoff(

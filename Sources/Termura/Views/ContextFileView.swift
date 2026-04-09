@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Sheet view for viewing and editing the project's `.termura/context.md` file.
 struct ContextFileView: View {
+    @Environment(\.fileManager) private var fileManager
     let projectRoot: String
     @Binding var isPresented: Bool
 
@@ -92,6 +93,10 @@ struct ContextFileView: View {
     private func loadFile() async {
         let path = contextFilePath
         do {
+            // WHY: Reading context.md must not block MainActor.
+            // OWNER: loadFile owns this detached read and awaits it inline.
+            // TEARDOWN: The detached task exits after one read attempt.
+            // TEST: Cover successful context load and read-failure reporting.
             let text = try await Task.detached {
                 try String(contentsOfFile: path, encoding: .utf8)
             }.value
@@ -107,19 +112,24 @@ struct ContextFileView: View {
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName).path
         let filePath = contextFilePath
         let text = content
+        let fileManager = fileManager
         // Lifecycle: user-initiated save — even if sheet dismisses, the write finishes harmlessly.
         // Task { } inherits @MainActor from the View; I/O is offloaded via inner Task.detached
         // so the main thread is not blocked, and state updates after the await are safely on MainActor.
         Task {
             do {
                 let root = projectRoot
+                // WHY: Saving context.md may create directories and write files, so it must leave MainActor.
+                // OWNER: The enclosing Task owns this detached write and awaits it before updating save state.
+                // TEARDOWN: The detached task ends after one save attempt and does not outlive saveFile().
+                // TEST: Cover gitignore repair, directory creation, and context save success/failure.
                 try await Task.detached {
                     // Ensure .termura/ is in .gitignore before creating the directory,
                     // preventing accidental commit of AI session data.
                     let rootURL = URL(fileURLWithPath: root)
-                    ensureProjectGitignore(at: rootURL)
-                    if !FileManager.default.fileExists(atPath: dirPath) {
-                        try FileManager.default.createDirectory(
+                    ensureProjectGitignore(at: rootURL, fileManager: fileManager)
+                    if !fileManager.fileExists(atPath: dirPath) {
+                        try fileManager.createDirectory(
                             atPath: dirPath, withIntermediateDirectories: true
                         )
                     }

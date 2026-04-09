@@ -2,8 +2,8 @@ import Foundation
 
 #if DEBUG
 
-/// Test double for `SessionMessageRepositoryProtocol`.
-actor MockSessionMessageRepository: SessionMessageRepositoryProtocol {
+/// Debug preview repository for `SessionMessageRepositoryProtocol`.
+actor DebugSessionMessageRepository: SessionMessageRepositoryProtocol {
     var savedMessages: [SessionMessage] = []
 
     func fetchMessages(

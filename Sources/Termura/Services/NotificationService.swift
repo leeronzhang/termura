@@ -94,22 +94,3 @@ actor NotificationService: NotificationServiceProtocol {
             : "\(Int(secs / 60))m \(Int(secs) % 60)s"
     }
 }
-
-// MARK: - Mock (Actor for test-safe mutation tracking)
-
-#if DEBUG
-
-actor MockNotificationService: NotificationServiceProtocol {
-    private(set) var notifiedChunks: [OutputChunk] = []
-    private(set) var notifiedContextAlerts: [ContextWindowAlert] = []
-
-    func notifyIfLong(_ chunk: OutputChunk) async {
-        notifiedChunks.append(chunk)
-    }
-
-    func notifyContextWindow(_ alert: ContextWindowAlert) async {
-        notifiedContextAlerts.append(alert)
-    }
-}
-
-#endif

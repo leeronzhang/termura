@@ -2,9 +2,9 @@ import AppKit
 import Foundation
 
 #if DEBUG
-/// Test double for TerminalEngine. Captures all interactions for assertion.
+/// Debug preview engine for TerminalEngine.
 @MainActor
-final class MockTerminalEngine: TerminalEngine {
+final class DebugTerminalEngine: TerminalEngine {
     // MARK: - Streams
 
     let outputStream: AsyncStream<TerminalOutputEvent>
@@ -31,6 +31,10 @@ final class MockTerminalEngine: TerminalEngine {
     // MARK: - Init
 
     init() {
+        // WHY: Preview terminal output must emulate the same async-stream lifecycle as the real engine.
+        // OWNER: DebugTerminalEngine owns both continuations for its lifetime.
+        // TEARDOWN: deinit/close paths finish the mock streams when tests release the engine.
+        // TEST: Cover output/shell event emission and shutdown behavior in tests.
         let (outStream, outCont) = AsyncStream.makeStream(
             of: TerminalOutputEvent.self,
             bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
@@ -38,6 +42,10 @@ final class MockTerminalEngine: TerminalEngine {
         outputStream = outStream
         continuation = outCont
 
+        // WHY: Preview shell events need their own stream with the same lifecycle guarantees.
+        // OWNER: DebugTerminalEngine owns shellContinuation for its lifetime.
+        // TEARDOWN: deinit/close paths finish the shell stream on engine teardown.
+        // TEST: Cover shell event emission and stream completion in tests.
         let (shellStream, shellCont) = AsyncStream.makeStream(
             of: ShellIntegrationEvent.self,
             bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)

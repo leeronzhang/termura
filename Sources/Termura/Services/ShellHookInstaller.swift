@@ -178,10 +178,10 @@ private extension Optional {
     }
 }
 
-// MARK: - Mock
+// MARK: - Debug Preview Stub
 
 #if DEBUG
-actor MockShellHookInstaller: ShellHookInstallerProtocol {
+actor DebugShellHookInstaller: ShellHookInstallerProtocol {
     var installCallCount = 0
     var isInstalledResult = false
     var shouldThrow = false

@@ -220,8 +220,7 @@ private enum AttachmentFilePicker {
         remaining: Int,
         completion: @escaping ([URL]) -> Void
     ) {
-        guard let window = NSApp.keyWindow else { return }
-        panel.beginSheetModal(for: window) { response in
+        panel.begin { response in
             guard response == .OK else { return }
             completion(Array(panel.urls.prefix(remaining)))
         }

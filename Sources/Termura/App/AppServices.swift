@@ -19,4 +19,6 @@ struct AppServices {
     /// Persists session metrics to ~/.termura/metrics/ for cross-session SLO analysis.
     let metricsPersistenceService: MetricsPersistenceService
     let shellHookInstaller: any ShellHookInstallerProtocol
+    /// Shared WKWebView pool for note rendering. Preheated at app launch.
+    let webViewPool: any WebViewPoolProtocol
 }

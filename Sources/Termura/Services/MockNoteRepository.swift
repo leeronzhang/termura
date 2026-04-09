@@ -2,8 +2,8 @@ import Foundation
 
 #if DEBUG
 
-/// In-memory note repository for unit tests and previews. No GRDB dependency.
-actor MockNoteRepository: NoteRepositoryProtocol {
+/// In-memory note repository for debug previews. No GRDB dependency.
+actor DebugNoteRepository: NoteRepositoryProtocol {
     private var store: [NoteID: NoteRecord] = [:]
     private var order: [NoteID] = []
 

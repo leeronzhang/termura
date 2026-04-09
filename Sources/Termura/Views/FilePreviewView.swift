@@ -57,6 +57,10 @@ struct FilePreviewView: View {
         guard !filePath.hasPrefix("/") else { return }
         let url = absoluteURL
         let root = projectRoot
+        // WHY: Symlink resolution can touch disk and must stay off MainActor during path validation.
+        // OWNER: validateContainment owns this detached check and awaits it inline.
+        // TEARDOWN: The detached task exits after one containment decision.
+        // TEST: Cover traversal rejection and valid in-project previews.
         let blocked: Bool = await Task.detached {
             let resolvedFile = url.resolvingSymlinksInPath().path
             let resolvedRoot = URL(fileURLWithPath: root).resolvingSymlinksInPath().path

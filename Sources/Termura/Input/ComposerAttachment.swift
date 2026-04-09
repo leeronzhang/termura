@@ -46,10 +46,13 @@ enum AttachmentSaveError: Error {
 
 /// Saves an NSImage to the shared tmp directory and returns its URL.
 /// Reuses AppConfig.DragDrop constants so all temp images land in the same directory.
-func saveTemporaryAttachmentImage(_ image: NSImage) throws -> URL {
-    let homeURL = FileManager.default.homeDirectoryForCurrentUser
+func saveTemporaryAttachmentImage(
+    _ image: NSImage,
+    fileManager: any FileManagerProtocol = GlobalEnvironmentDefaults.fileManager
+) throws -> URL {
+    let homeURL = fileManager.homeDirectoryForCurrentUser
     let tmpDir = homeURL.appendingPathComponent(AppConfig.DragDrop.tempImageSubdirectory)
-    try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+    try fileManager.createDirectory(at: tmpDir, withIntermediateDirectories: true)
     let ts = Int(Date().timeIntervalSince1970)
     let name = "\(AppConfig.DragDrop.imagePastePrefix)-\(ts).\(AppConfig.DragDrop.imagePasteExtension)"
     let fileURL = tmpDir.appendingPathComponent(name)

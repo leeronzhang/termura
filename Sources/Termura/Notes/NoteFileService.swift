@@ -32,7 +32,7 @@ actor NoteFileService: NoteFileServiceProtocol {
         let decoded = try NoteFrontmatter.decode(from: content)
         var record = NoteRecord(
             id: decoded.id, title: decoded.title, body: decoded.body,
-            isFavorite: decoded.isFavorite
+            isFavorite: decoded.isFavorite, references: decoded.references
         )
         record.createdAt = decoded.createdAt
         record.updatedAt = decoded.updatedAt

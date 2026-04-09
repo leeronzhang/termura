@@ -34,6 +34,10 @@ final class LibghosttyEngine: TerminalEngine {
 
     init(sessionID: SessionID, workingDirectory: String? = nil) {
         self.sessionID = sessionID
+        // WHY: Terminal output must be bridged from ghostty callbacks into async consumers with bounded buffering.
+        // OWNER: LibghosttyEngine owns outputContinuation and shellContinuation for the engine lifetime.
+        // TEARDOWN: deinit/close paths finish the continuations when the engine is released.
+        // TEST: Cover output/shell event delivery and shutdown finishing both streams.
         let (outStream, outCont) = AsyncStream.makeStream(
             of: TerminalOutputEvent.self,
             bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
@@ -41,6 +45,10 @@ final class LibghosttyEngine: TerminalEngine {
         outputStream = outStream
         outputContinuation = outCont
 
+        // WHY: Shell integration events follow the same lifecycle as terminal output and need their own stream.
+        // OWNER: LibghosttyEngine owns shellContinuation for the engine lifetime.
+        // TEARDOWN: deinit/close paths finish the shell stream when the engine is released.
+        // TEST: Cover shell integration event delivery and shutdown finishing the stream.
         let (shellStream, shellCont) = AsyncStream.makeStream(
             of: ShellIntegrationEvent.self,
             bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)

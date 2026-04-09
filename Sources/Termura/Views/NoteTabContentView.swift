@@ -9,20 +9,20 @@ import SwiftUI
 struct NoteTabContentView: View {
     let noteID: NoteID
     @Environment(\.notesViewModel) var notesViewModel
+    @Environment(\.themeManager) var themeManager
+    @Environment(\.webViewPool) var webViewPool
+    @Environment(\.webRendererBridge) var webRendererBridge
     var notes: Bindable<NotesViewModel>
     let onTitleChange: (NoteID, String) -> Void
 
     @FocusState private var isTitleFocused: Bool
+    @State private var viewMode: NoteViewMode = .edit
 
     var body: some View {
         VStack(spacing: 0) {
             noteHeader
             Divider()
-            NoteEditorView(
-                title: notesViewModel.editingTitle,
-                filePath: notesViewModel.selectedNoteFilePath,
-                text: notes.editingBody
-            )
+            content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
@@ -41,6 +41,28 @@ struct NoteTabContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var content: some View {
+        switch viewMode {
+        case .edit:
+            NoteEditorView(
+                title: notesViewModel.editingTitle,
+                filePath: notesViewModel.selectedNoteFilePath,
+                text: notes.editingBody
+            )
+        case .reading:
+            NoteRenderedView(
+                pool: webViewPool,
+                bridge: webRendererBridge,
+                theme: themeManager.current,
+                markdown: notesViewModel.editingBody,
+                references: notesViewModel.selectedNote?.references ?? [],
+                projectURL: notesViewModel.notesDirectoryURL
+                    ?? URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+            )
+        }
+    }
+
     private var noteHeader: some View {
         HStack(spacing: AppUI.Spacing.md) {
             TextField("Title", text: notes.editingTitle)
@@ -48,11 +70,27 @@ struct NoteTabContentView: View {
                 .textFieldStyle(.plain)
                 .focused($isTitleFocused)
             Spacer()
+            noteModeToggle
             noteFavoriteButton
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.top, AppUI.Spacing.md)
         .padding(.bottom, AppUI.Spacing.smMd)
+    }
+
+    private var noteModeToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                viewMode = (viewMode == .edit) ? .reading : .edit
+            }
+        } label: {
+            Image(systemName: viewMode == .edit ? "eye" : "pencil")
+                .font(AppUI.Font.body)
+                .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(viewMode == .edit ? "Switch to Reading mode" : "Switch to Edit mode")
+        .accessibilityLabel(viewMode == .edit ? "Switch to Reading mode" : "Switch to Edit mode")
     }
 
     private var noteFavoriteButton: some View {

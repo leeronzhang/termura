@@ -41,12 +41,20 @@ extension MainView {
             handleFocusDualPane(slot)
         case .openLastSilentNote:
             handleOpenLastSilentNote()
+        case let .openNoteTab(noteID):
+            handleOpenNoteTab(noteID: noteID)
         }
     }
 
     private func handleOpenLastSilentNote() {
         guard let noteID = notesViewModel.lastSilentNoteID,
               let note = notesViewModel.notes.first(where: { $0.id == noteID }) else { return }
+        commandRouter.selectedSidebarTab = .notes
+        openNoteTab(noteID: note.id, title: note.title)
+    }
+
+    private func handleOpenNoteTab(noteID: NoteID) {
+        guard let note = notesViewModel.notes.first(where: { $0.id == noteID }) else { return }
         commandRouter.selectedSidebarTab = .notes
         openNoteTab(noteID: note.id, title: note.title)
     }
@@ -110,7 +118,7 @@ extension MainView {
     /// the Composer is already open, or the editor already contains text.
     private func handleAgentResume(_ agentType: AgentType) {
         let key = AppConfig.AgentResume.autoFillEnabledKey
-        let enabled = UserDefaults.standard.object(forKey: key) as? Bool
+        let enabled = userDefaults.object(forKey: key) as? Bool
             ?? AppConfig.AgentResume.autoFillDefault
         guard enabled else { return }
         guard !commandRouter.showComposer else { return }

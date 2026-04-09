@@ -125,6 +125,10 @@ struct CodeEditorView: View {
     private func loadFile() async {
         let path = absolutePath
         let root = projectRoot
+        // WHY: File reads must leave MainActor while still enforcing project-root containment.
+        // OWNER: loadFile owns this detached read and awaits the Result immediately.
+        // TEARDOWN: The detached task ends after one read attempt and does not escape this method.
+        // TEST: Cover successful reads, containment rejection, and file-read failure handling.
         let result: Result<String, Error> = await Task.detached {
             // Absolute paths (harness rules) bypass root containment.
             if !path.hasPrefix("/"), !Self.isContained(filePath: path, inRoot: root) {
@@ -150,6 +154,10 @@ struct CodeEditorView: View {
         // main thread is not blocked, and state update after the await is safely on MainActor.
         Task {
             do {
+                // WHY: Saving must keep blocking file I/O off MainActor while preserving containment checks.
+                // OWNER: The enclosing Task owns this detached write and awaits it before mutating UI state.
+                // TEARDOWN: The detached task ends after one write attempt and does not outlive saveFile().
+                // TEST: Cover successful save, containment rejection, and file-write failure handling.
                 try await Task.detached {
                     if !path.hasPrefix("/"), !Self.isContained(filePath: path, inRoot: root) {
                         throw CocoaError(.fileWriteNoPermission)

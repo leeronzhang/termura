@@ -133,6 +133,7 @@ extension SessionMetadataBarView {
         case .code: "chevron.left.forwardslash.chevron.right"
         case .text: "text.alignleft"
         case .commandOutput: "terminal"
+        case .markdown: "doc.richtext"
         }
     }
 }

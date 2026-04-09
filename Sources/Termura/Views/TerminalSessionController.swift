@@ -67,9 +67,9 @@ final class TerminalSessionController {
         self.clock = clock
         self.notificationService = notificationService
         self.viewModel = viewModel
-        self.alertObserver = SessionAlertObserver(agentCoordinator: agentCoordinator, notificationService: notificationService)
-        self.promptObserver = SessionPromptObserver(engine: engine, modeController: modeController, clock: clock)
-        self.metadataObserver = SessionMetadataObserver(
+        alertObserver = SessionAlertObserver(agentCoordinator: agentCoordinator, notificationService: notificationService)
+        promptObserver = SessionPromptObserver(engine: engine, modeController: modeController, clock: clock)
+        metadataObserver = SessionMetadataObserver(
             sessionID: sessionID,
             sessionStore: sessionStore,
             outputProcessor: outputProcessor,
@@ -77,7 +77,7 @@ final class TerminalSessionController {
             clock: clock
         )
         taskExecutor = BoundedTaskExecutor(maxConcurrent: AppConfig.Runtime.maxConcurrentSessionTasks)
-        
+
         // Note: stream subscriptions are intentionally deferred to `inject(viewModel:)`.
         // If we subscribe here in init, incoming PTY/shell events can race and drop
         // state updates before the view model is fully attached on the next line.
@@ -85,9 +85,9 @@ final class TerminalSessionController {
 
     func inject(viewModel: TerminalViewModel) {
         self.viewModel = viewModel
-        self.alertObserver.inject(viewModel: viewModel)
-        self.promptObserver.inject(viewModel: viewModel, controller: self)
-        self.metadataObserver.inject(viewModel: viewModel)
+        alertObserver.inject(viewModel: viewModel)
+        promptObserver.inject(viewModel: viewModel, controller: self)
+        metadataObserver.inject(viewModel: viewModel)
         subscribeToOutput()
         subscribeToShellEvents()
     }
@@ -105,6 +105,10 @@ final class TerminalSessionController {
 
     private func subscribeToShellEvents() {
         let stream = engine.shellEventsStream
+        // WHY: Shell events arrive asynchronously from the terminal engine and must be consumed independently of the UI caller.
+        // OWNER: TerminalSessionController owns shellTask.
+        // TEARDOWN: deinit cancels shellTask and prompt/metadata teardown stops dependent observers.
+        // TEST: Cover controller teardown while shell events are still streaming.
         shellTask = AutoCancellableTask(Task.detached { [weak self] in
             for await event in stream {
                 guard let self, !Task.isCancelled else { break }
@@ -115,6 +119,10 @@ final class TerminalSessionController {
 
     private func subscribeToOutput() {
         let stream = engine.outputStream
+        // WHY: Terminal output can be continuous and must be drained in the background without blocking UI state updates.
+        // OWNER: TerminalSessionController owns streamTask.
+        // TEARDOWN: deinit cancels streamTask and pendingOutputDrainTask when the controller goes away.
+        // TEST: Cover output delivery, cancellation, and teardown during active streaming.
         streamTask = AutoCancellableTask(Task.detached { [weak self] in
             for await event in stream {
                 guard let self, !Task.isCancelled else { break }

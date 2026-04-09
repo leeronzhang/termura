@@ -3,10 +3,10 @@ import Foundation
 
 #if DEBUG
 
-/// Mock session store for unit tests and SwiftUI previews.
+/// Debug session store for SwiftUI previews.
 @Observable
 @MainActor
-final class MockSessionStore: SessionStoreProtocol {
+final class DebugSessionStore: SessionStoreProtocol {
     private(set) var sessions: [SessionRecord]
     private(set) var activeSessionID: SessionID?
     var projectRoot: String?

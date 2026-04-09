@@ -18,6 +18,7 @@ final class EditorViewModel {
     private var history: InputHistory
     private let modeController: InputModeController
     private let engine: any TerminalEngine
+    private let fileManager: any FileManagerProtocol
     /// Callback injected by TerminalAreaView for agent detection / session rename after submit.
     /// Internal (not private): TerminalAreaView sets this at view-setup time. Not an implementation detail.
     @ObservationIgnored var onCommandSubmit: ((String) -> Void)?
@@ -27,9 +28,14 @@ final class EditorViewModel {
 
     // MARK: - Init
 
-    init(engine: any TerminalEngine, modeController: InputModeController) {
+    init(
+        engine: any TerminalEngine,
+        modeController: InputModeController,
+        fileManager: any FileManagerProtocol = GlobalEnvironmentDefaults.fileManager
+    ) {
         self.engine = engine
         self.modeController = modeController
+        self.fileManager = fileManager
         history = InputHistory()
     }
 
@@ -47,9 +53,14 @@ final class EditorViewModel {
         attachments.removeAll { $0.id == id }
         if att.isTemporary {
             let url = att.url
+            let fileManager = fileManager
+            // WHY: Temporary attachment cleanup performs filesystem I/O and must not block the caller.
+            // OWNER: removeAttachment launches this one-shot detached delete for the removed attachment.
+            // TEARDOWN: The detached task exits after the delete attempt and does not outlive cleanup.
+            // TEST: Cover temp-attachment removal and non-fatal delete failures.
             Task.detached {
                 do {
-                    try FileManager.default.removeItem(at: url)
+                    try fileManager.removeItem(at: url)
                 } catch {
                     logger.debug("Temp attachment removal skipped: \(error.localizedDescription)")
                 }
@@ -63,10 +74,15 @@ final class EditorViewModel {
         let tempURLs = attachments.filter(\.isTemporary).map(\.url)
         attachments.removeAll()
         guard !tempURLs.isEmpty else { return }
+        let fileManager = fileManager
+        // WHY: Bulk temp-file cleanup performs filesystem I/O and must leave the caller's actor.
+        // OWNER: clearAttachments launches this one-shot detached delete batch.
+        // TEARDOWN: The detached task exits after processing the captured URL list.
+        // TEST: Cover submit/close cleanup deleting temp files and tolerating missing files.
         Task.detached {
             for url in tempURLs {
                 do {
-                    try FileManager.default.removeItem(at: url)
+                    try fileManager.removeItem(at: url)
                 } catch {
                     logger.debug("Temp attachment removal skipped: \(error.localizedDescription)")
                 }

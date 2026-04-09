@@ -140,7 +140,7 @@ private struct ThemeCard: View {
 #Preview("Theme Picker") {
     ThemePickerView(
         themeManager: ThemeManager(),
-        themeImportService: MockThemeImportService()
+        themeImportService: DebugThemeImportService()
     )
 }
 #endif

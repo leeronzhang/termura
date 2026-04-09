@@ -2,10 +2,10 @@ import Foundation
 
 #if DEBUG
 
-/// Test double for `AgentStateStoreProtocol`.
+/// Debug preview store for `AgentStateStoreProtocol`.
 /// Set `shouldRejectUpdates` to simulate state update failures (e.g., store full).
 @MainActor
-final class MockAgentStateStore: AgentStateStoreProtocol {
+final class DebugAgentStateStore: AgentStateStoreProtocol {
     private(set) var agents: [SessionID: AgentState] = [:]
     var updateCallCount = 0
     var removeCallCount = 0

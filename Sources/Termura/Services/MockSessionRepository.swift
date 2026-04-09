@@ -2,8 +2,8 @@ import Foundation
 
 #if DEBUG
 
-/// In-memory session repository for unit tests and previews. No GRDB dependency.
-actor MockSessionRepository: SessionRepositoryProtocol {
+/// In-memory session repository for debug previews. No GRDB dependency.
+actor DebugSessionRepository: SessionRepositoryProtocol {
     private var store: [SessionID: SessionRecord] = [:]
     private var order: [SessionID] = []
 

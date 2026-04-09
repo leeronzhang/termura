@@ -34,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let engineFactory: any TerminalEngineFactory
         #if DEBUG
         if environment["UI_TESTING_MOCK_TERMINAL_ENGINE"] != nil {
-            engineFactory = MockTerminalEngineFactory()
+            engineFactory = DebugTerminalEngineFactory()
         } else {
             engineFactory = LiveTerminalEngineFactory()
         }
@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let shellInstaller: any ShellHookInstallerProtocol
         #if DEBUG
         if environment["UI_TESTING_MOCK_SHELL_INSTALLER"] != nil {
-            shellInstaller = MockShellHookInstaller()
+            shellInstaller = DebugShellHookInstaller()
         } else {
             shellInstaller = ShellHookInstaller()
         }
@@ -63,7 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recentProjects: RecentProjectsService(),
             metricsCollector: collector,
             metricsPersistenceService: MetricsPersistenceService(metrics: collector),
-            shellHookInstaller: shellInstaller
+            shellHookInstaller: shellInstaller,
+            webViewPool: WebViewPool()
         )
         projectCoordinator = ProjectCoordinator()
 
@@ -91,6 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CrashContext.clearPersistedData()
         Self.cleanStaleTempImages()
 
+        // Pre-create a WKWebView for note rendering so the first Reading toggle is fast.
+        services.webViewPool.preheat()
+
         setupVisorShortcut()
         setupMenuBarActivation()
         projectCoordinator.start(with: ProjectCoordinator.Dependencies(
@@ -114,6 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// must survive the current session (user may still be composing the command), but can safely be
     /// removed on the next launch. Runs off the main thread to avoid blocking startup.
     private static func cleanStaleTempImages() {
+        // WHY: Startup cleanup must not block app launch on filesystem work.
+        // OWNER: AppDelegate launches this detached task during app startup.
+        // TEARDOWN: Fire-and-forget startup work; no retained handle is needed after one-shot cleanup completes.
+        // TEST: Cover stale-file deletion and preservation of fresh temp images.
         Task.detached {
             let fm = FileManager.default
             let tmpDir = fm.homeDirectoryForCurrentUser

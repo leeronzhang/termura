@@ -63,6 +63,10 @@ final class BoundedTaskExecutor {
         let cleanup = { @MainActor @Sendable [weak self] in
             self?.removeTracked(id)
         }
+        // WHY: Executor-owned background work must leave MainActor while still respecting the semaphore bound.
+        // OWNER: BoundedTaskExecutor tracks this task in _tracked[id] until cleanup runs.
+        // TEARDOWN: cleanup removes the tracked handle after operation completion or cancellation.
+        // TEST: Cover waitForIdle, cancellation, and bounded parallelism behavior.
         let task = Task.detached {
             await sem.wait()
             if !Task.isCancelled {

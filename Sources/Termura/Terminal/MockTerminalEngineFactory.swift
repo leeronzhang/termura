@@ -1,23 +1,23 @@
 import Foundation
 
 #if DEBUG
-struct MockTerminalEngineCreation: Sendable {
+struct DebugTerminalEngineCreation: Sendable {
     let sessionID: SessionID
     let shell: String?
     let currentDirectory: String?
 }
 
-/// Mock factory for testing -- returns the injected MockTerminalEngine.
-final class MockTerminalEngineFactory: TerminalEngineFactory {
-    private let engine: MockTerminalEngine
-    private(set) var createdEngines: [MockTerminalEngineCreation] = []
+/// Debug preview factory that returns the injected debug terminal engine.
+final class DebugTerminalEngineFactory: TerminalEngineFactory {
+    private let engine: DebugTerminalEngine
+    private(set) var createdEngines: [DebugTerminalEngineCreation] = []
 
-    init(engine: MockTerminalEngine = MockTerminalEngine()) {
+    init(engine: DebugTerminalEngine = DebugTerminalEngine()) {
         self.engine = engine
     }
 
     func makeEngine(for sessionID: SessionID, shell: String? = nil, currentDirectory: String? = nil) -> any TerminalEngine {
-        createdEngines.append(MockTerminalEngineCreation(
+        createdEngines.append(DebugTerminalEngineCreation(
             sessionID: sessionID,
             shell: shell,
             currentDirectory: currentDirectory

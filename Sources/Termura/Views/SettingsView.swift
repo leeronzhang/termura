@@ -75,6 +75,7 @@ struct GeneralSettingsView: View {
 // MARK: - Shell Integration Settings Tab
 
 struct ShellIntegrationSettingsView: View {
+    @Environment(\.userDefaults) private var userDefaults
     @State private var selectedShell: ShellType = .zsh
     @State private var installState: InstallState = .idle
     @State private var installError: String?
@@ -189,7 +190,7 @@ struct ShellIntegrationSettingsView: View {
         Task {
             do {
                 try await installer.install(into: shell)
-                UserDefaults.standard.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
+                userDefaults.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
                 await refreshStatus()
                 installState = .done
                 try await Task.sleep(for: AppConfig.Runtime.onboardingDismissDelay)
@@ -214,8 +215,8 @@ struct ShellIntegrationSettingsView: View {
     SettingsView(
         themeManager: ThemeManager(),
         fontSettings: FontSettings(),
-        themeImportService: MockThemeImportService(),
-        shellHookInstaller: MockShellHookInstaller()
+        themeImportService: DebugThemeImportService(),
+        shellHookInstaller: DebugShellHookInstaller()
     )
 }
 #endif

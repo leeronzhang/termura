@@ -2,16 +2,12 @@ import Foundation
 
 #if DEBUG
 
-/// Test double for `GitServiceProtocol`.
-actor MockGitService: GitServiceProtocol {
+/// Debug fallback for previews and local environment defaults.
+actor DebugGitService: GitServiceProtocol {
     var stubbedResult: GitStatusResult = .notARepo
-    var statusCallCount = 0
-
-    func setStubbed(_ result: GitStatusResult) { stubbedResult = result }
 
     func status(at directory: String) async throws -> GitStatusResult {
-        statusCallCount += 1
-        return stubbedResult
+        stubbedResult
     }
 
     var stubbedDiff: String?

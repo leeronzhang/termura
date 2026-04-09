@@ -17,7 +17,7 @@ enum TerminalLifecycleState: String, Sendable {
 
 /// Protocol abstracting the terminal PTY engine.
 /// @MainActor: implementations interact with the AppKit render layer.
-/// Implementations: LibghosttyEngine (live), MockTerminalEngine (tests).
+/// Implementations: LibghosttyEngine (live), DebugTerminalEngine (preview/debug).
 @MainActor
 protocol TerminalEngine: AnyObject, Sendable {
     /// Current operational state in the lifecycle.

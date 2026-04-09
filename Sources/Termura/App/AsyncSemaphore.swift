@@ -11,7 +11,7 @@ actor AsyncSemaphore {
         let id: UUID
         let continuation: CheckedContinuation<Void, Never>
     }
-    
+
     private var waiters: Deque<Suspension> = []
 
     /// Creates a semaphore with the given number of permits.

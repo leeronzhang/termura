@@ -90,11 +90,14 @@ final class ProjectCoordinator {
             let controller = ProjectWindowController(
                 projectContext: context,
                 themeManager: deps.appServices.themeManager,
-                fontSettings: deps.appServices.fontSettings
+                fontSettings: deps.appServices.fontSettings,
+                webViewPool: deps.appServices.webViewPool,
+                webRendererBridge: WebRendererBridge()
             )
             projectWindows[url] = controller
             activeContext = context
             controller.onWindowClose = { [weak self] in self?.closeProject(at: url) }
+            installLinkRouter(for: context, projectURL: url)
             // Fire the launch-time callback exactly once after the first window opens.
             if projectWindows.count == 1 {
                 onFirstProjectOpened?(context.commandRouter)
@@ -175,6 +178,10 @@ final class ProjectCoordinator {
     // MARK: - Private
 
     private func observeWindowFocus() {
+        // WHY: Track the active project context as window focus changes across project windows.
+        // OWNER: ProjectCoordinator stores this observer in windowObserver.
+        // TEARDOWN: deinit removes windowObserver through NotificationCenter.default.removeObserver(observer).
+        // TEST: Cover focus switching and observer cleanup when the coordinator is released.
         windowObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: nil,
@@ -195,6 +202,26 @@ final class ProjectCoordinator {
     private func persistOpenProjects() {
         let paths = projectWindows.keys.map(\.path)
         deps?.userDefaults.set(paths, forKey: AppConfig.UserDefaultsKeys.openProjectPaths)
+    }
+
+    /// Wires the LinkRouter so terminal Cmd+Click on `.md` files inside the project's
+    /// notes directory opens the corresponding internal note tab.
+    private func installLinkRouter(for context: ProjectContext, projectURL: URL) {
+        let notesDir = ProjectContext.notesDirectory(for: projectURL)
+        let linkRouter = LinkRouter()
+        linkRouter.notesDirectoryURL = notesDir
+        let notesVM = context.notesViewModel
+        let commandRouter = context.commandRouter
+        linkRouter.onOpenNoteByPath = { [weak notesVM, weak commandRouter] url in
+            Task { @MainActor in
+                guard let notesVM, let commandRouter else { return }
+                if let note = await notesVM.findNote(byFileURL: url) {
+                    commandRouter.pendingCommand = .openNoteTab(noteID: note.id)
+                }
+            }
+        }
+        GhosttyAppContext.linkRouter = linkRouter
+        GhosttyAppContext.currentWorkingDirectory = projectURL.path
     }
 
     private func setupChunkHandler(for context: ProjectContext) -> UUID {

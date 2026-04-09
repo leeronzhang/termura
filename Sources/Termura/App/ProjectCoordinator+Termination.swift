@@ -23,6 +23,10 @@ extension ProjectCoordinator {
         contexts: [ProjectContext],
         metricsFlush: (@Sendable () async -> Void)?
     ) {
+        // WHY: App termination must keep flush + handoff off MainActor while honoring a bounded shutdown path.
+        // OWNER: ProjectCoordinator owns this detached termination task via the app termination lifecycle.
+        // TEARDOWN: The surrounding termination reply path completes when this detached task finishes or times out.
+        // TEST: Cover successful flush, timeout fallback, and app-termination reply semantics.
         Task.detached {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {

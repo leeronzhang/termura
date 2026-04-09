@@ -2,15 +2,12 @@ import Foundation
 
 #if DEBUG
 
-/// Test double for `FileTreeServiceProtocol`.
-actor MockFileTreeService: FileTreeServiceProtocol {
+/// Debug fallback for previews and local environment defaults.
+actor DebugFileTreeService: FileTreeServiceProtocol {
     var stubbedTree: [FileTreeNode] = []
-    var scanCallCount = 0
-    var annotateCallCount = 0
 
     func scan(at projectRoot: String) -> [FileTreeNode] {
-        scanCallCount += 1
-        return stubbedTree
+        stubbedTree
     }
 
     func annotate(
@@ -18,8 +15,7 @@ actor MockFileTreeService: FileTreeServiceProtocol {
         with gitResult: GitStatusResult,
         trackedFiles: Set<String>
     ) -> [FileTreeNode] {
-        annotateCallCount += 1
-        return tree
+        tree
     }
 }
 

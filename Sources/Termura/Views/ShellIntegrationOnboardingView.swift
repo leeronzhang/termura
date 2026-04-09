@@ -3,6 +3,7 @@ import SwiftUI
 /// Sheet shown on first launch to guide the user through shell integration installation.
 /// Writes `UserDefaults` key `AppConfig.ShellIntegration.installedDefaultsKey` on success.
 struct ShellIntegrationOnboardingView: View {
+    @Environment(\.userDefaults) private var userDefaults
     @Binding var isPresented: Bool
     let installer: any ShellHookInstallerProtocol
 
@@ -135,7 +136,7 @@ struct ShellIntegrationOnboardingView: View {
         Task {
             do {
                 try await installer.install(into: shell)
-                UserDefaults.standard.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
+                userDefaults.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
                 installState = .done
                 try await Task.sleep(for: AppConfig.Runtime.onboardingDismissDelay)
                 isPresented = false
@@ -157,7 +158,7 @@ struct ShellIntegrationOnboardingView: View {
 #Preview("Shell Integration Onboarding") {
     ShellIntegrationOnboardingView(
         isPresented: .constant(true),
-        installer: MockShellHookInstaller()
+        installer: DebugShellHookInstaller()
     )
 }
 #endif

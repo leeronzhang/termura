@@ -1,8 +1,8 @@
 import Foundation
 
 #if DEBUG
-/// Test double for `TokenCountingServiceProtocol`.
-actor MockTokenCountingService: TokenCountingServiceProtocol {
+/// Debug preview stub for `TokenCountingServiceProtocol`.
+actor DebugTokenCountingService: TokenCountingServiceProtocol {
     var stubbedTokens: [SessionID: Int] = [:]
     var stubbedBreakdowns: [SessionID: TokenEstimateBreakdown] = [:]
     var accumulateInputCallCount = 0

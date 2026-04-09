@@ -25,6 +25,7 @@ enum NoteFrontmatter {
         let title: String
         let isFavorite: Bool
         let tags: [String]
+        let references: [String]
         let createdAt: Date
         let updatedAt: Date
         let body: String
@@ -39,6 +40,10 @@ enum NoteFrontmatter {
             let joined = input.tags.map { escapeYAMLString($0) }.joined(separator: ", ")
             lines.append("tags: [\(joined)]")
         }
+        if !input.references.isEmpty {
+            let joined = input.references.map { escapeYAMLString($0) }.joined(separator: ", ")
+            lines.append("references: [\(joined)]")
+        }
         lines.append("created: \(formatDate(input.createdAt))")
         lines.append("updated: \(formatDate(input.updatedAt))")
         lines.append(separator)
@@ -49,7 +54,8 @@ enum NoteFrontmatter {
     static func encode(record: NoteRecord) -> String {
         encode(EncodeInput(
             id: record.id, title: record.title, isFavorite: record.isFavorite,
-            tags: [], createdAt: record.createdAt, updatedAt: record.updatedAt,
+            tags: [], references: record.references,
+            createdAt: record.createdAt, updatedAt: record.updatedAt,
             body: record.body
         ))
     }
@@ -61,6 +67,7 @@ enum NoteFrontmatter {
         var title: String
         var isFavorite: Bool
         var tags: [String]
+        var references: [String]
         var createdAt: Date
         var updatedAt: Date
         var body: String
@@ -87,33 +94,32 @@ enum NoteFrontmatter {
 
         let title = kvPairs["title"] ?? ""
         let favorite = kvPairs["favorite"] == "true"
-        let tags = parseTags(kvPairs["tags"])
+        let tags = parseStringArray(kvPairs["tags"])
+        let references = parseStringArray(kvPairs["references"])
 
-        let createdAt: Date
-        if let raw = kvPairs["created"], let parsed = parseDate(raw) {
-            createdAt = parsed
+        let createdAt: Date = if let raw = kvPairs["created"], let parsed = parseDate(raw) {
+            parsed
         } else {
-            createdAt = Date()
+            Date()
         }
 
-        let updatedAt: Date
-        if let raw = kvPairs["updated"], let parsed = parseDate(raw) {
-            updatedAt = parsed
+        let updatedAt: Date = if let raw = kvPairs["updated"], let parsed = parseDate(raw) {
+            parsed
         } else {
-            updatedAt = Date()
+            Date()
         }
 
         let bodyStartIndex = lines.index(after: secondSep)
-        let body: String
-        if bodyStartIndex < lines.endIndex {
-            body = lines[bodyStartIndex...].joined(separator: "\n")
+        let body: String = if bodyStartIndex < lines.endIndex {
+            lines[bodyStartIndex...].joined(separator: "\n")
         } else {
-            body = ""
+            ""
         }
 
         return Decoded(
             id: NoteID(rawValue: uuid), title: title, isFavorite: favorite,
-            tags: tags, createdAt: createdAt, updatedAt: updatedAt, body: body
+            tags: tags, references: references,
+            createdAt: createdAt, updatedAt: updatedAt, body: body
         )
     }
 
@@ -131,12 +137,23 @@ enum NoteFrontmatter {
         return result
     }
 
-    private static func parseTags(_ raw: String?) -> [String] {
+    /// Parses a YAML inline array of strings: `[a, "b with comma", c]`.
+    /// Used for both `tags:` and `references:` fields.
+    private static func parseStringArray(_ raw: String?) -> [String] {
         guard let raw, !raw.isEmpty else { return [] }
         var s = raw
         if s.hasPrefix("[") { s = String(s.dropFirst()) }
         if s.hasSuffix("]") { s = String(s.dropLast()) }
-        return s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return s.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { unquote($0) }
+            .filter { !$0.isEmpty }
+    }
+
+    private static func unquote(_ s: String) -> String {
+        guard s.hasPrefix("\"") && s.hasSuffix("\"") && s.count >= 2 else { return s }
+        let inner = String(s.dropFirst().dropLast())
+        return inner.replacingOccurrences(of: "\\\"", with: "\"")
     }
 
     private static func escapeYAMLString(_ s: String) -> String {

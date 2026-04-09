@@ -138,6 +138,10 @@ struct DiffContentView: View {
                     .appendingPathComponent(filePath)
                     .standardized
                 let root = projectRoot
+                // WHY: Reading an untracked file for preview must leave MainActor but still enforce path containment.
+                // OWNER: The current diff load owns this detached read and awaits it inline.
+                // TEARDOWN: The detached task exits after one read attempt and does not outlive the load path.
+                // TEST: Cover untracked-file preview, traversal rejection, and read failure handling.
                 let content: String = try await Task.detached {
                     let resolvedFile = url.resolvingSymlinksInPath().path
                     let resolvedRoot = URL(fileURLWithPath: root).resolvingSymlinksInPath().path

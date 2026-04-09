@@ -9,13 +9,13 @@ import SwiftUI
 @MainActor
 private func makePreviewViewState() -> SessionViewState {
     let sessionID = SessionID()
-    let engine = MockTerminalEngine()
-    let agentStateStore = MockAgentStateStore()
+    let engine = DebugTerminalEngine()
+    let agentStateStore = DebugAgentStateStore()
     let sessionStore = SessionStore(
-        engineStore: TerminalEngineStore(factory: MockTerminalEngineFactory()),
-        repository: MockSessionRepository()
+        engineStore: TerminalEngineStore(factory: DebugTerminalEngineFactory()),
+        repository: DebugSessionRepository()
     )
-    let tokenService = MockTokenCountingService()
+    let tokenService = DebugTokenCountingService()
     let outputStore = OutputStore(sessionID: sessionID)
     let modeController = InputModeController()
     let agentCoordinator = AgentCoordinator(

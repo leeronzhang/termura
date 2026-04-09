@@ -15,4 +15,6 @@ enum OutputContentType: String, Sendable, Codable, CaseIterable {
     case toolCall
     /// Standard command output (ls, git status, etc.).
     case commandOutput
+    /// Markdown-formatted content (headings, lists, fenced code blocks).
+    case markdown
 }

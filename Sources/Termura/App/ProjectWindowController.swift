@@ -8,17 +8,23 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
     let projectContext: ProjectContext
     private let themeManager: ThemeManager
     private let fontSettings: FontSettings
+    private let webViewPool: any WebViewPoolProtocol
+    private let webRendererBridge: any WebRendererBridgeProtocol
     private let userDefaults: any UserDefaultsStoring
 
     init(
         projectContext: ProjectContext,
         themeManager: ThemeManager,
         fontSettings: FontSettings,
+        webViewPool: any WebViewPoolProtocol,
+        webRendererBridge: any WebRendererBridgeProtocol,
         userDefaults: any UserDefaultsStoring = UserDefaults.standard
     ) {
         self.projectContext = projectContext
         self.themeManager = themeManager
         self.fontSettings = fontSettings
+        self.webViewPool = webViewPool
+        self.webRendererBridge = webRendererBridge
         self.userDefaults = userDefaults
 
         let window = Self.makeWindow(title: projectContext.displayName)
@@ -27,7 +33,9 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         let rootView = ContentView(
             projectContext: projectContext,
             themeManager: themeManager,
-            fontSettings: fontSettings
+            fontSettings: fontSettings,
+            webViewPool: webViewPool,
+            webRendererBridge: webRendererBridge
         )
         let hostingController = NSHostingController(rootView: rootView)
         // Prevent SwiftUI from resizing the window to fit its content.
