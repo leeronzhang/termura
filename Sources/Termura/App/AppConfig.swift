@@ -21,223 +21,36 @@ enum AppConfig {
         static let maxSize: CGFloat = 28
     }
 
-    enum Terminal {
-        static let maxScrollbackLines = 10000
-        static let maxOutputChunksPerSession = 500
-        static let ptyColumns: UInt16 = 80
-        static let ptyRows: UInt16 = 24
-        /// Backpressure cap for PTY output / shell-event AsyncStreams.
-        /// Oldest events are dropped once the buffer is full; prevents unbounded memory growth
-        /// during high-throughput commands (e.g. `cat` on a large file).
-        static let streamBufferCapacity = 512
-        /// Debounce window before sending SIGWINCH after a layout change.
-        /// Prevents spurious double-resize when SwiftUI rebuilds the terminal view tree
-        /// during a session switch (first layout pass fires with a transient wrong size,
-        /// second pass fires with the correct size; only the second should send SIGWINCH).
-        static let resizeDebounce: Duration = .milliseconds(16)
-    }
-
-    enum Runtime {
-        /// Search debounce (Combine scheduler requires Double; keep as seconds)
-        static let searchDebounceSeconds: Double = 0.3
-        /// Notes auto-save debounce
-        static let notesAutoSave: Duration = .seconds(1)
-        /// Debounce before persisting session metadata changes (rename, working directory).
-        /// Intentionally separate from notesAutoSave so each can be tuned independently.
-        static let sessionMetadataDebounce: Duration = .seconds(1)
-        /// Maximum concurrent background tasks per terminal session.
-        /// Bounds CPU/memory usage during high-frequency output (e.g. `cat` large file).
-        static let maxConcurrentSessionTasks = 8
-        /// Queue depth multiplier for BoundedTaskExecutor.isAtCapacity.
-        /// When tracked.count >= maxConcurrent * this value, incoming output batches
-        /// are coalesced into a pending buffer instead of spawning a new task,
-        /// preventing unbounded task accumulation during PTY floods.
-        static let taskQueueDepthMultiplier = 4
-        /// Long command notification threshold
-        static let longCommandThresholdSeconds: Double = 30.0
-        /// Maximum time (seconds) to wait for DB flush + handoff during app termination.
-        /// If the deadline is exceeded the app still calls reply(toApplicationShouldTerminate:)
-        /// rather than hanging until the OS force-kills the process.
-        static let terminationFlushTimeoutSeconds: Double = 2.0
-        /// Visor animation duration
-        static let visorAnimationSeconds: Double = 0.2
-        /// Delay before dismissing onboarding sheet after install.
-        static let onboardingDismissDelay: Duration = .seconds(1)
-        /// Auto-dismiss duration for transient toast banners (e.g. "Saved to Notes").
-        static let toastAutoDismiss: Duration = .seconds(2)
-        /// Minimum interval between SessionMetadata UI refreshes during streaming output.
-        /// Prevents per-packet SwiftUI redraws during high-throughput terminal output.
-        static let metadataRefreshThrottleSeconds: Double = 0.5
-        /// Debounce before forking a PTY when activating a session without an existing engine.
-        /// Prevents a PTY fork storm when the user rapidly clicks through the session list:
-        /// only the session the user actually settles on creates a shell process.
-        static let engineCreationDebounce: Duration = .milliseconds(120)
-        /// Tick interval for AgentStateStore.now, which drives elapsed-duration display in sidebar
-        /// and agent dashboard. 1s granularity matches the coarsest unit MetadataFormatter emits.
-        static let agentDurationTickSeconds: Double = 1.0
-    }
-
-    enum SLO {
-        /// Launch time P95 target: < 2s
-        static let launchSeconds: Double = 2.0
-        /// Session switch target: < 100ms
-        static let sessionSwitchSeconds: Double = 0.1
-        /// Full-text search P99 target: < 200ms
-        static let searchSeconds: Double = 0.2
-        /// Terminal input latency target: < 16ms (1 frame)
-        static let inputLatencySeconds: Double = 0.016
-    }
-
     enum Input {
         static let historyCapacity = 200
     }
 
     enum Notes {
         static let maxTitleLength = 200
-        /// Subdirectory under .termura/ for Markdown note files.
-        static let notesDirectoryName = "notes"
+        /// Legacy single-folder location: `<project>/.termura/notes/`.
+        /// Used only by KnowledgeStructureMigrationService to detect old layouts to migrate.
+        /// New code should use `AppConfig.Knowledge.notesSubdirectory` under `Knowledge.directoryName`.
+        static let legacyNotesDirectoryName = "notes"
         /// Maximum slug length in note filenames.
         static let maxSlugLength = 50
         /// Debounce window for file-system watcher events on the notes directory.
         static let fileWatchDebounce: Duration = .milliseconds(500)
     }
 
-    enum Persistence {
-        static let databaseFileName = "termura.db"
-        static let directoryName = ".termura"
-        static let snapshotMaxLines = 1000
-        static let snapshotCompressionKey = "lzfse"
-        /// Maximum IDs per reorder batch.
-        /// SQLite SQLITE_LIMIT_VARIABLE_NUMBER defaults to 999.
-        /// Each row consumes 3 bindings (2 in CASE WHEN + 1 in IN), so floor(999 / 3) = 333.
-        static let reorderBatchSize = 333
-        /// Maximum IDs per IN-clause batch (1 binding per ID).
-        /// Stays well below SQLite's SQLITE_LIMIT_VARIABLE_NUMBER = 999.
-        static let inClauseBatchSize = 500
-    }
-
-    enum AI {
-        /// ASCII chars per token (4 ASCII bytes ≈ 1 BPE token for English/code text).
-        static let asciiCharsPerToken = 4
-        /// Non-CJK, non-ASCII chars per token (Cyrillic, Arabic, Latin-extended, etc.).
-        static let otherUnicodeCharsPerToken = 2
-        // CJK/Hiragana/Katakana/Hangul: 1 char per token — see estimateTokens(in:).
-    }
-
-    /// Per-million-token pricing for heuristic cost estimation.
-    /// Prices are approximate as of early 2026; update when models change.
-    /// Note: Aider derives cost directly from its output — these are fallbacks only.
-    enum CostEstimation {
-        // Anthropic Claude (claude-sonnet-4 / claude-haiku-4)
-        static let claudeInputPerMillion: Double = 3.0
-        static let claudeOutputPerMillion: Double = 15.0
-        static let claudeCacheReadPerMillion: Double = 0.30
-
-        // OpenAI Codex / GPT-4o
-        static let codexInputPerMillion: Double = 2.50
-        static let codexOutputPerMillion: Double = 10.0
-
-        // Google Gemini 2.0 Flash (most common Gemini CLI model, paid tier)
-        static let geminiInputPerMillion: Double = 0.075
-        static let geminiOutputPerMillion: Double = 0.30
-
-        // Aider uses the underlying model — default to GPT-4o rates as a heuristic
-        static let aiderDefaultInputPerMillion: Double = 2.50
-        static let aiderDefaultOutputPerMillion: Double = 10.0
-
-        // Generic fallback
-        static let defaultInputPerMillion: Double = 3.0
-        static let defaultOutputPerMillion: Double = 15.0
-
-        /// UserDefaults key: when true, cost row is hidden in Inspector (subscription billing).
-        static let subscriptionModeKey = "costDisplay.subscriptionMode"
-    }
-
-    enum ContextWindow {
-        static let claudeCodeLimit = 200_000
-        static let codexLimit = 128_000
-        static let aiderLimit = 128_000
-        static let openCodeLimit = 128_000
-        static let piLimit = 128_000
-        static let geminiLimit = 1_000_000
-        static let unknownLimit = 100_000
-        /// Fraction of context window at which to show a warning.
-        static let warningThreshold: Double = 0.8
-        /// Fraction of context window at which to show a critical alert.
-        static let criticalThreshold: Double = 0.95
-        /// Minimum interval between context window notifications (seconds).
-        static let notificationCooldownSeconds: Double = 60.0
-    }
-
-    enum UI {
-        static let sidebarMinWidth: Double = 220
-        static let sidebarMaxWidth: Double = 480
-        static let sidebarDefaultWidth: Double = 360
-        /// Width below which dragging the divider collapses the sidebar (same effect as Cmd+B).
-        static let sidebarCollapseThreshold: Double = 220
-        static let metadataBarHeight: Double = 28
-        static let metadataPanelWidth: Double = 280
-        static let metadataPanelMinWidth: Double = 120
-        static let metadataPanelMaxWidth: Double = 300
-        static let dualPaneMinWidth: Double = 300
-        static let tokenProgressWarningFraction: Double = 0.8
-        static let editorMinHeightPoints: Double = 72
-        static let editorMaxHeightPoints: Double = 300
-        /// Delay after exiting full screen before repositioning traffic lights (100ms).
-        static let fullScreenExitDelay: Duration = .milliseconds(100)
-        /// Delay before window configuration after launch (50ms).
-        static let windowConfigDelay: Duration = .milliseconds(50)
-        /// Delay before focusing editor on appear (50ms).
-        static let editorFocusDelay: Duration = .milliseconds(50)
-        /// Delay before prompt recheck after terminal data (100ms).
-        static let promptRecheckDelay: Duration = .milliseconds(100)
-        /// Fraction of context window at which token progress turns red.
-        static let tokenProgressCriticalFraction: Double = 0.9
-        /// Animation duration for traffic light fade-in after full-screen exit.
-        static let trafficLightFadeSeconds: Double = 0.2
-        /// Height of the project path bar in points.
-        static let projectPathBarHeight: Double = 32
-        /// Visor panel height as a fraction of screen height.
-        static let visorPanelHeightFraction: Double = 0.55
-        /// Indentation per nesting level in the file tree sidebar (points).
-        static let fileTreeIndentPerLevel: Double = 16
-        /// Chevron indicator width in file tree rows (points).
-        static let fileTreeChevronWidth: Double = 12
-        /// Content tab bar height (points, excluding title bar inset).
-        static let contentTabBarHeight: Double = 44
-        /// Debounce delay before persisting file-tree expansion state (300ms).
-        static let expansionPersistDebounce: Duration = .milliseconds(300)
-        /// Scale factor for agent icon relative to the size parameter.
-        static let agentIconScaleFactor: Double = 0.75
-        /// Delay before toggling fullscreen when restoring window state on launch (200ms).
-        /// Gives the window time to become key before the fullscreen animation starts.
-        static let fullScreenRestoreDelay: Duration = .milliseconds(200)
-    }
-
-    enum ShellIntegration {
-        static let hookSentinelComment = "# termura-shell-integration"
-        static let shellScriptFileName = "termura.sh"
-        static let shellScriptDirectory = ".termura/shell"
-        static let installedDefaultsKey = "shellIntegrationInstalled"
-    }
-
-    enum Output {
-        static let maxChunksPerSession = 500
-        static let maxChunkOutputChars = 200_000
-        static let ansiStripBatchSize = 4096
-        /// Regex pattern matching shell prompt line endings (zsh/bash/fish/sh).
-        /// Matches lines ending with $, %, #, or > optionally followed by whitespace.
-        static let fallbackPromptPattern = ".*[$%#>]\\s*$"
-        /// AI tool prompt pattern for Claude Code / Aider style prompts.
-        /// Matches `>` (U+003E), U+276F, or U+203A as a bare prompt line.
-        static let aiToolPromptPattern = "^[>\u{276F}\u{203A}]\\s*$"
-        /// Prefix character limit for diff detection heuristic.
-        static let diffDetectionPrefixLength = 2000
-        /// Prefix character limit for error detection heuristic.
-        static let errorDetectionPrefixLength = 3000
-        /// Prefix character limit for tool-call detection heuristic.
-        static let toolCallDetectionPrefixLength = 500
-        static let classifyPrefixLength = max(diffDetectionPrefixLength, errorDetectionPrefixLength, toolCallDetectionPrefixLength)
+    /// Knowledge management directory layout under `<project>/.termura/`.
+    /// Three-tier structure: sources (raw inputs), log (agent conversations),
+    /// notes (curated outputs), plus shared attachments.
+    enum Knowledge {
+        /// Top-level container under `.termura/`.
+        static let directoryName = "knowledge"
+        /// Curated notes — the user/agent-edited markdown layer.
+        static let notesSubdirectory = "notes"
+        /// Raw input materials (articles, PDFs, screenshots, datasets).
+        static let sourcesSubdirectory = "sources"
+        /// Human ↔ AI conversation logs (filled by P2 capture).
+        static let logSubdirectory = "log"
+        /// Cross-note shared resources (images, diagrams, data).
+        static let attachmentsSubdirectory = "attachments"
     }
 
     enum Search {
@@ -253,5 +66,29 @@ enum AppConfig {
         /// Schemes that may be opened from terminal output (OSC 8 / plain-text detection).
         /// Any URL whose scheme is not in this set is silently blocked.
         static let allowedTerminalSchemes: Set<String> = ["https", "http", "file", "mailto"]
+    }
+
+    // MARK: - Link Routing
+
+    enum LinkRouting {
+        /// UserDefaults key for link open mode preference.
+        static let linkOpenModeKey = "linkRouting.openMode"
+        /// Default link open mode: "internal" opens in-app, "external" opens in system browser.
+        static let defaultOpenMode = "internal"
+
+        /// File extensions routed to the internal CodeEditorView.
+        static let codeExtensions: Set<String> = [
+            "swift", "ts", "tsx", "js", "jsx", "py", "rs", "go",
+            "rb", "java", "kt", "c", "cpp", "h", "m", "mm",
+            "css", "json", "yaml", "yml", "toml"
+        ]
+        /// File extensions routed to the internal Markdown/rich render panel.
+        static let markdownExtensions: Set<String> = ["md", "markdown", "mdx"]
+        /// File extensions routed to the internal image/PDF preview.
+        static let previewExtensions: Set<String> = [
+            "png", "jpg", "jpeg", "gif", "svg", "pdf", "webp"
+        ]
+        /// File extensions loaded directly in the Panel WebView.
+        static let webExtensions: Set<String> = ["html", "htm"]
     }
 }
