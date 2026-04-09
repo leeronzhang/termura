@@ -25,27 +25,11 @@ struct SessionRowView: View {
 
     @State private var isEditing = false
     @State private var editTitle = ""
-    @State private var isHovered = false
-    @State private var glowOpacity: Double = 0.0
-    @Environment(\.themeManager) private var themeManager
+    @State var isHovered = false
+    @State var glowOpacity: Double = 0.0
+    @Environment(\.themeManager) var themeManager
 
-    private var isWaiting: Bool { agentStatus == .waitingInput }
-
-    private var accessibilityStatusValue: String {
-        var parts: [String] = []
-        if isActive {
-            parts.append("Active")
-        } else if isInSplit {
-            parts.append("In split view")
-        } else if session.isEnded {
-            parts.append("Ended")
-        }
-        if let type = agentType, type != .unknown { parts.append(type.displayName) }
-        if let status = agentStatus { parts.append(status.rawValue) }
-        if let tokens = tokenSummary { parts.append("\(tokens) tokens") }
-        if let duration = durationText { parts.append(duration) }
-        return parts.joined(separator: ", ")
-    }
+    var isWaiting: Bool { agentStatus == .waitingInput }
 
     var body: some View {
         HStack(alignment: .top, spacing: AppUI.Spacing.smMd) {
@@ -194,34 +178,6 @@ struct SessionRowView: View {
         .foregroundColor(themeManager.current.sidebarText.opacity(AppUI.Opacity.tertiary))
     }
 
-    private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: AppUI.Radius.md)
-            .fill(rowFillColor)
-    }
-
-    private var rowFillColor: Color {
-        if isActive {
-            return Color.accentColor.opacity(AppUI.Opacity.selected)
-        } else if isInSplit {
-            return Color.accentColor.opacity(AppUI.Opacity.whisper)
-        } else if isHovered {
-            return themeManager.current.sidebarText.opacity(AppUI.Opacity.whisper)
-        }
-        return .clear
-    }
-
-    private var glowBorder: some View {
-        let borderColor = if isActive {
-            Color.accentColor.opacity(AppUI.Opacity.border)
-        } else if isInSplit {
-            Color.accentColor.opacity(AppUI.Opacity.whisper)
-        } else {
-            Color.accentColor.opacity(glowOpacity)
-        }
-        return RoundedRectangle(cornerRadius: AppUI.Radius.md)
-            .stroke(borderColor, lineWidth: 1)
-    }
-
     // MARK: - Edit helpers
 
     private func beginEditing() {
@@ -238,18 +194,6 @@ struct SessionRowView: View {
 
     private func cancelEdit() {
         isEditing = false
-    }
-
-    private func colorForLabel(_ label: SessionColorLabel) -> Color {
-        switch label {
-        case .none: .clear
-        case .red: .red
-        case .orange: .orange
-        case .yellow: .yellow
-        case .green: .green
-        case .blue: .blue
-        case .purple: .purple
-        }
     }
 }
 

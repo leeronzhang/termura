@@ -47,18 +47,19 @@ final class ProjectViewModel {
     }
 
     private let gitService: any GitServiceProtocol
-    private let clock: any AppClock
+    let clock: any AppClock
     private let fileTreeService: any FileTreeServiceProtocol
     private let projectRoot: String
-    private let userDefaults: any UserDefaultsStoring
-    private let treeManager: FileTreeManager
+    let userDefaults: any UserDefaultsStoring
+    private let notificationCenter: any NotificationCenterObserving
+    let treeManager: FileTreeManager
     private var commandRouter: CommandRouter?
     private var chunkHandlerToken: UUID?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var appActiveObserver: (any NSObjectProtocol)?
-    @ObservationIgnored private var debounceTask: Task<Void, Never>?
-    @ObservationIgnored private var persistTask: Task<Void, Never>?
-    private var hasRestoredExpandState = false
+    @ObservationIgnored var debounceTask: Task<Void, Never>?
+    @ObservationIgnored var persistTask: Task<Void, Never>?
+    var hasRestoredExpandState = false
 
     init(
         gitService: any GitServiceProtocol,
@@ -66,7 +67,8 @@ final class ProjectViewModel {
         commandRouter: CommandRouter? = nil,
         fileTreeService: any FileTreeServiceProtocol = FileTreeService(),
         clock: any AppClock = LiveClock(),
-        userDefaults: any UserDefaultsStoring = UserDefaults.standard
+        userDefaults: any UserDefaultsStoring = GlobalEnvironmentDefaults.userDefaults,
+        notificationCenter: any NotificationCenterObserving = GlobalEnvironmentDefaults.notificationCenter
     ) {
         self.gitService = gitService
         self.projectRoot = projectRoot
@@ -74,6 +76,7 @@ final class ProjectViewModel {
         self.fileTreeService = fileTreeService
         self.clock = clock
         self.userDefaults = userDefaults
+        self.notificationCenter = notificationCenter
         treeManager = FileTreeManager(expandedNodeIDs: [], hideIgnoredFiles: true)
         restoreExpandedIDs()
         setupObservers()
@@ -87,7 +90,7 @@ final class ProjectViewModel {
 
     func tearDown() {
         if let observer = appActiveObserver {
-            NotificationCenter.default.removeObserver(observer)
+            notificationCenter.removeObserver(observer)
         }
         appActiveObserver = nil
         if let token = chunkHandlerToken {
@@ -214,66 +217,16 @@ final class ProjectViewModel {
         }
 
         // Refresh when the app becomes active (user may have edited files externally).
-        appActiveObserver = NotificationCenter.default.addObserver(
+        // WHY: Project state must refresh when the app regains focus after external file changes.
+        // OWNER: ProjectViewModel stores this observer in appActiveObserver.
+        // TEARDOWN: deinit removes appActiveObserver from NotificationCenter.
+        // TEST: Cover app activation triggering refresh and observer cleanup on teardown.
+        appActiveObserver = notificationCenter.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main // Sync body — .main + assumeIsolated avoids a Task allocation.
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
-        }
-    }
-
-    // MARK: - Expansion Persistence
-
-    private var expandedIDsKey: String {
-        AppConfig.UserDefaultsKeys.fileTreeExpandedIDs(projectRoot: projectRoot)
-    }
-
-    private var hideIgnoredKey: String {
-        AppConfig.UserDefaultsKeys.fileTreeHideIgnored(projectRoot: projectRoot)
-    }
-
-    private func persistExpandedIDs() {
-        persistTask?.cancel()
-        persistTask = Task { [weak self] in
-            do {
-                try await self?.clock.sleep(for: AppConfig.UI.expansionPersistDebounce)
-            } catch is CancellationError {
-                // CancellationError is expected — a newer expansion event supersedes this persist.
-                return
-            } catch {
-                logger.debug("Expansion persist debounce interrupted: \(error.localizedDescription)")
-                return
-            }
-            guard let self, !Task.isCancelled else { return }
-            userDefaults.set(Array(expandedNodeIDs), forKey: expandedIDsKey)
-        }
-    }
-
-    private func restoreExpandedIDs() {
-        if let saved = userDefaults.stringArray(forKey: expandedIDsKey) {
-            treeManager.setExpandedNodeIDs(Set(saved))
-            hasRestoredExpandState = !saved.isEmpty
-        }
-        // Restore ignore filter (defaults to true if not set)
-        if userDefaults.object(forKey: hideIgnoredKey) != nil {
-            treeManager.setHideIgnoredFiles(userDefaults.bool(forKey: hideIgnoredKey))
-        }
-    }
-
-    private func debouncedRefresh() {
-        debounceTask?.cancel()
-        debounceTask = Task { [weak self] in
-            do {
-                try await self?.clock.sleep(for: AppConfig.Git.refreshDebounce)
-            } catch is CancellationError {
-                // CancellationError is expected — a newer refresh event supersedes this one.
-                return
-            } catch {
-                logger.warning("Git refresh debounce interrupted: \(error.localizedDescription)")
-                return
-            }
-            self?.refresh()
         }
     }
 }

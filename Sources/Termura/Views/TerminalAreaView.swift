@@ -27,6 +27,7 @@ struct TerminalAreaView: View {
     @Environment(\.themeManager) var themeManager
     @Environment(\.fontSettings) var fontSettings
     @Environment(\.notesViewModel) var notesViewModel
+    @Environment(\.fileManager) var fileManager
     /// Per-session state container — owned by `SessionViewStateManager`.
     /// `@Bindable` enables `$state.viewModel.pendingRiskAlert` binding syntax
     /// while `@Observable` on SessionViewState handles automatic re-renders.
@@ -82,54 +83,6 @@ struct TerminalAreaView: View {
             .onChange(of: sessionScope.store.sessions.count) { old, new in
                 registerNewBranchMarkers(oldCount: old, newCount: new)
             }
-    }
-
-    // MARK: - Bottom overlays
-
-    /// Notes silent-capture toast — only shown in the focused pane in dual-pane mode.
-    @ViewBuilder
-    private var notesOverlay: some View {
-        if let message = notesViewModel.toastMessage,
-           !commandRouter.isDualPaneActive || isFocusedPane {
-            Button {
-                notesViewModel.toastMessage = nil
-                commandRouter.pendingCommand = .openLastSilentNote
-            } label: {
-                Text(message)
-                    .font(AppUI.Font.bodyMedium)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, AppUI.Spacing.xxl)
-                    .padding(.vertical, AppUI.Spacing.md)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AppUI.Spacing.md))
-            }
-            .buttonStyle(.plain)
-            .padding(.bottom, AppUI.Spacing.xxl)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    @ViewBuilder
-    private var riskAlertOverlay: some View {
-        if let risk = state.viewModel.pendingRiskAlert {
-            RiskAlertBannerView(
-                alert: risk,
-                onStopAgent: {
-                    state.viewModel.dismissRiskAlert()
-                    let eng = engine
-                    Task { await eng.send("\u{03}") }
-                },
-                onAllow: { state.viewModel.dismissRiskAlert() }
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var contextWindowOverlay: some View {
-        if let alert = state.viewModel.contextWindowAlert {
-            ContextWindowAlertView(alert: alert) {
-                state.viewModel.contextWindowAlert = nil
-            }
-        }
     }
 
     private func registerNewBranchMarkers(oldCount: Int, newCount: Int) {
@@ -253,10 +206,15 @@ struct TerminalAreaView: View {
         let path = URL(fileURLWithPath: root)
             .appendingPathComponent(AppConfig.SessionHandoff.directoryName)
             .appendingPathComponent(AppConfig.SessionHandoff.contextFileName).path
+        let fileManager = fileManager
         // Lifecycle: one-shot cosmetic check. fileExists is a synchronous stat(2) syscall
         // that can block on network mounts or under I/O pressure — must not run on MainActor.
+        // WHY: Context-file existence is a blocking stat call and should not pause UI rendering.
+        // OWNER: refreshContextFileExists launches this one-shot detached check.
+        // TEARDOWN: The detached task exits after one lookup and posts the result back to MainActor.
+        // TEST: Cover context file appearing/disappearing while the view remains active.
         Task.detached { [path] in
-            let exists = FileManager.default.fileExists(atPath: path)
+            let exists = fileManager.fileExists(atPath: path)
             await MainActor.run { localUI.contextFileExists = exists }
         }
     }

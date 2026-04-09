@@ -27,12 +27,12 @@ extension MainView {
             persistLogger.warning("Failed to encode open tabs: \(error.localizedDescription)")
             return
         }
-        UserDefaults.standard.set(data, forKey: tabsDefaultsKey)
+        userDefaults.set(data, forKey: tabsDefaultsKey)
         if let tab = selectedContentTab {
             let selectedKey = AppConfig.UserDefaultsKeys.openTabsSelected(
                 projectRoot: sessionStore.projectRoot ?? "default"
             )
-            UserDefaults.standard.set(tab.id, forKey: selectedKey)
+            userDefaults.set(tab.id, forKey: selectedKey)
         }
         // Persist per-sidebar tab memory so sidebar restore works across launches.
         let memoryKey = AppConfig.UserDefaultsKeys.sidebarTabMemory(
@@ -41,7 +41,7 @@ extension MainView {
         let sidebarMemory: [String: String] = lastContentTabBySidebarTab.reduce(into: [:]) { result, pair in
             result[pair.key.rawValue] = pair.value.id
         }
-        UserDefaults.standard.set(sidebarMemory, forKey: memoryKey)
+        userDefaults.set(sidebarMemory, forKey: memoryKey)
     }
 
     // MARK: - Sidebar tab ↔ content tab sync
@@ -115,106 +115,24 @@ extension MainView {
         }
     }
 
-    // MARK: - Per-sidebar restore
+    // MARK: - Helpers
 
     /// Finds the live tab instance from openTabs or terminalItems matching the saved id.
     /// The saved copy in lastContentTabBySidebarTab may have stale titles; the live copy is authoritative.
-    private func findLiveTab(matching saved: ContentTab) -> ContentTab? {
+    func findLiveTab(matching saved: ContentTab) -> ContentTab? {
         tabManager.openTabs.first(where: { $0.id == saved.id })
             ?? tabManager.terminalItems.first(where: { $0.id == saved.id })
     }
 
-    /// Sessions: restore the last terminal/split tab, or fall back to the active terminal.
-    /// Sessions should never show empty state as long as at least one session exists.
-    private func restoreSessionsTab() {
-        if let saved = lastContentTabBySidebarTab[.sessions],
-           saved.isTerminal || saved.isSplit,
-           let live = findLiveTab(matching: saved) {
-            selectAndActivate(live, for: .sessions)
-            return
-        }
-        // Fall back to the active terminal session.
-        let activeTab = sessionStore.activeSessionID.flatMap { activeID in
-            terminalItems.first(where: { $0.containsSession(activeID) })
-        } ?? terminalItems.first
-        if let tab = activeTab {
-            selectAndActivate(tab, for: .sessions)
-        } else {
-            sidebarShowsEmpty.insert(.sessions)
-        }
-    }
-
-    /// Notes: restore saved → scan open note tabs → auto-open first note → empty.
-    private func restoreNotesTab() {
-        if let saved = lastContentTabBySidebarTab[.notes],
-           let live = findLiveTab(matching: saved) {
-            selectAndActivate(live, for: .notes)
-            return
-        }
-        // Fallback: any open note tab.
-        if let noteTab = tabManager.openTabs.last(where: { $0.isNote }) {
-            selectAndActivate(noteTab, for: .notes)
-            return
-        }
-        // Auto-open the most recent note (may be empty if notes load asynchronously).
-        if let recent = notesViewModel.notes.first {
-            tabManager.openNoteTab(noteID: recent.id, title: recent.title)
-            sidebarShowsEmpty.remove(.notes)
-            return
-        }
-        sidebarShowsEmpty.insert(.notes)
-    }
-
     /// Whether a file tab is a harness rule file (CLAUDE.md, AGENTS.md, etc.).
-    private func isHarnessRuleFile(_ tab: ContentTab) -> Bool {
+    func isHarnessRuleFile(_ tab: ContentTab) -> Bool {
         guard let path = tab.filePath else { return false }
         let name = URL(fileURLWithPath: path).lastPathComponent
         return AppConfig.Harness.supportedRuleFiles.contains(name)
     }
 
-    /// Project: restore saved tab or empty state. Skips harness rule files.
-    private func restoreProjectTab() {
-        if let saved = lastContentTabBySidebarTab[.project],
-           saved.isProjectContent,
-           !isHarnessRuleFile(saved),
-           let live = findLiveTab(matching: saved) {
-            selectAndActivate(live, for: .project)
-            return
-        }
-        sidebarShowsEmpty.insert(.project)
-    }
-
-    /// Harness: restore saved tab or empty state.
-    private func restoreHarnessTab() {
-        if let saved = lastContentTabBySidebarTab[.harness],
-           let live = findLiveTab(matching: saved) {
-            selectAndActivate(live, for: .harness)
-            return
-        }
-        sidebarShowsEmpty.insert(.harness)
-    }
-
-    /// Selects the tab, clears empty state, and activates the session if applicable.
-    private func selectAndActivate(_ tab: ContentTab, for sidebar: SidebarTab) {
-        sidebarShowsEmpty.remove(sidebar)
-        tabManager.selectedContentTab = tab
-        activateRestoredSession(tab)
-    }
-
-    /// Sync activeSessionID when restoring a terminal or split tab.
-    private func activateRestoredSession(_ tab: ContentTab) {
-        switch tab {
-        case let .terminal(sid, _):
-            sessionStore.activateSession(id: sid)
-        case let .split(left, right, _, _):
-            sessionStore.activateSession(id: tabManager.focusedSlot == .left ? left : right)
-        default:
-            break
-        }
-    }
-
     func restoreOpenTabs() {
-        guard let data = UserDefaults.standard.data(forKey: tabsDefaultsKey) else { return }
+        guard let data = userDefaults.data(forKey: tabsDefaultsKey) else { return }
         let restored: [ContentTab]
         do {
             restored = try JSONDecoder().decode([ContentTab].self, from: data)
@@ -233,7 +151,7 @@ extension MainView {
         let selectedKey = AppConfig.UserDefaultsKeys.openTabsSelected(
             projectRoot: sessionStore.projectRoot ?? "default"
         )
-        if let selectedID = UserDefaults.standard.string(forKey: selectedKey),
+        if let selectedID = userDefaults.string(forKey: selectedKey),
            let match = tabManager.terminalItems.first(where: { $0.id == selectedID }) ??
            tabManager.openTabs.first(where: { $0.id == selectedID }) {
             tabManager.selectedContentTab = match
@@ -242,7 +160,7 @@ extension MainView {
         let memoryKey = AppConfig.UserDefaultsKeys.sidebarTabMemory(
             projectRoot: sessionStore.projectRoot ?? "default"
         )
-        if let memory = UserDefaults.standard.dictionary(forKey: memoryKey) as? [String: String] {
+        if let memory = userDefaults.dictionary(forKey: memoryKey) as? [String: String] {
             for (sidebarRaw, tabID) in memory {
                 guard let sidebar = SidebarTab(rawValue: sidebarRaw) else { continue }
                 if let tab = tabManager.openTabs.first(where: { $0.id == tabID })
