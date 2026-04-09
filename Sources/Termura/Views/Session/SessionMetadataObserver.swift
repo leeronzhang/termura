@@ -78,7 +78,7 @@ final class SessionMetadataObserver {
         let service = outputProcessor.tokenCountingService
         let sid = sessionID
         let breakdown = await service.tokenBreakdown(for: sid)
-        let tokens = breakdown.inputTokens + breakdown.cachedTokens
+        let tokens = breakdown.inputTokens + breakdown.outputTokens + breakdown.cachedTokens
         let elapsed = clock.now().timeIntervalSince(viewModel.sessionStartTime)
         let cmdCount = outputProcessor.outputStore.chunks.count
         let dir = workingDirectory ?? viewModel.currentMetadata.workingDirectory
