@@ -15,6 +15,10 @@
   <a href="#termura-中文">中文版</a>
 </p>
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="Termura screenshot" width="900">
+</p>
+
 ---
 
 ## Features
