@@ -132,7 +132,7 @@ struct MarkdownFileView: View {
                 viewMode = viewMode == .edit ? .reading : .edit
             }
         } label: {
-            Image(systemName: viewMode == .edit ? "eye" : "square.and.pencil")
+            Image(systemName: viewMode == .edit ? "eye" : "highlighter")
                 .font(AppUI.Font.body)
                 .foregroundColor(.secondary)
         }
