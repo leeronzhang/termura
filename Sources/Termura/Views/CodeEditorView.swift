@@ -173,56 +173,6 @@ struct CodeEditorView: View {
     }
 }
 
-// MARK: - Binding-backed editor (for notes stored in GRDB)
-
-/// Editable code viewer backed by a text Binding (no file I/O).
-/// Used for notes whose content lives in the database.
-struct NoteEditorView: View {
-    let title: String
-    let filePath: String?
-    @Binding var text: String
-    @Environment(\.fontSettings) var fontSettings
-
-    @State private var isModified = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            noteEditorPathBar
-            Divider()
-            CodeEditorTextViewRepresentable(
-                text: $text,
-                isModified: $isModified,
-                onSave: {},
-                fontFamily: fontSettings.terminalFontFamily,
-                fontSize: fontSettings.editorFontSize,
-                language: "markdown"
-            )
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var noteEditorPathBar: some View {
-        HStack(spacing: AppUI.Spacing.md) {
-            if let filePath {
-                Button {
-                    NSWorkspace.shared.selectFile(filePath, inFileViewerRootedAtPath: "")
-                } label: {
-                    Text(MetadataFormatter.abbreviateDirectory(filePath))
-                        .font(AppUI.Font.pathMono)
-                        .foregroundColor(.secondary.opacity(AppUI.Opacity.strong))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .buttonStyle(.plain)
-                .help("Show in Finder")
-            }
-            Spacer()
-        }
-        .padding(.horizontal, AppUI.Spacing.xxl)
-        .padding(.vertical, AppUI.Spacing.mdLg)
-    }
-}
-
 // MARK: - Shared error view
 
 private func editorErrorView(_ message: String) -> some View {

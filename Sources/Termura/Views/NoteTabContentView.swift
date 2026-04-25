@@ -12,6 +12,7 @@ struct NoteTabContentView: View {
     @Environment(\.themeManager) var themeManager
     @Environment(\.webViewPool) var webViewPool
     @Environment(\.webRendererBridge) var webRendererBridge
+    @Environment(\.fontSettings) var fontSettings
     var notes: Bindable<NotesViewModel>
     let onTitleChange: (NoteID, String) -> Void
 
@@ -45,10 +46,13 @@ struct NoteTabContentView: View {
     private var content: some View {
         switch viewMode {
         case .edit:
-            NoteEditorView(
-                title: notesViewModel.editingTitle,
-                filePath: notesViewModel.selectedNoteFilePath,
-                text: notes.editingBody
+            CodeEditorTextViewRepresentable(
+                text: notes.editingBody,
+                isModified: .constant(false),
+                onSave: {},
+                fontFamily: fontSettings.terminalFontFamily,
+                fontSize: fontSettings.editorFontSize,
+                language: "markdown"
             )
         case .reading:
             NoteRenderedView(
@@ -64,13 +68,14 @@ struct NoteTabContentView: View {
     }
 
     private var noteHeader: some View {
-        HStack(spacing: AppUI.Spacing.md) {
+        HStack(spacing: 0) {
             TextField("Title", text: notes.editingTitle)
                 .font(AppUI.Font.title1Semibold)
                 .textFieldStyle(.plain)
                 .focused($isTitleFocused)
             Spacer()
             noteModeToggle
+            Spacer().frame(width: AppUI.Spacing.xxl)
             noteFavoriteButton
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
@@ -84,7 +89,7 @@ struct NoteTabContentView: View {
                 viewMode = (viewMode == .edit) ? .reading : .edit
             }
         } label: {
-            Image(systemName: viewMode == .edit ? "eye" : "pencil")
+            Image(systemName: viewMode == .edit ? "eye" : "square.and.pencil")
                 .font(AppUI.Font.body)
                 .foregroundColor(.secondary)
         }

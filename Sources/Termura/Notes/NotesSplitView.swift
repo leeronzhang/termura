@@ -3,8 +3,13 @@ import SwiftUI
 
 struct NotesSplitView: View {
     @Bindable var viewModel: NotesViewModel
+    @Environment(\.themeManager) var themeManager
+    @Environment(\.webViewPool) var webViewPool
+    @Environment(\.webRendererBridge) var webRendererBridge
+    @Environment(\.fontSettings) var fontSettings
 
     @FocusState private var isTitleFocused: Bool
+    @State private var viewMode: NoteViewMode = .edit
 
     var body: some View {
         HSplitView {
@@ -66,12 +71,7 @@ struct NotesSplitView: View {
             VStack(spacing: 0) {
                 noteHeader(noteID: noteID)
                 Divider()
-                NoteEditorView(
-                    title: viewModel.editingTitle,
-                    filePath: viewModel.selectedNoteFilePath,
-                    text: $viewModel.editingBody
-                )
-                .id(noteID)
+                splitContent(noteID: noteID)
             }
         } else {
             VStack(spacing: AppUI.Spacing.smMd) {
@@ -86,18 +86,62 @@ struct NotesSplitView: View {
         }
     }
 
+    @ViewBuilder
+    private func splitContent(noteID: NoteID) -> some View {
+        switch viewMode {
+        case .edit:
+            CodeEditorTextViewRepresentable(
+                text: $viewModel.editingBody,
+                isModified: .constant(false),
+                onSave: {},
+                fontFamily: fontSettings.terminalFontFamily,
+                fontSize: fontSettings.editorFontSize,
+                language: "markdown"
+            )
+            .id(noteID)
+        case .reading:
+            NoteRenderedView(
+                pool: webViewPool,
+                bridge: webRendererBridge,
+                theme: themeManager.current,
+                markdown: viewModel.editingBody,
+                references: viewModel.selectedNote?.references ?? [],
+                projectURL: viewModel.notesDirectoryURL
+                    ?? URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+            )
+            .id(noteID)
+        }
+    }
+
     private func noteHeader(noteID: NoteID) -> some View {
-        HStack(spacing: AppUI.Spacing.md) {
+        HStack(spacing: 0) {
             TextField("Title", text: $viewModel.editingTitle)
                 .font(AppUI.Font.title1Semibold)
                 .textFieldStyle(.plain)
                 .focused($isTitleFocused)
             Spacer()
+            splitModeToggle
+            Spacer().frame(width: AppUI.Spacing.xxl)
             splitFavoriteButton(noteID: noteID)
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.top, AppUI.Spacing.md)
         .padding(.bottom, AppUI.Spacing.smMd)
+    }
+
+    private var splitModeToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                viewMode = (viewMode == .edit) ? .reading : .edit
+            }
+        } label: {
+            Image(systemName: viewMode == .edit ? "eye" : "square.and.pencil")
+                .font(AppUI.Font.body)
+                .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(viewMode == .edit ? "Switch to Reading mode" : "Switch to Edit mode")
+        .accessibilityLabel(viewMode == .edit ? "Switch to Reading mode" : "Switch to Edit mode")
     }
 
     private func splitFavoriteButton(noteID: NoteID) -> some View {

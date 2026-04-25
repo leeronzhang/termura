@@ -82,12 +82,13 @@ struct MarkdownFileView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: AppUI.Spacing.sm) {
+        HStack(spacing: 0) {
             breadcrumbs
             if isModified {
                 Circle()
                     .fill(Color.orange)
                     .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
+                    .padding(.leading, AppUI.Spacing.sm)
             }
             Spacer()
             if isModified {
@@ -95,8 +96,10 @@ struct MarkdownFileView: View {
                     .font(AppUI.Font.label)
                     .buttonStyle(.plain)
                     .foregroundColor(.accentColor)
+                Spacer().frame(width: AppUI.Spacing.xxl)
             }
             modeToggle
+            Spacer().frame(width: AppUI.Spacing.xxl)
             finderButton
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
@@ -104,20 +107,22 @@ struct MarkdownFileView: View {
     }
 
     private var breadcrumbs: some View {
-        ForEach(Array(breadcrumbComponents.enumerated()), id: \.offset) { index, part in
-            if index > 0 {
-                Image(systemName: "chevron.right")
-                    .font(AppUI.Font.chevron)
-                    .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
+        HStack(spacing: AppUI.Spacing.sm) {
+            ForEach(Array(breadcrumbComponents.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Image(systemName: "chevron.right")
+                        .font(AppUI.Font.chevron)
+                        .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
+                }
+                Text(part)
+                    .font(AppUI.Font.pathMono)
+                    .foregroundColor(
+                        index == breadcrumbComponents.count - 1
+                            ? .secondary.opacity(AppUI.Opacity.strong)
+                            : .secondary.opacity(AppUI.Opacity.dimmed)
+                    )
+                    .lineLimit(1)
             }
-            Text(part)
-                .font(AppUI.Font.pathMono)
-                .foregroundColor(
-                    index == breadcrumbComponents.count - 1
-                        ? .secondary.opacity(AppUI.Opacity.strong)
-                        : .secondary.opacity(AppUI.Opacity.dimmed)
-                )
-                .lineLimit(1)
         }
     }
 
@@ -127,7 +132,7 @@ struct MarkdownFileView: View {
                 viewMode = viewMode == .edit ? .reading : .edit
             }
         } label: {
-            Image(systemName: viewMode == .edit ? "eye" : "pencil")
+            Image(systemName: viewMode == .edit ? "eye" : "square.and.pencil")
                 .font(AppUI.Font.body)
                 .foregroundColor(.secondary)
         }

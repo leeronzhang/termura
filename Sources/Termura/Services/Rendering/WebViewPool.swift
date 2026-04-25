@@ -49,6 +49,7 @@ final class WebViewPool: WebViewPoolProtocol {
 
     private func createWebView() -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
         config.preferences.isElementFullscreenEnabled = false
 
         let webView = WKWebView(frame: .zero, configuration: config)
