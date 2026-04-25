@@ -23,6 +23,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// keyed by window identity. Prevents duplicate registration and enables cleanup on close.
     var fullScreenObserverTokens: [ObjectIdentifier: [any NSObjectProtocol]] = [:]
 
+    // MARK: - Titlebar KVO guards
+
+    /// KVO observation that reverts `titlebarAppearsTransparent` when AppKit resets it.
+    var titlebarPropertyKVO: NSKeyValueObservation?
+    /// KVO observations on individual NSVisualEffectViews inside the titlebar container.
+    var titlebarEffectKVOObservers: [NSKeyValueObservation] = []
+    /// Identities of effect views currently under KVO observation (avoids redundant reinstall).
+    var titlebarEffectObservedViews: Set<ObjectIdentifier> = []
+
     // MARK: - Init
 
     override init() {
@@ -185,6 +194,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         logger.info("Registered \(registered) bundled font(s)")
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // Secondary defense: re-suppress titlebar chrome on app activation.
+        // AppKit resets titlebarAppearsTransparent and effect views when the app
+        // regains focus; the KVO guard catches most resets, but re-applying here
+        // covers any gap between the reset and the KVO callback.
+        for window in NSApp.windows {
+            guard !(window is NSPanel), window.contentViewController != nil,
+                  !window.styleMask.contains(.fullScreen) else { continue }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            suppressTitlebarChrome(window)
+            CATransaction.commit()
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

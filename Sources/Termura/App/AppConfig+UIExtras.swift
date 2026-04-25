@@ -5,18 +5,23 @@ extension AppConfig.UI {
     // MARK: - Window Chrome
 
     /// Traffic-light button horizontal offset from window edge.
-    static let trafficLightX: CGFloat = 12
+    /// Aligned with session text labels (`.padding(.horizontal, xxxl=24)` minus
+    /// the ~4pt internal button margin → visual circle starts at ~24pt).
+    static let trafficLightX: CGFloat = 20
     /// Traffic-light button vertical offset from window top.
-    static let trafficLightTopInset: CGFloat = 8
+    /// Centers the 14pt buttons at y=24pt — matching the sidebar tab-bar icon center
+    /// (`.padding(.top, md=8)` + `frame(height: xxxxl=32)/2 = 24pt`).
+    static let trafficLightTopInset: CGFloat = 17
     /// Height of the traffic-light button container, measured from the live window in
     /// `adjustTrafficLights`. Written once at startup; read when the sidebar toggle renders.
-    /// Default 16pt is a fallback for the brief window before measurement fires.
-    @MainActor static var trafficLightContainerHeight: CGFloat = 16
+    /// Default 35pt is a fallback for the brief window before measurement fires
+    /// (topInset 17 + buttonHeight ~14 + 4pt padding).
+    @MainActor static var trafficLightContainerHeight: CGFloat = 35
     /// Derived vertical center of the traffic-light group from the top of the window.
     /// Recomputed each access so it reflects the latest measured container height.
     @MainActor static var trafficLightCenterY: CGFloat { trafficLightTopInset + trafficLightContainerHeight / 2 }
     /// Minimum leading padding to clear the traffic-light group.
-    /// Based on trafficLightX(12) + 3 buttons(~52pt) + 32pt gap = 96pt.
+    /// Based on trafficLightX(20) + 3 buttons(~52pt) + 24pt gap = 96pt.
     static let trafficLightSafeLeading: CGFloat = 96
     /// Fullscreen project-name label horizontal offset from zoom button.
     static let fullScreenLabelSpacing: CGFloat = 12

@@ -23,10 +23,13 @@ extension AppDelegate {
             }
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
+            window.titlebarSeparatorStyle = .none
             window.backgroundColor = NSColor(self.services.themeManager.current.background)
 
             disableTitlebarEffect(in: window)
             adjustTrafficLights(in: window)
+            installTitlebarEffectKVOGuard(for: window, force: true)
+            installTitlebarPropertyKVOGuard(for: window)
 
             observeFullScreenTransitions(window: window)
         }
@@ -55,9 +58,10 @@ extension AppDelegate {
             forName: NSWindow.didEnterFullScreenNotification,
             object: window,
             queue: .main // Sync body — .main + assumeIsolated avoids a Task allocation.
-        ) { [weak window] _ in
+        ) { [weak self, weak window] _ in
             MainActor.assumeIsolated {
-                guard let window else { return }
+                guard let self, let window else { return }
+                self.tearDownTitlebarKVOGuards()
                 Self.addFullScreenLabel(to: window)
             }
         }
@@ -94,6 +98,11 @@ extension AppDelegate {
             MainActor.assumeIsolated {
                 guard let self, let window, !window.styleMask.contains(.fullScreen) else { return }
                 self.adjustTrafficLights(in: window)
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                self.disableTitlebarEffect(in: window)
+                CATransaction.commit()
+                self.installTitlebarEffectKVOGuard(for: window, force: false)
             }
         }
 
@@ -127,6 +136,8 @@ extension AppDelegate {
                 }
                 disableTitlebarEffect(in: window)
                 adjustTrafficLights(in: window)
+                installTitlebarEffectKVOGuard(for: window, force: true)
+                installTitlebarPropertyKVOGuard(for: window)
                 await NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = AppConfig.UI.trafficLightFadeSeconds
                     self.trafficLightContainer(in: window)?.animator().alphaValue = 1
