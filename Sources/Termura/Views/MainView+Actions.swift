@@ -186,7 +186,17 @@ extension MainView {
     }
 
     func closeContentTab(_ tab: ContentTab) {
+        let sidebar = commandRouter.selectedSidebarTab
         tabManager.closeTab(tab)
+        // Clear stale sidebar memory so restore doesn't re-select the closed tab.
+        if lastContentTabBySidebarTab[sidebar]?.id == tab.id {
+            lastContentTabBySidebarTab[sidebar] = nil
+        }
+        // If the fallback tab doesn't belong to the current sidebar, re-run
+        // sidebar-aware restore to keep left sidebar and right content in sync.
+        if let newTab = selectedContentTab, !isTabAppropriate(newTab, for: sidebar) {
+            ensureSelectedTabMatchesSidebar()
+        }
         persistOpenTabs()
     }
 
