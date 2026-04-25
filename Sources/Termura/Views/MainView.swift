@@ -115,6 +115,14 @@ struct MainView: View {
     private func onSelectedContentTabChange(old oldTab: ContentTab?, new newTab: ContentTab?) {
         // Clear the empty-state flag for the current sidebar so the tab is shown.
         sidebarShowsEmpty.remove(commandRouter.selectedSidebarTab)
+        // Dismiss the Composer when the content tab actually changes.
+        // Each EditorViewModel is bound to its own TerminalEngine; leaving the
+        // Composer open across a tab switch would show the new tab's (empty) editor
+        // while the user's in-progress text stays in the old tab's EditorViewModel —
+        // pressing Enter would send a blank Return to the wrong session.
+        if oldTab?.id != newTab?.id, commandRouter.showComposer {
+            commandRouter.dismissComposer()
+        }
         // Sync isDualPaneActive + focusedSlot when selected tab changes externally
         // (commands, session deletion, initial load) — not just user tab taps.
         guard let tab = newTab else { return }
