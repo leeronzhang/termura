@@ -198,9 +198,11 @@ final class TabManager {
         switch newTab {
         case let .terminal(sid, _):
             sessionStore?.activateSession(id: sid)
+            commandRouter?.selectedSidebarTab = .sessions
         case let .split(left, right, _, _):
             sessionStore?.activateSession(id: focusedSlot == .left ? left : right)
             commandRouter?.isDualPaneActive = true
+            commandRouter?.selectedSidebarTab = .sessions
         case .note:
             commandRouter?.selectedSidebarTab = .notes
         case .diff, .file, .preview:
