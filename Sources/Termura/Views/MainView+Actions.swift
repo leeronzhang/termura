@@ -201,8 +201,13 @@ extension MainView {
             if let sibling {
                 selectAndActivate(sibling, for: sidebar)
             } else {
+                selectedContentTab = nil
                 sidebarShowsEmpty.insert(sidebar)
             }
+        }
+        // Deselect the note in the sidebar list when its tab is closed.
+        if case let .note(noteID, _) = tab, notesViewModel.selectedNoteID == noteID {
+            notesViewModel.selectedNoteID = nil
         }
         persistOpenTabs()
     }

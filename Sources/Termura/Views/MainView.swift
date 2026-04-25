@@ -113,8 +113,12 @@ struct MainView: View {
     // MARK: - onChange helpers
 
     private func onSelectedContentTabChange(old oldTab: ContentTab?, new newTab: ContentTab?) {
-        // Clear the empty-state flag for the current sidebar so the tab is shown.
-        sidebarShowsEmpty.remove(commandRouter.selectedSidebarTab)
+        // Only clear the empty-state flag when a real, sidebar-appropriate tab is
+        // selected. Setting selectedContentTab to nil (tab close) or to a
+        // mismatched tab (fallback) must not undo the empty state.
+        if let tab = newTab, isTabAppropriate(tab, for: commandRouter.selectedSidebarTab) {
+            sidebarShowsEmpty.remove(commandRouter.selectedSidebarTab)
+        }
         // Dismiss the Composer when the content tab actually changes.
         // Each EditorViewModel is bound to its own TerminalEngine; leaving the
         // Composer open across a tab switch would show the new tab's (empty) editor
