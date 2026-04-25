@@ -17,7 +17,11 @@ final class NotesViewModel {
     }
 
     var editingBody: String = "" {
-        didSet { scheduleAutoSave() }
+        didSet {
+            guard !isLoadingNote else { return }
+            syncInMemoryBody(editingBody)
+            scheduleAutoSave()
+        }
     }
 
     /// User-visible error message from the last failed operation; cleared on next success.
@@ -113,9 +117,15 @@ final class NotesViewModel {
     }
 
     func selectNote(id: NoteID) {
+        // Already editing this note — keep current edits, skip reload.
+        // Prevents the debounce race: view recreation calls selectNote with
+        // the same ID before auto-save fires, overwriting unsaved edits with
+        // stale data from the in-memory notes array.
+        if selectedNoteID == id { return }
+
         // Flush pending edits for the departing note before switching so that
         // a rename-then-select within 1 second does not lose the rename.
-        if selectedNoteID != nil, selectedNoteID != id, autoSaveTask != nil {
+        if selectedNoteID != nil, autoSaveTask != nil {
             autoSaveTask?.cancel()
             autoSaveTask = nil
             persistCurrentNote(title: editingTitle, body: editingBody)
