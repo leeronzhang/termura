@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - Pane slot
 
-enum PaneSlot: Equatable {
+enum PaneSlot: Hashable {
     case left
     case right
 }
@@ -144,6 +144,7 @@ struct MainView: View {
             SidebarView(
                 isFullScreen: isFullScreen,
                 activeContentTab: resolvedSelectedTab,
+                splitMemberships: tabManager.buildSplitMemberships(),
                 selectedTab: router.selectedSidebarTab,
                 focusedSessionID: focusedPaneSessionID ?? sessionStore.activeSessionID,
                 onActivateSession: { activateSessionFromSidebar($0) },

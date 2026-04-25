@@ -31,6 +31,7 @@ protocol AppCommandDispatcher: AnyObject {
     func selectSession(at index: Int)
     func cycleContentTab(forward: Bool)
     func focusDualPane(slot: PaneSlot)
+    func swapDualPanes()
     func requestBranchMerge()
 
     // MARK: - Font zoom
@@ -117,6 +118,10 @@ extension AppDelegate: AppCommandDispatcher {
 
     func focusDualPane(slot: PaneSlot) {
         activeContext?.commandRouter.focusDualPane(slot)
+    }
+
+    func swapDualPanes() {
+        activeContext?.commandRouter.pendingCommand = .swapPanes
     }
 
     func requestBranchMerge() {

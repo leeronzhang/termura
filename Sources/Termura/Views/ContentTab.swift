@@ -1,5 +1,14 @@
 import SwiftUI
 
+/// Describes a session's membership in a split tab pair.
+struct SplitMembership: Hashable {
+    let partnerSessionID: SessionID
+    let partnerTitle: String
+    /// Whether this split tab is the currently selected tab.
+    let isActiveTab: Bool
+    let paneSlot: PaneSlot
+}
+
 /// Identifies an open tab in the main content area.
 /// Terminal tabs carry a SessionID; split tabs carry two session IDs.
 enum ContentTab: Identifiable, Hashable, Codable {

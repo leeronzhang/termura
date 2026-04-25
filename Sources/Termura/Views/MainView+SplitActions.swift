@@ -19,6 +19,16 @@ extension MainView {
     }
 }
 
+// MARK: - Pane swap
+
+extension MainView {
+    /// Swaps the left and right panes of the current split tab.
+    func swapPanes() {
+        tabManager.swapPanes()
+        persistOpenTabs()
+    }
+}
+
 // MARK: - Keyboard focus switch
 
 extension MainView {

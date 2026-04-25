@@ -91,6 +91,11 @@ struct AppCommands: Commands {
         }
         .keyboardShortcut(.rightArrow, modifiers: [.control, .shift])
 
+        Button("Swap Panes") {
+            dispatcher.swapDualPanes()
+        }
+        .keyboardShortcut("s", modifiers: [.control, .shift])
+
         Divider()
 
         Button("Toggle Inspector") {

@@ -34,6 +34,25 @@ final class TabManager {
 
     var isInSplitMode: Bool { resolvedSelectedTab?.isSplit ?? false }
 
+    /// Builds a lookup of every session currently in a split tab, mapping to its partner info.
+    func buildSplitMemberships() -> [SessionID: SplitMembership] {
+        var result: [SessionID: SplitMembership] = [:]
+        let activeID = resolvedSelectedTab?.id
+        for tab in terminalItems {
+            guard case let .split(left, right, leftTitle, rightTitle) = tab else { continue }
+            let isActive = tab.id == activeID
+            result[left] = SplitMembership(
+                partnerSessionID: right, partnerTitle: rightTitle,
+                isActiveTab: isActive, paneSlot: .left
+            )
+            result[right] = SplitMembership(
+                partnerSessionID: left, partnerTitle: leftTitle,
+                isActiveTab: isActive, paneSlot: .right
+            )
+        }
+        return result
+    }
+
     var leftPaneSessionID: SessionID? {
         guard case let .split(left, _, _, _) = resolvedSelectedTab else { return nil }
         return left

@@ -113,6 +113,20 @@ extension TerminalAreaView {
         .buttonStyle(.plain)
         .help(commandRouter.isDualPaneActive ? "Exit Split View" : "Split View")
 
+        if commandRouter.isDualPaneActive {
+            Spacer().frame(width: AppUI.Spacing.xxl)
+
+            Button {
+                commandRouter.pendingCommand = .swapPanes
+            } label: {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(AppUI.Font.toolbarIcon)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Swap Panes (Ctrl+Shift+S)")
+        }
+
         Spacer().frame(width: AppUI.Spacing.xxl)
 
         Button {

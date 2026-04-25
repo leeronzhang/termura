@@ -17,6 +17,8 @@ struct SidebarView: View {
     var isFullScreen: Bool = false
     /// The currently selected content tab — used for session highlight logic.
     var activeContentTab: ContentTab?
+    /// Maps each session in a split tab to its partner info (icon + subtitle in the sidebar).
+    var splitMemberships: [SessionID: SplitMembership] = [:]
     @Binding var selectedTab: SidebarTab
     /// The session that currently has keyboard focus (active in focused pane or single pane).
     var focusedSessionID: SessionID?

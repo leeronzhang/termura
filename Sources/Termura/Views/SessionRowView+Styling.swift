@@ -7,6 +7,8 @@ extension SessionRowView {
             parts.append("Active")
         } else if isInSplit {
             parts.append("In split view")
+        } else if isInNonActiveSplit {
+            parts.append("In split view (inactive tab)")
         } else if session.isEnded {
             parts.append("Ended")
         }
@@ -30,6 +32,7 @@ extension SessionRowView {
         } else if isHovered {
             return themeManager.current.sidebarText.opacity(AppUI.Opacity.whisper)
         }
+        // Non-active splits use a left bar indicator instead of background fill.
         return .clear
     }
 
@@ -43,6 +46,21 @@ extension SessionRowView {
         }
         return RoundedRectangle(cornerRadius: AppUI.Radius.md)
             .stroke(borderColor, lineWidth: 1)
+    }
+
+    /// Left-edge accent bar for sessions in a non-active split tab.
+    var splitIndicatorBar: some View {
+        Group {
+            if isInNonActiveSplit {
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.accentColor.opacity(AppUI.Opacity.secondary))
+                        .frame(width: 2)
+                        .padding(.vertical, AppUI.Spacing.sm)
+                    Spacer()
+                }
+            }
+        }
     }
 
     func colorForLabel(_ label: SessionColorLabel) -> Color {

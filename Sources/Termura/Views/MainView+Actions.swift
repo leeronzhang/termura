@@ -39,6 +39,8 @@ extension MainView {
             handleCycleContentTab(forward: forward)
         case let .focusDualPane(slot):
             handleFocusDualPane(slot)
+        case .swapPanes:
+            swapPanes()
         case .openLastSilentNote:
             handleOpenLastSilentNote()
         case let .openNoteTab(noteID):

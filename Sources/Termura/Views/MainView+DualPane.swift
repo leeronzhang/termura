@@ -52,7 +52,13 @@ extension MainView {
             .dropDestination(for: String.self) { items, _ in
                 guard let str = items.first,
                       let uuid = UUID(uuidString: str) else { return false }
-                handleDropSession(SessionID(rawValue: uuid), onto: slot)
+                let draggedID = SessionID(rawValue: uuid)
+                let isIntraSplitDrag = resolvedSelectedTab?.containsSession(draggedID) ?? false
+                if isIntraSplitDrag {
+                    swapPanes()
+                } else {
+                    handleDropSession(draggedID, onto: slot)
+                }
                 return true
             } isTargeted: { isTargeted in
                 dropTargetSlot = isTargeted ? slot : nil

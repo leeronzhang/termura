@@ -6,6 +6,10 @@ struct SessionRowView: View {
     let isActive: Bool
     /// True when the session is in a dual-pane split but not the focused pane.
     var isInSplit: Bool = false
+    /// True when the session is in a split tab that is not currently selected.
+    var isInNonActiveSplit: Bool = false
+    /// Split membership info — partner name, slot, active state.
+    var splitInfo: SplitMembership?
     let hasUnreadFailure: Bool
     var agentStatus: AgentStatus?
     var agentType: AgentType?
@@ -36,6 +40,7 @@ struct SessionRowView: View {
             leadingIcons
             VStack(alignment: .leading, spacing: AppUI.Spacing.smMd) {
                 titleRow
+                splitPartnerLine
                 agentStatsLine
             }
         }
@@ -44,6 +49,7 @@ struct SessionRowView: View {
         .opacity(session.isEnded ? AppUI.Opacity.secondary : 1.0)
         .background(rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
+        .overlay(splitIndicatorBar)
         .overlay(glowBorder)
         .onTapGesture { onActivate() }
         .onHover { isHovered = $0 }
@@ -73,19 +79,25 @@ struct SessionRowView: View {
 
     @ViewBuilder
     private var leadingIcons: some View {
-        if let type = agentType, type != .unknown {
-            AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
-                .padding(.top, AppUI.Spacing.xxs)
-        } else if session.colorLabel != .none {
-            Circle()
-                .fill(colorForLabel(session.colorLabel))
-                .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
-                .padding(.top, AppUI.Spacing.xxs)
-        } else if let type = agentType {
-            // .unknown: show generic terminal placeholder until detection fires.
-            AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
-                .padding(.top, AppUI.Spacing.xxs)
+        VStack(spacing: AppUI.Spacing.xxs) {
+            if let type = agentType, type != .unknown {
+                AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
+            } else if session.colorLabel != .none {
+                Circle()
+                    .fill(colorForLabel(session.colorLabel))
+                    .frame(width: AppUI.Size.dotMedium, height: AppUI.Size.dotMedium)
+            } else if let type = agentType {
+                AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
+            }
+            if splitInfo != nil {
+                Image(systemName: "rectangle.split.2x1")
+                    .font(.system(size: 9))
+                    .foregroundColor(.accentColor.opacity(
+                        (isActive || isInSplit) ? AppUI.Opacity.strong : AppUI.Opacity.tertiary
+                    ))
+            }
         }
+        .padding(.top, AppUI.Spacing.xxs)
     }
 
     private var titleRow: some View {
@@ -132,6 +144,20 @@ struct SessionRowView: View {
                 .font((isActive || isInSplit) ? AppUI.Font.title3Medium : AppUI.Font.title3)
                 .foregroundColor((isActive || isInSplit) ? .primary : themeManager.current.sidebarText)
                 .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private var splitPartnerLine: some View {
+        if let info = splitInfo {
+            HStack(spacing: AppUI.Spacing.xxs) {
+                Image(systemName: "link")
+                    .font(.system(size: 8))
+                Text(info.partnerTitle)
+                    .lineLimit(1)
+            }
+            .font(AppUI.Font.captionMono)
+            .foregroundColor(.secondary.opacity(AppUI.Opacity.tertiary))
         }
     }
 

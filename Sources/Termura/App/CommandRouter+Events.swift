@@ -22,6 +22,8 @@ extension CommandRouter {
         case cycleContentTab(forward: Bool)
         /// Focus the specified pane in dual-pane mode. No-op in single-pane mode.
         case focusDualPane(PaneSlot)
+        /// Swap left and right panes in the current split tab.
+        case swapPanes
         /// Open the most recently silently-created note (e.g. via "Send to Notes" toast tap).
         case openLastSilentNote
         /// Open a specific note tab by ID (used by LinkRouter for terminal Cmd+Click on .md files).

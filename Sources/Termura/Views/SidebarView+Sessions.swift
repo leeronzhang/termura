@@ -104,12 +104,15 @@ extension SidebarView {
         let isFocused = focusedSessionID == session.id
         let activeState = isInCurrentTab && isFocused
         let splitState = isInCurrentTab && !isFocused
+        let membership = splitMemberships[session.id]
         let agentRowState = sessionScope.agentStates.sidebarRowState(for: session.id)
         return SessionSidebarRowView(
             session: session,
             agentRowState: agentRowState,
             isActive: activeState,
             isInSplit: splitState,
+            isInNonActiveSplit: membership.map { !$0.isActiveTab } ?? false,
+            splitInfo: membership,
             hasUnreadFailure: false,
             onActivate: { activateOrSplit(session: session) },
             onRename: { sessionStore.renameSession(id: session.id, title: $0) },
@@ -209,6 +212,8 @@ struct SessionSidebarRowView: View {
     let agentRowState: AgentSidebarRowState
     let isActive: Bool
     let isInSplit: Bool
+    var isInNonActiveSplit: Bool = false
+    var splitInfo: SplitMembership?
     let hasUnreadFailure: Bool
     let onActivate: () -> Void
     let onRename: (String) -> Void
@@ -221,6 +226,8 @@ struct SessionSidebarRowView: View {
             session: session,
             isActive: isActive,
             isInSplit: isInSplit,
+            isInNonActiveSplit: isInNonActiveSplit,
+            splitInfo: splitInfo,
             hasUnreadFailure: hasUnreadFailure,
             agentStatus: agentRowState.status,
             agentType: agentRowState.agentType ?? session.agentType,
