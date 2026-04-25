@@ -201,7 +201,7 @@ extension MainView {
             if let sibling {
                 selectAndActivate(sibling, for: sidebar)
             } else {
-                selectedContentTab = nil
+                tabManager.selectedContentTab = nil
                 sidebarShowsEmpty.insert(sidebar)
             }
         }
