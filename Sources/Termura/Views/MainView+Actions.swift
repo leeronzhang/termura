@@ -192,10 +192,17 @@ extension MainView {
         if lastContentTabBySidebarTab[sidebar]?.id == tab.id {
             lastContentTabBySidebarTab[sidebar] = nil
         }
-        // If the fallback tab doesn't belong to the current sidebar, re-run
-        // sidebar-aware restore to keep left sidebar and right content in sync.
+        // If the fallback tab doesn't belong to the current sidebar, find a
+        // sibling tab of the same type. If none remain, show the empty state
+        // instead of auto-opening new content (restoreNotesTab would reopen a
+        // note the user just closed).
         if let newTab = selectedContentTab, !isTabAppropriate(newTab, for: sidebar) {
-            ensureSelectedTabMatchesSidebar()
+            let sibling = tabManager.openTabs.last(where: { isTabAppropriate($0, for: sidebar) })
+            if let sibling {
+                selectAndActivate(sibling, for: sidebar)
+            } else {
+                sidebarShowsEmpty.insert(sidebar)
+            }
         }
         persistOpenTabs()
     }
