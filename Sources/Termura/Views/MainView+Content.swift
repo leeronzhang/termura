@@ -3,6 +3,8 @@ import SwiftUI
 // MARK: - Content area views
 
 extension MainView {
+    static let markdownExtensions: Set<String> = ["md", "markdown"]
+
     // MARK: - Tab computation
 
     /// All tabs: explicit terminal items + non-terminal tabs (user-opened files/notes).
@@ -105,11 +107,15 @@ extension MainView {
             )
             .id(tab.id)
         case let .file(path, _):
-            CodeEditorView(
-                filePath: path,
-                projectRoot: activeProjectRoot
-            )
-            .id(path)
+            if Self.markdownExtensions.contains(
+                URL(fileURLWithPath: path).pathExtension.lowercased()
+            ) {
+                MarkdownFileView(filePath: path, projectRoot: activeProjectRoot)
+                    .id(path)
+            } else {
+                CodeEditorView(filePath: path, projectRoot: activeProjectRoot)
+                    .id(path)
+            }
         case let .preview(path, _):
             FilePreviewView(
                 filePath: path,
@@ -139,7 +145,15 @@ extension MainView {
                 state: state
             )
         } else {
-            emptyState
+            // Engine not yet created — loadPersistedSessions only pre-creates the
+            // engine for the most-recently-active session; all others are created on
+            // demand when their tab becomes visible (tab switch, startup restore, etc.).
+            // TerminalEngineStore is @Observable, so the view re-renders once the
+            // engine is inserted.
+            Color.clear
+                .task(id: sessionID) {
+                    sessionStore.ensureEngine(for: sessionID, shell: nil)
+                }
         }
     }
 
