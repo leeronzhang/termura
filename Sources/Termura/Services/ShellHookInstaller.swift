@@ -138,14 +138,6 @@ preexec_termura() {
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd precmd_termura
 add-zsh-hook preexec preexec_termura
-_termura_accept_line() {
-    if [[ "$BUFFER" == '>> '* ]]; then
-        local query="${BUFFER#>> }"
-        BUFFER="tn ask \\"${query//\\"/\\\\\\"}\\""
-    fi
-    zle .accept-line
-}
-zle -N accept-line _termura_accept_line
 """
 
 private let bashHookScript = """
@@ -165,13 +157,6 @@ _termura_preexec() {
 }
 PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND; }_termura_precmd"
 trap '_termura_preexec' DEBUG
-_termura_accept_line() {
-    if [[ "$READLINE_LINE" == '>> '* ]]; then
-        local query="${READLINE_LINE#>> }"
-        READLINE_LINE="tn ask \\"${query//\\"/\\\\\\"}\\""
-    fi
-}
-bind -x '"\\C-m": _termura_accept_line'
 """
 
 // MARK: - Errors
