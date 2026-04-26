@@ -125,8 +125,7 @@ struct NotesSplitView: View {
             splitFavoriteButton(noteID: noteID)
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
-        .padding(.top, AppUI.Spacing.md)
-        .padding(.bottom, AppUI.Spacing.smMd)
+        .padding(.vertical, AppUI.Spacing.md)
     }
 
     private var splitModeToggle: some View {
@@ -151,7 +150,7 @@ struct NotesSplitView: View {
         } label: {
             Image(systemName: isFav ? "star.fill" : "star")
                 .font(AppUI.Font.body)
-                .foregroundColor(isFav ? .yellow : .secondary)
+                .foregroundColor(isFav ? .brandGreen : .secondary)
         }
         .buttonStyle(.plain)
         .help(isFav ? "Remove from favorites" : "Add to favorites")

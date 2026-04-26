@@ -20,6 +20,7 @@ final class TabManager {
     // Dependencies (set via inject)
     var sessionStore: (any SessionStoreProtocol)?
     var commandRouter: CommandRouter?
+    var notesViewModel: NotesViewModel?
 
     func inject(sessionStore: any SessionStoreProtocol, commandRouter: CommandRouter) {
         self.sessionStore = sessionStore
@@ -65,6 +66,18 @@ final class TabManager {
 
     var focusedPaneSessionID: SessionID? {
         focusedSlot == .left ? leftPaneSessionID : rightPaneSessionID
+    }
+
+    // MARK: - Note split accessors
+
+    var leftPaneNoteID: NoteID? {
+        guard case let .noteSplit(left, _, _, _) = resolvedSelectedTab else { return nil }
+        return left
+    }
+
+    var rightPaneNoteID: NoteID? {
+        guard case let .noteSplit(_, right, _, _) = resolvedSelectedTab else { return nil }
+        return right
     }
 
     // MARK: - Tab Operations
@@ -124,7 +137,7 @@ final class TabManager {
                 await sessionStore?.endSession(id: sid)
                 sessionStore?.activateSession(id: survivingID)
             }
-        case .note, .diff, .file, .preview:
+        case .note, .noteSplit, .diff, .file, .preview:
             openTabs.removeAll { $0 == tab }
             if selectedContentTab == tab {
                 selectedContentTab = terminalItems.last ?? openTabs.first
@@ -203,7 +216,7 @@ final class TabManager {
             sessionStore?.activateSession(id: focusedSlot == .left ? left : right)
             commandRouter?.isDualPaneActive = true
             commandRouter?.selectedSidebarTab = .sessions
-        case .note:
+        case .note, .noteSplit:
             commandRouter?.selectedSidebarTab = .notes
         case .diff, .file, .preview:
             commandRouter?.selectedSidebarTab = .project

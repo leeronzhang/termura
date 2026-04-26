@@ -16,7 +16,7 @@ extension MainView {
         // Only persist note and file tabs — terminal/split/diff tabs are ephemeral or session-derived.
         let persistable = openTabs.filter {
             switch $0 {
-            case .note, .file, .preview: true
+            case .note, .noteSplit, .file, .preview: true
             case .terminal, .split, .diff: false
             }
         }
@@ -50,7 +50,7 @@ extension MainView {
     private func sidebarOwner(of tab: ContentTab) -> SidebarTab {
         switch tab {
         case .terminal, .split: .sessions
-        case .note: .notes
+        case .note, .noteSplit: .notes
         case .file, .preview, .diff: .project
         }
     }

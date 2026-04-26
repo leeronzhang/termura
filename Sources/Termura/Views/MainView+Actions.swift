@@ -10,42 +10,52 @@ extension MainView {
     /// Called from the unified `.onChange(of: commandRouter.pendingCommand)` in MainView.body.
     func reduce(command: CommandRouter.PendingCommand) {
         switch command {
-        case .toggleDualPane:
-            toggleSplitTab()
-        case .closeTab:
-            handleCloseTab()
-        case .createNote:
-            handleCreateNote()
-        case .toggleSessionInfo:
-            handleToggleSessionInfo()
-        case .toggleAgentDashboard:
-            handleToggleAgentDashboard()
-        case let .resumeAgent(agentType):
-            handleAgentResume(agentType)
-        case let .composerPrefill(text):
-            handleComposerPrefill(text)
-        case let .endSession(sid):
-            // Synchronously remove the tab and update selection BEFORE the async endSession
-            // to prevent blank state: endSession calls terminateEngine synchronously (before
-            // the DB await), so the engine disappears while selectedContentTab still points
-            // to the closed tab. Moving the UI update here eliminates that window.
-            removeTerminalTab(containingSession: sid)
-            Task { @MainActor in
-                await sessionStore.endSession(id: sid)
-            }
-        case let .selectSession(index):
-            handleSelectSession(at: index)
-        case let .cycleContentTab(forward):
-            handleCycleContentTab(forward: forward)
-        case let .focusDualPane(slot):
-            handleFocusDualPane(slot)
-        case .swapPanes:
-            swapPanes()
-        case .openLastSilentNote:
-            handleOpenLastSilentNote()
-        case let .openNoteTab(noteID):
-            handleOpenNoteTab(noteID: noteID)
+        case .toggleDualPane: handleToggleDualPane()
+        case .closeTab: handleCloseTab()
+        case .createNote: handleCreateNote()
+        case .toggleSessionInfo: handleToggleSessionInfo()
+        case .toggleAgentDashboard: handleToggleAgentDashboard()
+        case let .resumeAgent(agentType): handleAgentResume(agentType)
+        case let .composerPrefill(text): handleComposerPrefill(text)
+        case let .endSession(sid): handleEndSession(sid)
+        case let .selectSession(index): handleSelectSession(at: index)
+        case let .cycleContentTab(forward): handleCycleContentTab(forward: forward)
+        case let .focusDualPane(slot): handleFocusDualPaneDispatch(slot)
+        case .swapPanes: handleSwapPanesDispatch()
+        case .openLastSilentNote: handleOpenLastSilentNote()
+        case let .openNoteTab(noteID): handleOpenNoteTab(noteID: noteID)
         }
+    }
+
+    // MARK: - Dual-pane dispatch (context-aware session vs. note)
+
+    private func handleToggleDualPane() {
+        if resolvedSelectedTab?.isNote == true {
+            toggleNoteSplitTab()
+        } else {
+            toggleSplitTab()
+        }
+    }
+
+    private func handleFocusDualPaneDispatch(_ slot: PaneSlot) {
+        if commandRouter.isNoteDualPaneActive {
+            handleFocusNoteDualPane(slot)
+        } else {
+            handleFocusDualPane(slot)
+        }
+    }
+
+    private func handleSwapPanesDispatch() {
+        if commandRouter.isNoteDualPaneActive {
+            swapNotePanes()
+        } else {
+            swapPanes()
+        }
+    }
+
+    private func handleEndSession(_ sid: SessionID) {
+        removeTerminalTab(containingSession: sid)
+        Task { @MainActor in await sessionStore.endSession(id: sid) }
     }
 
     private func handleOpenLastSilentNote() {

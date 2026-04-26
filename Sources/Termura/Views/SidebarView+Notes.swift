@@ -31,14 +31,34 @@ extension SidebarView {
 
     func notesList(vm: NotesViewModel) -> some View {
         let composerActive = commandRouter.isComposerNotesActive
+        let isNoteSplit = commandRouter.isNoteDualPaneActive
+        let splitIDs = activeContentTab?.splitNoteIDs
         return ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: AppUI.Spacing.sm) {
                 ForEach(vm.notes) { note in
+                    let inCurrentTab = activeContentTab?.containsNote(note.id) ?? false
+                    let isFocused = vm.selectedNoteID == note.id
+                    let activeState = inCurrentTab && isFocused
+                    let splitState = inCurrentTab && !isFocused && isNoteSplit
                     SidebarNoteRow(
                         note: note,
-                        isActive: vm.selectedNoteID == note.id,
+                        isActive: activeState,
+                        isInSplit: splitState,
                         composerActive: composerActive,
-                        onOpen: { onOpenNote?(note.id, note.title) },
+                        onOpen: {
+                            if isNoteSplit, let ids = splitIDs {
+                                // Clicking a note already in the split shifts focus.
+                                if note.id == ids.left {
+                                    commandRouter.focusDualPane(.left)
+                                } else if note.id == ids.right {
+                                    commandRouter.focusDualPane(.right)
+                                } else {
+                                    onOpenNote?(note.id, note.title)
+                                }
+                            } else {
+                                onOpenNote?(note.id, note.title)
+                            }
+                        },
                         onInsert: { commandRouter.composerInsertHandler?($0) },
                         onToggleFavorite: { vm.toggleFavorite(id: note.id) }
                     )
@@ -66,6 +86,8 @@ extension SidebarView {
 private struct SidebarNoteRow: View {
     let note: NoteRecord
     let isActive: Bool
+    /// True when the note is in the active split tab but in the non-focused pane.
+    var isInSplit: Bool = false
     let composerActive: Bool
     let onOpen: () -> Void
     let onInsert: (String) -> Void
@@ -82,7 +104,7 @@ private struct SidebarNoteRow: View {
                 HStack {
                     Text(note.title.isEmpty ? "Untitled" : note.title)
                         .font(isActive ? AppUI.Font.title3Medium : AppUI.Font.title3)
-                        .foregroundColor(isActive ? .primary : .secondary)
+                        .foregroundColor(isActive || isInSplit ? .primary : .secondary)
                         .lineLimit(1)
                     Spacer()
                     Text(formattedDate(note.updatedAt))
@@ -106,7 +128,12 @@ private struct SidebarNoteRow: View {
         }
         .overlay(
             RoundedRectangle(cornerRadius: AppUI.Radius.md)
-                .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
+                .stroke(
+                    isActive ? Color.brandGreen.opacity(AppUI.Opacity.border)
+                        : isInSplit ? Color.brandGreen.opacity(AppUI.Opacity.border * 0.6)
+                        : .clear,
+                    lineWidth: 1
+                )
         )
         .contentShape(Rectangle())
         .onTapGesture { rowTapped() }
@@ -130,7 +157,11 @@ private struct SidebarNoteRow: View {
 
     private var rowBackground: some View {
         RoundedRectangle(cornerRadius: AppUI.Radius.md)
-            .fill(isActive ? Color.accentColor.opacity(AppUI.Opacity.selected) : .clear)
+            .fill(
+                isActive ? Color.brandGreen.opacity(AppUI.Opacity.selected)
+                    : isInSplit ? Color.brandGreen.opacity(AppUI.Opacity.selected * 0.4)
+                    : .clear
+            )
     }
 
     private var insertButton: some View {
@@ -139,7 +170,7 @@ private struct SidebarNoteRow: View {
         } label: {
             Image(systemName: "arrow.right.circle.fill")
                 .font(AppUI.Font.title2Regular)
-                .foregroundColor(.accentColor)
+                .foregroundColor(.brandGreen)
         }
         .buttonStyle(.plain)
         .help("Insert into Composer")
@@ -150,7 +181,7 @@ private struct SidebarNoteRow: View {
         Button { onToggleFavorite() } label: {
             Image(systemName: note.isFavorite ? "star.fill" : "star")
                 .font(AppUI.Font.label)
-                .foregroundColor(note.isFavorite ? .yellow : .secondary)
+                .foregroundColor(note.isFavorite ? .brandGreen : .secondary)
         }
         .buttonStyle(.plain)
         .help(note.isFavorite ? "Remove from favorites" : "Add to favorites")

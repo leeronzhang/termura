@@ -48,6 +48,13 @@ final class CommandRouter {
     /// Toggled by the info toolbar button; applies globally (not per-pane).
     var showDualPaneMetadata = true
 
+    // MARK: - Note dual pane
+
+    /// Whether note dual-pane (side-by-side) mode is active.
+    var isNoteDualPaneActive = false
+    /// Which pane is currently focused in note dual-pane mode.
+    var focusedNotePaneSlot: PaneSlot = .left
+
     // MARK: - Per-terminal toggles
 
     var showComposer: Bool = false

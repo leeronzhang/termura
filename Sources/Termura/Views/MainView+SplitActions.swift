@@ -38,6 +38,24 @@ extension MainView {
     }
 }
 
+// MARK: - Note split actions
+
+extension MainView {
+    func toggleNoteSplitTab() {
+        tabManager.toggleNoteSplitTab()
+        persistOpenTabs()
+    }
+
+    func swapNotePanes() {
+        tabManager.swapNotePanes()
+        persistOpenTabs()
+    }
+
+    func handleFocusNoteDualPane(_ slot: PaneSlot) {
+        tabManager.handleFocusNoteDualPane(slot)
+    }
+}
+
 // MARK: - Drag-and-drop pane replacement
 
 extension MainView {

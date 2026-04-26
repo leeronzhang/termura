@@ -87,6 +87,7 @@ struct MainView: View {
         .onChange(of: selectedContentTab) { oldTab, newTab in onSelectedContentTabChange(old: oldTab, new: newTab) }
         .task {
             tabManager.inject(sessionStore: sessionStore, commandRouter: commandRouter)
+            tabManager.notesViewModel = notesViewModel
             await ensureInitialSession()
             restoreOpenTabs()
             // Ensure selected tab matches the startup sidebar (.sessions).
@@ -131,13 +132,11 @@ struct MainView: View {
         // (commands, session deletion, initial load) — not just user tab taps.
         guard let tab = newTab else { return }
         let isSplit = tab.isSplit
+        let isNSplit = tab.isNoteSplit
         let wasInDualPane = commandRouter.isDualPaneActive
         commandRouter.isDualPaneActive = isSplit
+        commandRouter.isNoteDualPaneActive = isNSplit
         if isSplit {
-            // Reset focus when entering split mode OR switching to a different split tab.
-            // Title-only refreshes (same tab.id, different title) must not steal pane focus —
-            // otherwise any terminal output that changes the session title
-            // (e.g. Codex running in the right pane) resets focus to .left.
             let isSameTab = oldTab?.id == tab.id
             if !wasInDualPane || !isSameTab {
                 tabManager.focusedSlot = .left
@@ -145,6 +144,10 @@ struct MainView: View {
             }
         } else {
             commandRouter.focusedDualPaneID = nil
+        }
+        if isNSplit {
+            let isSameTab = oldTab?.id == tab.id
+            if !isSameTab { commandRouter.focusedNotePaneSlot = .left }
         }
     }
 

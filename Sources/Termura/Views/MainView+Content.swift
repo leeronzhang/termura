@@ -36,7 +36,7 @@ extension MainView {
                             sessionStore.activateSession(id: sid)
                             commandRouter.isDualPaneActive = true
                             commandRouter.selectedSidebarTab = .sessions
-                        case .note:
+                        case .note, .noteSplit:
                             commandRouter.selectedSidebarTab = .notes
                         case .diff, .file, .preview:
                             commandRouter.selectedSidebarTab = .project
@@ -99,6 +99,9 @@ extension MainView {
         case let .note(noteID, _):
             noteEditorView(noteID: noteID)
                 .id(noteID)
+        case .noteSplit:
+            noteDualPaneView()
+                .id(tab.id)
         case let .diff(path, isStaged, isUntracked):
             DiffContentView(
                 filePath: path,

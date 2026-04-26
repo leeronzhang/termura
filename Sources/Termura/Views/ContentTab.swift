@@ -15,6 +15,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
     case terminal(sessionID: SessionID, title: String)
     case split(left: SessionID, right: SessionID, leftTitle: String, rightTitle: String)
     case note(noteID: NoteID, title: String)
+    case noteSplit(left: NoteID, right: NoteID, leftTitle: String, rightTitle: String)
     case diff(path: String, isStaged: Bool, isUntracked: Bool)
     case file(path: String, name: String)
     case preview(path: String, name: String)
@@ -24,6 +25,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
         case let .terminal(sessionID, _): "terminal-\(sessionID)"
         case let .split(left, right, _, _): "split-\(left)-\(right)"
         case let .note(noteID, _): "note-\(noteID)"
+        case let .noteSplit(left, right, _, _): "notesplit-\(left)-\(right)"
         case let .diff(path, isStaged, _): "diff-\(isStaged ? "staged" : "wt")-\(path)"
         case let .file(path, _): "file-\(path)"
         case let .preview(path, _): "preview-\(path)"
@@ -39,6 +41,10 @@ enum ContentTab: Identifiable, Hashable, Codable {
             let right = rightTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Terminal" : rightTitle
             return "\(left) | \(right)"
         case let .note(_, title): return title.isEmpty ? "Untitled" : title
+        case let .noteSplit(_, _, leftTitle, rightTitle):
+            let left = leftTitle.isEmpty ? "Untitled" : leftTitle
+            let right = rightTitle.isEmpty ? "Untitled" : rightTitle
+            return "\(left) | \(right)"
         case let .diff(path, _, _): return URL(fileURLWithPath: path).lastPathComponent
         case let .file(_, name): return name
         case let .preview(_, name): return name
@@ -50,6 +56,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
         case .terminal: "terminal"
         case .split: "rectangle.split.2x1"
         case .note: "doc.text"
+        case .noteSplit: "rectangle.split.2x1"
         case .diff: "doc.text.magnifyingglass"
         case .file: "doc.text"
         case .preview: "eye"
@@ -61,7 +68,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
     var fileTypeIconName: String? {
         switch self {
         case .terminal, .split: nil
-        case .note: "readme.md"
+        case .note, .noteSplit: "readme.md"
         case let .diff(path, _, _): URL(fileURLWithPath: path).lastPathComponent
         case let .file(_, name): name
         case let .preview(_, name): name
@@ -74,7 +81,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
     var isClosable: Bool {
         switch self {
         case .terminal, .split: true
-        case .note, .diff, .file, .preview: true
+        case .note, .noteSplit, .diff, .file, .preview: true
         }
     }
 
@@ -90,9 +97,17 @@ enum ContentTab: Identifiable, Hashable, Codable {
         return false
     }
 
-    /// Whether this tab is a Markdown note editor.
+    /// Whether this tab is a Markdown note editor (single or split).
     var isNote: Bool {
-        if case .note = self { return true }
+        switch self {
+        case .note, .noteSplit: true
+        default: false
+        }
+    }
+
+    /// Whether this tab is a split pair of two note editors.
+    var isNoteSplit: Bool {
+        if case .noteSplit = self { return true }
         return false
     }
 
@@ -100,7 +115,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
     var isProjectContent: Bool {
         switch self {
         case .file, .preview, .diff: true
-        case .terminal, .split, .note: false
+        case .terminal, .split, .note, .noteSplit: false
         }
     }
 
@@ -116,12 +131,27 @@ enum ContentTab: Identifiable, Hashable, Codable {
         return nil
     }
 
+    /// The left and right note IDs if this is a note split tab.
+    var splitNoteIDs: (left: NoteID, right: NoteID)? {
+        if case let .noteSplit(left, right, _, _) = self { return (left, right) }
+        return nil
+    }
+
     /// Whether either slot of this tab contains the given session.
     func containsSession(_ id: SessionID) -> Bool {
         switch self {
         case let .terminal(sid, _): sid == id
         case let .split(left, right, _, _): left == id || right == id
-        case .note, .diff, .file, .preview: false
+        case .note, .noteSplit, .diff, .file, .preview: false
+        }
+    }
+
+    /// Whether either slot of this tab contains the given note.
+    func containsNote(_ id: NoteID) -> Bool {
+        switch self {
+        case let .note(noteID, _): noteID == id
+        case let .noteSplit(left, right, _, _): left == id || right == id
+        default: false
         }
     }
 
@@ -130,7 +160,7 @@ enum ContentTab: Identifiable, Hashable, Codable {
         switch self {
         case let .file(path, _), let .preview(path, _), let .diff(path, _, _):
             path
-        case .terminal, .split, .note:
+        case .terminal, .split, .note, .noteSplit:
             nil
         }
     }
