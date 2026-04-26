@@ -65,111 +65,32 @@
     }
   }
 
-  // Enable highlight / mark: ==text== → <mark>text</mark>
-  (function enableMark(mdInstance) {
-    function tokenize(state, silent) {
-      var start = state.pos;
-      var marker = state.src.charCodeAt(start);
-      if (marker !== 0x3D /* = */) return false;
-      if (state.src.charCodeAt(start + 1) !== 0x3D) return false;
-      var scanned = state.scanDelims(start, true);
-      if (scanned.length < 2) return false;
-      var token;
-      if (scanned.length % 2) {
-        token = state.push("text", "", 0);
-        token.content = "=";
-        scanned.length--;
-      }
-      for (var i = 0; i < scanned.length; i += 2) {
-        token = state.push("mark_open", "mark", 1);
-        token.markup = "==";
-        state.delimiters.push({
-          marker: marker,
-          length: 0,
-          token: state.tokens.length - 1,
-          end: -1,
-          open: scanned.can_open,
-          close: scanned.can_close,
-        });
-      }
-      state.pos += scanned.length;
-      return true;
+  // Enable backlinks: [[note-name]] or [[note-name|display text]]
+  if (window.markdownitBacklink) {
+    try {
+      md.use(window.markdownitBacklink);
+    } catch (e) {
+      console.error("Failed to enable markdown-it-backlink:", e);
     }
-    function postProcess(state, delimiters) {
-      var loneMarkers = [];
-      for (var i = 0; i < delimiters.length; i++) {
-        var startDelim = delimiters[i];
-        if (startDelim.marker !== 0x3D) continue;
-        if (startDelim.end === -1) continue;
-        var endDelim = delimiters[startDelim.end];
-        var tokenO = state.tokens[startDelim.token];
-        var tokenC = state.tokens[endDelim.token];
-        tokenO.type = "mark_open";
-        tokenO.tag = "mark";
-        tokenO.nesting = 1;
-        tokenO.markup = "==";
-        tokenO.content = "";
-        tokenC.type = "mark_close";
-        tokenC.tag = "mark";
-        tokenC.nesting = -1;
-        tokenC.markup = "==";
-        tokenC.content = "";
-        if (state.tokens[endDelim.token - 1].type === "text" &&
-            state.tokens[endDelim.token - 1].content === "=") {
-          loneMarkers.push(endDelim.token - 1);
-        }
-      }
-      while (loneMarkers.length) {
-        var idx = loneMarkers.pop();
-        var j = idx + 1;
-        while (j < state.tokens.length && state.tokens[j].type === "mark_close") j++;
-        if (j !== idx + 1) {
-          var tok = state.tokens[j - 1];
-          state.tokens[j - 1] = state.tokens[idx];
-          state.tokens[idx] = tok;
-        }
-      }
-    }
-    mdInstance.inline.ruler.before("emphasis", "mark", tokenize);
-    mdInstance.inline.ruler2.before("emphasis", "mark", function (state) {
-      postProcess(state, state.delimiters);
-      if (state.tokens_meta) {
-        for (var k = 0; k < state.tokens_meta.length; k++) {
-          if (state.tokens_meta[k] && state.tokens_meta[k].delimiters) {
-            postProcess(state, state.tokens_meta[k].delimiters);
-          }
-        }
-      }
-    });
-  })(md);
+  }
 
-  // Enable GFM-style task lists: - [ ] unchecked, - [x] checked.
-  // Converts list items starting with [ ] or [x] into checkboxes with .task-list-item class.
-  (function enableTaskLists(mdInstance) {
-    mdInstance.core.ruler.after("inline", "task-lists", function (state) {
-      var tokens = state.tokens;
-      for (var i = 0; i < tokens.length; i++) {
-        if (tokens[i].type !== "inline" || !tokens[i].children) continue;
-        // Must be inside a list item (previous token is list_item_open).
-        if (i < 1 || tokens[i - 1].type !== "paragraph_open") continue;
-        if (i < 2 || tokens[i - 2].type !== "list_item_open") continue;
-        var children = tokens[i].children;
-        if (children.length === 0 || children[0].type !== "text") continue;
-        var text = children[0].content;
-        var checked;
-        if (text.indexOf("[ ] ") === 0) { checked = false; }
-        else if (text.indexOf("[x] ") === 0 || text.indexOf("[X] ") === 0) { checked = true; }
-        else { continue; }
-        // Mark the list item with task-list-item class.
-        tokens[i - 2].attrJoin("class", "task-list-item");
-        // Replace leading [ ]/[x] with a checkbox token.
-        var checkbox = new state.Token("html_inline", "", 0);
-        checkbox.content = '<input type="checkbox" disabled' + (checked ? " checked" : "") + '> ';
-        children[0].content = text.slice(4);
-        children.unshift(checkbox);
-      }
-    });
-  })(md);
+  // Enable highlight / mark: ==text== → <mark>text</mark> (loaded from markdown-it-extras.js)
+  if (window.markdownitMark) {
+    try {
+      md.use(window.markdownitMark);
+    } catch (e) {
+      console.error("Failed to enable markdown-it-mark:", e);
+    }
+  }
+
+  // Enable GFM-style task lists (loaded from markdown-it-extras.js)
+  if (window.markdownitTaskLists) {
+    try {
+      md.use(window.markdownitTaskLists);
+    } catch (e) {
+      console.error("Failed to enable markdown-it-task-lists:", e);
+    }
+  }
 
   /** Mermaid theme — beautiful-mermaid built-in github-dark with transparent bg. */
   var mermaidTheme = window.beautifulMermaid && window.beautifulMermaid.THEMES
@@ -372,10 +293,15 @@
    * @param {string} markdownText - Raw markdown source
    * @param {string} referencesJSON - JSON-encoded array of citation strings
    */
-  function renderMarkdown(markdownText, referencesJSON) {
-    // Normalize: strip U+FFFC (Object Replacement Character) that can break
-    // code fences when pasted from rich-text sources or system clipboard.
-    var src = (markdownText || "").replace(/\uFFFC/g, "");
+  function renderMarkdown(markdownText, referencesJSON, backlinksJSON) {
+    // Normalize markdown source before parsing:
+    // 1. Strip U+FFFC (Object Replacement Character) — breaks code fences
+    //    when pasted from rich-text sources or system clipboard.
+    // 2. Auto-tag bare fences whose next line starts with a mermaid keyword,
+    //    e.g. "```\ngraph TD" → "```mermaid\ngraph TD".
+    var src = (markdownText || "")
+      .replace(/\uFFFC/g, "")
+      .replace(/^(`{3,})\s*\n((?:graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|gitgraph|mindmap|timeline|xychart|block)\b)/gm, "$1mermaid\n$2");
     try {
       contentEl.innerHTML = md.render(src);
     } catch (e) {
@@ -403,6 +329,21 @@
       }).join("");
       section.innerHTML = heading + "<ol>" + items + "</ol>";
       contentEl.appendChild(section);
+    }
+
+    // Backlinks section: notes that link to this one via [[...]].
+    var backlinks = [];
+    try { backlinks = JSON.parse(backlinksJSON || "[]"); } catch (_) { backlinks = []; }
+    if (Array.isArray(backlinks) && backlinks.length > 0) {
+      var blSection = document.createElement("section");
+      blSection.className = "backlinks";
+      var blItems = backlinks.map(function (title) {
+        return '<li><a href="termura-note://open?title='
+          + encodeURIComponent(title)
+          + '" class="backlink">' + escapeHtml(title) + '</a></li>';
+      }).join("");
+      blSection.innerHTML = "<h2>Backlinks</h2><ul>" + blItems + "</ul>";
+      contentEl.appendChild(blSection);
     }
 
     window.scrollTo(0, 0);

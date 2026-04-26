@@ -152,6 +152,9 @@
         }
       }
     },
+    "Appends a small OSC 133 script to your shell RC file (%@). No data leaves your machine." : {
+
+    },
     "Ask About This" : {
       "comment" : "Context menu item: ask the AI about the selected text",
       "extractionState" : "manual",
@@ -163,9 +166,6 @@
           }
         }
       }
-    },
-    "Appends a small OSC 133 script to your shell RC file (%@). No data leaves your machine." : {
-
     },
     "Auto-fill launch command on session restore" : {
       "comment" : "Settings toggle label for Agent Resume feature",
@@ -344,18 +344,6 @@
     "context.md" : {
 
     },
-    "Corruption Detection" : {
-      "comment" : "Harness upsell: feature name for rule-file corruption scanning",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Corruption Detection"
-          }
-        }
-      }
-    },
     "Copy" : {
       "comment" : "Context menu item: copy selected text to clipboard",
       "extractionState" : "manual",
@@ -364,6 +352,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Copy"
+          }
+        }
+      }
+    },
+    "Corruption Detection" : {
+      "comment" : "Harness upsell: feature name for rule-file corruption scanning",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corruption Detection"
           }
         }
       }
@@ -882,6 +882,9 @@
         }
       }
     },
+    "Knowledge" : {
+
+    },
     "Learn More & Upgrade" : {
 
     },
@@ -1227,18 +1230,6 @@
         }
       }
     },
-    "Quote in Composer" : {
-      "comment" : "Context menu item: quote the current selection in the AI composer",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quote in Composer"
-          }
-        }
-      }
-    },
     "Proceed" : {
       "comment" : "Confirm button in an intervention alert: allow the high-risk operation to continue",
       "extractionState" : "manual",
@@ -1259,6 +1250,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Project"
+          }
+        }
+      }
+    },
+    "Quote in Composer" : {
+      "comment" : "Context menu item: quote the current selection in the AI composer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quote in Composer"
           }
         }
       }
@@ -1407,30 +1410,6 @@
         }
       }
     },
-    "Select All" : {
-      "comment" : "Context menu item: select all text in the terminal",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select All"
-          }
-        }
-      }
-    },
-    "Send to Notes" : {
-      "comment" : "Context menu item: send the selected text to the notes panel",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Send to Notes"
-          }
-        }
-      }
-    },
     "See every change to a rule file, diff between versions, and roll back instantly." : {
       "comment" : "Harness upsell: Version History feature description",
       "extractionState" : "manual",
@@ -1491,6 +1470,18 @@
         }
       }
     },
+    "Select All" : {
+      "comment" : "Context menu item: select all text in the terminal",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select All"
+          }
+        }
+      }
+    },
     "Select or create a note" : {
       "comment" : "Empty-state label in the notes split view when no note is selected",
       "extractionState" : "manual",
@@ -1523,6 +1514,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Semantic search…"
+          }
+        }
+      }
+    },
+    "Send to Notes" : {
+      "comment" : "Context menu item: send the selected text to the notes panel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send to Notes"
           }
         }
       }

@@ -49,6 +49,7 @@ extension NotesViewModel {
         notes[idx].title = title
         notes[idx].body = body
         notes[idx].updatedAt = clock.now()
+        backlinkIndex.rebuild(from: notes)
         let updated = notes[idx]
         if let oldID = noteSavePendingID {
             pendingWrites[oldID]?.cancel()

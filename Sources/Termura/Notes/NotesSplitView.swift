@@ -63,6 +63,16 @@ struct NotesSplitView: View {
         .padding(.vertical, AppUI.Spacing.md)
     }
 
+    /// Base URL for resolving relative image paths in the rendered note.
+    /// Folder notes use the folder directory; flat notes use the notes root.
+    private var noteBaseURL: URL {
+        let fallback = viewModel.notesDirectoryURL
+            ?? URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+        guard let note = viewModel.selectedNote, note.isFolder,
+              let dir = viewModel.notesDirectoryURL else { return fallback }
+        return dir.appendingPathComponent(NoteFileService.folderName(for: note))
+    }
+
     // MARK: - Editor
 
     @ViewBuilder
@@ -96,7 +106,8 @@ struct NotesSplitView: View {
                 onSave: {},
                 fontFamily: fontSettings.terminalFontFamily,
                 fontSize: fontSettings.editorFontSize,
-                language: "markdown"
+                language: "markdown",
+                autoFocus: false
             )
             .id(noteID)
         case .reading:
@@ -106,8 +117,9 @@ struct NotesSplitView: View {
                 theme: themeManager.current,
                 markdown: viewModel.editingBody,
                 references: viewModel.selectedNote?.references ?? [],
-                projectURL: viewModel.notesDirectoryURL
-                    ?? URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+                backlinks: viewModel.selectedNoteBacklinks.map(\.title),
+                projectURL: noteBaseURL,
+                onOpenBacklink: { viewModel.navigateToBacklink(title: $0) }
             )
             .id(noteID)
         }

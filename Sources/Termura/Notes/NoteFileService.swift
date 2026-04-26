@@ -32,7 +32,8 @@ actor NoteFileService: NoteFileServiceProtocol {
         let decoded = try NoteFrontmatter.decode(from: content)
         var record = NoteRecord(
             id: decoded.id, title: decoded.title, body: decoded.body,
-            isFavorite: decoded.isFavorite, references: decoded.references
+            isFavorite: decoded.isFavorite, references: decoded.references,
+            isFolder: decoded.isFolder
         )
         record.createdAt = decoded.createdAt
         record.updatedAt = decoded.updatedAt
@@ -44,6 +45,13 @@ actor NoteFileService: NoteFileServiceProtocol {
         let fileURL = directory.appendingPathComponent(name)
         let content = NoteFrontmatter.encode(record: note)
 
+        if note.isFolder {
+            let folderURL = fileURL.deletingLastPathComponent()
+            if !fileManager.fileExists(atPath: folderURL.path) {
+                try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            }
+        }
+
         do {
             try content.write(to: fileURL, atomically: true, encoding: .utf8)
         } catch {
@@ -53,11 +61,16 @@ actor NoteFileService: NoteFileServiceProtocol {
     }
 
     func deleteNote(at url: URL) async throws {
+        let target: URL = if url.lastPathComponent == "README.md" {
+            url.deletingLastPathComponent()
+        } else {
+            url
+        }
         do {
-            try fileManager.removeItem(atPath: url.path)
+            try fileManager.removeItem(at: target)
         } catch {
-            logger.error("Failed to delete note file at \(url.path): \(error.localizedDescription)")
-            throw NoteFileError.fileWriteFailed(path: url.path, underlying: error)
+            logger.error("Failed to delete note at \(target.path): \(error.localizedDescription)")
+            throw NoteFileError.fileWriteFailed(path: target.path, underlying: error)
         }
     }
 
@@ -65,10 +78,33 @@ actor NoteFileService: NoteFileServiceProtocol {
         guard fileManager.fileExists(atPath: directory.path) else { return [] }
         let contents = try fileManager.contentsOfDirectory(
             at: directory,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         )
-        return contents.filter { $0.pathExtension == "md" }
+        var result = contents.filter { $0.pathExtension == "md" }
+        let folderNotes = folderNoteURLs(contents: contents)
+        result.append(contentsOf: folderNotes)
+        return result
+    }
+
+    /// Scans subdirectories for folder notes (`subfolder/README.md`).
+    private func folderNoteURLs(contents: [URL]) -> [URL] {
+        var result: [URL] = []
+        for url in contents {
+            let isDir: Bool
+            do {
+                isDir = try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory ?? false
+            } catch {
+                logger.debug("Could not check isDirectory for \(url.lastPathComponent): \(error.localizedDescription)")
+                continue
+            }
+            guard isDir else { continue }
+            let readme = url.appendingPathComponent("README.md")
+            if fileManager.fileExists(atPath: readme.path) {
+                result.append(readme)
+            }
+        }
+        return result
     }
 
     func filename(for note: NoteRecord) -> String {
@@ -77,13 +113,27 @@ actor NoteFileService: NoteFileServiceProtocol {
 
     /// Pure-function filename derivation. Exposed as static so callers that only need
     /// the filename string can avoid an actor hop (e.g. NotesViewModel.selectedNoteFilePath).
+    /// For folder notes returns `slug/README.md`; for flat notes `{prefix}-{slug}.md`.
     nonisolated static func filename(for note: NoteRecord) -> String {
+        if note.isFolder {
+            return folderName(for: note) + "/README.md"
+        }
         let prefix = String(note.id.rawValue.uuidString.prefix(8)).lowercased()
         let slug = slugify(note.title)
         if slug.isEmpty {
             return "\(prefix).md"
         }
         return "\(prefix)-\(slug).md"
+    }
+
+    /// Directory name for a folder note. Uses the same slug logic as flat notes
+    /// but without the UUID prefix — folder names are human-readable.
+    nonisolated static func folderName(for note: NoteRecord) -> String {
+        let slug = slugify(note.title)
+        if slug.isEmpty {
+            return String(note.id.rawValue.uuidString.prefix(8)).lowercased()
+        }
+        return slug
     }
 
     /// Converts a title to a URL-safe slug. Public static so the single canonical

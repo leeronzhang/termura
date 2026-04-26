@@ -83,7 +83,8 @@ struct NoteTabContentView: View {
                 onSave: {},
                 fontFamily: fontSettings.terminalFontFamily,
                 fontSize: fontSettings.editorFontSize,
-                language: "markdown"
+                language: "markdown",
+                autoFocus: false
             )
         case .reading:
             NoteRenderedView(
@@ -92,8 +93,9 @@ struct NoteTabContentView: View {
                 theme: themeManager.current,
                 markdown: notesViewModel.editingBody,
                 references: notesViewModel.selectedNote?.references ?? [],
-                projectURL: notesViewModel.notesDirectoryURL
-                    ?? URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+                backlinks: notesViewModel.selectedNoteBacklinks.map(\.title),
+                projectURL: noteBaseURL(for: notesViewModel.selectedNote),
+                onOpenBacklink: { notesViewModel.navigateToBacklink(title: $0) }
             )
         }
     }
@@ -106,9 +108,18 @@ struct NoteTabContentView: View {
             theme: themeManager.current,
             markdown: inactiveNote?.body ?? "",
             references: inactiveNote?.references ?? [],
-            projectURL: notesViewModel.notesDirectoryURL
-                ?? URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+            backlinks: notesViewModel.selectedNoteBacklinks.map(\.title),
+            projectURL: noteBaseURL(for: inactiveNote),
+            onOpenBacklink: { notesViewModel.navigateToBacklink(title: $0) }
         )
+    }
+
+    private func noteBaseURL(for note: NoteRecord?) -> URL {
+        let fallback = notesViewModel.notesDirectoryURL
+            ?? URL(fileURLWithPath: AppConfig.Paths.homeDirectory)
+        guard let note, note.isFolder,
+              let dir = notesViewModel.notesDirectoryURL else { return fallback }
+        return dir.appendingPathComponent(NoteFileService.folderName(for: note))
     }
 
     // MARK: - Header

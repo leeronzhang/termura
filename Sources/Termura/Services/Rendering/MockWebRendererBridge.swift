@@ -23,7 +23,8 @@ final class DebugWebRendererBridge: WebRendererBridgeProtocol {
         appendedChunks.append(contentsOf: chunks)
     }
 
-    func renderMarkdown(_ markdown: String, references: [String], to webView: WKWebView) async {
+    func renderMarkdown(_ markdown: String, references: [String], backlinks: [String],
+                        to webView: WKWebView) async {
         renderedMarkdownCalls.append((markdown: markdown, references: references))
     }
 }

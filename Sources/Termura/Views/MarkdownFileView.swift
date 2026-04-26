@@ -74,6 +74,7 @@ struct MarkdownFileView: View {
                 theme: themeManager.current,
                 markdown: content,
                 references: [],
+                backlinks: [],
                 projectURL: projectURL
             )
         }

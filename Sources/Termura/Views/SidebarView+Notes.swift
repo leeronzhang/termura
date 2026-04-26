@@ -7,6 +7,13 @@ extension SidebarView {
     var notesContent: some View {
         VStack(spacing: 0) {
             notesHeader(vm: notesViewModel)
+            if !notesViewModel.allTags.isEmpty {
+                TagChipsBar(
+                    tags: notesViewModel.allTags,
+                    selectedTag: notesViewModel.selectedTagFilter,
+                    onSelect: { notesViewModel.selectedTagFilter = $0 }
+                )
+            }
             notesList(vm: notesViewModel)
         }
         .task { await notesViewModel.loadNotes() }
@@ -35,7 +42,7 @@ extension SidebarView {
         let splitIDs = activeContentTab?.splitNoteIDs
         return ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: AppUI.Spacing.sm) {
-                ForEach(vm.notes) { note in
+                ForEach(vm.filteredNotes) { note in
                     let inCurrentTab = activeContentTab?.containsNote(note.id) ?? false
                     let isFocused = vm.selectedNoteID == note.id
                     let activeState = inCurrentTab && isFocused
@@ -115,6 +122,12 @@ private struct SidebarNoteRow: View {
                     Text(preview)
                         .font(AppUI.Font.caption)
                         .foregroundColor(.secondary.opacity(AppUI.Opacity.secondary))
+                        .lineLimit(1)
+                }
+                if !note.tags.isEmpty {
+                    Text(note.tags.joined(separator: " · "))
+                        .font(AppUI.Font.micro)
+                        .foregroundColor(.brandGreen.opacity(0.7))
                         .lineLimit(1)
                 }
             }

@@ -32,30 +32,31 @@ extension FileBackedNoteRepository {
     }
 
     /// Incrementally sync index with disk: only reads new/modified files, removes deleted entries.
+    /// Uses relative paths as keys to avoid collisions between folder notes (all named README.md).
     func incrementalSync() async throws {
         let diskURLs = try await fileService.listNoteFiles(in: notesDirectory)
         var diskMap: [String: (url: URL, modDate: Date?)] = [:]
         for url in diskURLs {
-            diskMap[url.lastPathComponent] = (url, fileModDate(at: url))
+            diskMap[relativeKey(for: url)] = (url, fileModDate(at: url))
         }
 
-        var indexByFilename: [String: NoteID] = [:]
+        var indexByRelPath: [String: NoteID] = [:]
         for (id, entry) in index {
-            indexByFilename[entry.url.lastPathComponent] = id
+            indexByRelPath[relativeKey(for: entry.url)] = id
         }
 
         // Remove entries whose files no longer exist on disk.
-        let removed = Set(indexByFilename.keys).subtracting(diskMap.keys)
-        for filename in removed {
-            guard let id = indexByFilename[filename] else { continue }
+        let removed = Set(indexByRelPath.keys).subtracting(diskMap.keys)
+        for relPath in removed {
+            guard let id = indexByRelPath[relPath] else { continue }
             index[id] = nil
             try await deleteCache(id: id)
         }
 
         // Read only new or modified files (modDate changed).
         var upsertCount = 0
-        for (filename, disk) in diskMap {
-            if let id = indexByFilename[filename], let entry = index[id],
+        for (relPath, disk) in diskMap {
+            if let id = indexByRelPath[relPath], let entry = index[id],
                let diskMod = disk.modDate, let indexMod = entry.modificationDate, diskMod == indexMod {
                 continue
             }
@@ -65,12 +66,23 @@ extension FileBackedNoteRepository {
                 try await upsertCache(record)
                 upsertCount += 1
             } catch {
-                logger.warning("Skipping malformed note file \(filename): \(error.localizedDescription)")
+                logger.warning("Skipping malformed note file \(relPath): \(error.localizedDescription)")
             }
         }
         if !removed.isEmpty || upsertCount > 0 {
             logger.debug("Incremental sync: \(upsertCount) upserted, \(removed.count) removed")
         }
+    }
+
+    /// Returns a path relative to `notesDirectory`, e.g. `my-topic/README.md` or `abc-note.md`.
+    private func relativeKey(for url: URL) -> String {
+        let base = notesDirectory.standardizedFileURL.path
+        let full = url.standardizedFileURL.path
+        if full.hasPrefix(base) {
+            let rel = String(full.dropFirst(base.count))
+            return rel.hasPrefix("/") ? String(rel.dropFirst()) : rel
+        }
+        return url.lastPathComponent
     }
 
     // MARK: - File Watching

@@ -35,11 +35,14 @@ final class WebRendererBridge: WebRendererBridgeProtocol {
         }
     }
 
-    func renderMarkdown(_ markdown: String, references: [String], to webView: WKWebView) async {
+    func renderMarkdown(_ markdown: String, references: [String], backlinks: [String],
+                        to webView: WKWebView) async {
         let escapedMarkdown = escapeForJS(markdown)
         let referencesJSON = serializeReferences(references)
         let escapedReferences = escapeForJS(referencesJSON)
-        let js = "window.termuraRenderer.renderMarkdown('\(escapedMarkdown)', '\(escapedReferences)');"
+        let backlinksJSON = serializeReferences(backlinks)
+        let escapedBacklinks = escapeForJS(backlinksJSON)
+        let js = "window.termuraRenderer.renderMarkdown('\(escapedMarkdown)', '\(escapedReferences)', '\(escapedBacklinks)');"
         do {
             try await webView.evaluateJavaScript(js)
         } catch {

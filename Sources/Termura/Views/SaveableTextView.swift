@@ -19,7 +19,8 @@ final class SaveableTextView: NSTextView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard event.modifierFlags.contains(.command) else {
+        guard event.modifierFlags.contains(.command),
+              window?.firstResponder === self else {
             return super.performKeyEquivalent(with: event)
         }
         switch event.charactersIgnoringModifiers {

@@ -59,6 +59,7 @@ extension MainView {
     func isTabAppropriate(_ tab: ContentTab, for sidebar: SidebarTab) -> Bool {
         switch sidebar {
         case .sessions: tab.isTerminal || tab.isSplit
+        case .knowledge: tab.isNote
         case .notes: tab.isNote
         case .project: tab.isProjectContent
         case .harness: tab.isProjectContent
@@ -74,6 +75,7 @@ extension MainView {
         // Current tab doesn't match — run the restore for this sidebar.
         switch sidebar {
         case .sessions: restoreSessionsTab()
+        case .knowledge: restoreNotesTab()
         case .notes: restoreNotesTab()
         case .project: restoreProjectTab()
         case .harness: restoreHarnessTab()
@@ -104,6 +106,8 @@ extension MainView {
         switch newTab {
         case .sessions:
             restoreSessionsTab()
+        case .knowledge:
+            restoreNotesTab()
         case .notes:
             restoreNotesTab()
         case .project:

@@ -1,0 +1,169 @@
+/* Plugin-specific styles for the Termura WebRenderer.
+   Covers: chunk output, references, footnotes, KaTeX, Mermaid, backlinks. */
+
+/* ── Chunk separator (agent output) ── */
+
+.chunk-separator {
+  border-top: 1px solid var(--md-border);
+  margin: 16px 0 8px;
+  padding-top: 8px;
+  opacity: 0.5;
+}
+
+.chunk-command {
+  font-family: "Source Code Pro", ui-monospace, Menlo, Monaco, monospace;
+  font-size: 0.85em;
+  color: var(--termura-ansi-green);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.chunk-error {
+  color: var(--termura-ansi-red);
+}
+
+/* ── References section ── */
+
+section.references {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--md-border);
+}
+
+section.references h2 {
+  font-size: 1.1em;
+  margin-bottom: 0.5em;
+  color: var(--md-text-muted);
+}
+
+section.references ol {
+  padding-left: 24px;
+  font-size: 0.9em;
+  color: var(--md-text-muted);
+}
+
+section.references li {
+  margin-bottom: 4px;
+}
+
+/* ── Superscript / Subscript ── */
+
+sup, sub {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+sup {
+  top: -0.5em;
+}
+
+sub {
+  bottom: -0.25em;
+}
+
+/* ── Footnotes (markdown-it-footnote) ── */
+
+section.footnotes {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--md-border);
+  font-size: 0.88em;
+  color: var(--md-text-muted);
+}
+
+section.footnotes ol {
+  padding-left: 24px;
+}
+
+section.footnotes li {
+  margin-bottom: 0.4em;
+}
+
+section.footnotes li p {
+  margin: 0;
+}
+
+sup.footnote-ref a,
+a.footnote-backref {
+  color: var(--md-link);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+sup.footnote-ref a:hover,
+a.footnote-backref:hover {
+  text-decoration: underline;
+}
+
+hr.footnotes-sep {
+  display: none;
+}
+
+/* ── KaTeX ── */
+
+.katex {
+  color: var(--md-text) !important;
+}
+
+/* ── Mermaid ── */
+
+.mermaid {
+  margin: 1em 0;
+  text-align: center;
+}
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  color: var(--termura-ansi-red);
+  font-size: 0.85em;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: rgba(228, 54, 57, 0.1);
+  border-radius: 4px;
+}
+
+/* ── Backlinks: [[note-name]] → clickable internal links ── */
+
+a.backlink {
+  color: var(--termura-ansi-green);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+a.backlink:hover {
+  text-decoration: underline solid;
+}
+
+/* ── Backlinks section: notes that reference this one ── */
+
+section.backlinks {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--md-border);
+}
+
+section.backlinks h2 {
+  font-size: 1.1em;
+  margin-bottom: 0.5em;
+  color: var(--md-text-muted);
+}
+
+section.backlinks ul {
+  list-style: none;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+section.backlinks li {
+  margin-bottom: 4px;
+}
+
+section.backlinks li::before {
+  content: "← ";
+  color: var(--md-text-muted);
+}

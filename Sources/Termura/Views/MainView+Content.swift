@@ -80,6 +80,7 @@ extension MainView {
     private func emptyStateFor(_ sidebar: SidebarTab) -> some View {
         switch sidebar {
         case .sessions: emptyState
+        case .knowledge: notesEmptyState
         case .notes: notesEmptyState
         case .project: projectEmptyState
         case .harness: harnessEmptyState

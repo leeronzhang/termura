@@ -16,5 +16,7 @@ protocol WebRendererBridgeProtocol: AnyObject, Sendable {
     /// Replace the WebView content with rendered markdown.
     /// Used by NoteRenderedView to display a single markdown document.
     /// References are appended as a numbered References section at the bottom.
-    func renderMarkdown(_ markdown: String, references: [String], to webView: WKWebView) async
+    /// Backlinks are shown as a "Backlinks" section listing notes that link to this one.
+    func renderMarkdown(_ markdown: String, references: [String], backlinks: [String],
+                        to webView: WKWebView) async
 }

@@ -2,7 +2,7 @@ import Foundation
 
 /// YAML frontmatter codec for Markdown note files.
 /// Schema is fixed (6 fields), so hand-rolled key-value parsing suffices without external YAML dependency.
-enum NoteFrontmatter {
+public enum NoteFrontmatter {
     private static let separator = "---"
     private static func makeISO8601Formatter() -> ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
@@ -20,18 +20,26 @@ enum NoteFrontmatter {
 
     // MARK: - Encode
 
-    struct EncodeInput: Sendable {
-        let id: NoteID
-        let title: String
-        let isFavorite: Bool
-        let tags: [String]
-        let references: [String]
-        let createdAt: Date
-        let updatedAt: Date
-        let body: String
+    public struct EncodeInput: Sendable {
+        public let id: NoteID
+        public let title: String
+        public let isFavorite: Bool
+        public let tags: [String]
+        public let references: [String]
+        public let isFolder: Bool
+        public let createdAt: Date
+        public let updatedAt: Date
+        public let body: String
+
+        public init(id: NoteID, title: String, isFavorite: Bool, tags: [String],
+                    references: [String], isFolder: Bool, createdAt: Date, updatedAt: Date, body: String) {
+            self.id = id; self.title = title; self.isFavorite = isFavorite
+            self.tags = tags; self.references = references; self.isFolder = isFolder
+            self.createdAt = createdAt; self.updatedAt = updatedAt; self.body = body
+        }
     }
 
-    static func encode(_ input: EncodeInput) -> String {
+    public static func encode(_ input: EncodeInput) -> String {
         var lines = [separator]
         lines.append("id: \(input.id.rawValue.uuidString)")
         lines.append("title: \(escapeYAMLString(input.title))")
@@ -44,6 +52,9 @@ enum NoteFrontmatter {
             let joined = input.references.map { escapeYAMLString($0) }.joined(separator: ", ")
             lines.append("references: [\(joined)]")
         }
+        if input.isFolder {
+            lines.append("folder: true")
+        }
         lines.append("created: \(formatDate(input.createdAt))")
         lines.append("updated: \(formatDate(input.updatedAt))")
         lines.append(separator)
@@ -51,10 +62,10 @@ enum NoteFrontmatter {
         return lines.joined(separator: "\n")
     }
 
-    static func encode(record: NoteRecord) -> String {
+    public static func encode(record: NoteRecord) -> String {
         encode(EncodeInput(
             id: record.id, title: record.title, isFavorite: record.isFavorite,
-            tags: [], references: record.references,
+            tags: record.tags, references: record.references, isFolder: record.isFolder,
             createdAt: record.createdAt, updatedAt: record.updatedAt,
             body: record.body
         ))
@@ -62,18 +73,19 @@ enum NoteFrontmatter {
 
     // MARK: - Decode
 
-    struct Decoded: Sendable, Equatable {
-        let id: NoteID
-        var title: String
-        var isFavorite: Bool
-        var tags: [String]
-        var references: [String]
-        var createdAt: Date
-        var updatedAt: Date
-        var body: String
+    public struct Decoded: Sendable, Equatable {
+        public let id: NoteID
+        public var title: String
+        public var isFavorite: Bool
+        public var tags: [String]
+        public var references: [String]
+        public var isFolder: Bool
+        public var createdAt: Date
+        public var updatedAt: Date
+        public var body: String
     }
 
-    static func decode(from content: String) throws -> Decoded {
+    public static func decode(from content: String) throws -> Decoded {
         let lines = content.components(separatedBy: "\n")
         guard let firstSep = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == separator }) else {
             throw NoteFileError.missingFrontmatter
@@ -96,6 +108,7 @@ enum NoteFrontmatter {
         let favorite = kvPairs["favorite"] == "true"
         let tags = parseStringArray(kvPairs["tags"])
         let references = parseStringArray(kvPairs["references"])
+        let isFolder = kvPairs["folder"] == "true"
 
         let createdAt: Date = if let raw = kvPairs["created"], let parsed = parseDate(raw) {
             parsed
@@ -118,7 +131,7 @@ enum NoteFrontmatter {
 
         return Decoded(
             id: NoteID(rawValue: uuid), title: title, isFavorite: favorite,
-            tags: tags, references: references,
+            tags: tags, references: references, isFolder: isFolder,
             createdAt: createdAt, updatedAt: updatedAt, body: body
         )
     }
@@ -162,27 +175,5 @@ enum NoteFrontmatter {
             return "\"\(escaped)\""
         }
         return s
-    }
-}
-
-// MARK: - Errors
-
-enum NoteFileError: LocalizedError {
-    case missingFrontmatter
-    case missingRequiredField(String)
-    case fileReadFailed(path: String, underlying: Error)
-    case fileWriteFailed(path: String, underlying: Error)
-
-    var errorDescription: String? {
-        switch self {
-        case .missingFrontmatter:
-            "Note file is missing YAML frontmatter delimiters (---)."
-        case let .missingRequiredField(field):
-            "Note frontmatter is missing required field: \(field)"
-        case let .fileReadFailed(path, underlying):
-            "Failed to read note file at \(path): \(underlying.localizedDescription)"
-        case let .fileWriteFailed(path, underlying):
-            "Failed to write note file at \(path): \(underlying.localizedDescription)"
-        }
     }
 }
