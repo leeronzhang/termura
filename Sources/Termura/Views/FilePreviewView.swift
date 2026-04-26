@@ -90,7 +90,7 @@ struct FilePreviewView: View {
             }
             .font(AppUI.Font.label)
             .buttonStyle(.plain)
-            .foregroundColor(.accentColor)
+            .foregroundColor(.brandGreen)
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
@@ -126,7 +126,7 @@ struct FilePreviewView: View {
             } label: {
                 Text("1:1")
                     .font(AppUI.Font.captionMono)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(.brandGreen)
             }
             .buttonStyle(.plain)
         }

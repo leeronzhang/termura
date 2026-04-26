@@ -61,7 +61,7 @@ struct ContentTabBar: View {
                         .accessibilityHidden(true)
                 } else if hasUncommittedChanges {
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(Color.brandGreen)
                         .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
                         .offset(x: 3, y: -1)
                         .accessibilityHidden(true)

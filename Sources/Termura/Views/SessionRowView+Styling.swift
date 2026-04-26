@@ -26,9 +26,9 @@ extension SessionRowView {
 
     var rowFillColor: Color {
         if isActive {
-            return Color.accentColor.opacity(AppUI.Opacity.selected)
+            return Color.brandGreen.opacity(AppUI.Opacity.selected)
         } else if isInSplit {
-            return Color.accentColor.opacity(AppUI.Opacity.whisper)
+            return Color.brandGreen.opacity(AppUI.Opacity.whisper)
         } else if isHovered {
             return themeManager.current.sidebarText.opacity(AppUI.Opacity.whisper)
         }
@@ -38,11 +38,11 @@ extension SessionRowView {
 
     var glowBorder: some View {
         let borderColor = if isActive {
-            Color.accentColor.opacity(AppUI.Opacity.border)
+            Color.brandGreen.opacity(AppUI.Opacity.border)
         } else if isInSplit {
-            Color.accentColor.opacity(AppUI.Opacity.whisper)
+            Color.brandGreen.opacity(AppUI.Opacity.whisper)
         } else {
-            Color.accentColor.opacity(glowOpacity)
+            Color.brandGreen.opacity(glowOpacity)
         }
         return RoundedRectangle(cornerRadius: AppUI.Radius.md)
             .stroke(borderColor, lineWidth: 1)
@@ -54,7 +54,7 @@ extension SessionRowView {
             if isInNonActiveSplit {
                 HStack(spacing: 0) {
                     RoundedRectangle(cornerRadius: 1)
-                        .fill(Color.accentColor.opacity(AppUI.Opacity.secondary))
+                        .fill(Color.brandGreen.opacity(AppUI.Opacity.secondary))
                         .frame(width: 2)
                         .padding(.vertical, AppUI.Spacing.sm)
                     Spacer()

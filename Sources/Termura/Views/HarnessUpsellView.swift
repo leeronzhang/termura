@@ -62,7 +62,7 @@ struct HarnessUpsellView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, AppUI.Spacing.smMd)
                 .padding(.vertical, 2)
-                .background(Color.accentColor)
+                .background(Color.brandGreen)
                 .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.sm))
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
@@ -87,7 +87,7 @@ struct HarnessUpsellView: View {
                 HStack(alignment: .top, spacing: AppUI.Spacing.mdLg) {
                     Image(systemName: feature.icon)
                         .font(AppUI.Font.body)
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(.brandGreen)
                         .frame(width: 20)
                     VStack(alignment: .leading, spacing: AppUI.Spacing.xs) {
                         Text(feature.title)
@@ -117,7 +117,7 @@ struct HarnessUpsellView: View {
                 Spacer()
             }
             .padding(.vertical, AppUI.Spacing.smMd)
-            .background(Color.accentColor)
+            .background(Color.brandGreen)
             .foregroundColor(.white)
             .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
         }

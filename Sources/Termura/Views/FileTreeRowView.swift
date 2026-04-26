@@ -63,11 +63,11 @@ struct FileTreeRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, AppUI.Spacing.lg)
         .padding(.vertical, AppUI.Spacing.smMd)
-        .background(isActive ? Color.accentColor.opacity(AppUI.Opacity.selected) : Color.clear)
+        .background(isActive ? Color.brandGreen.opacity(AppUI.Opacity.selected) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
         .overlay(
             RoundedRectangle(cornerRadius: AppUI.Radius.md)
-                .stroke(isActive ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
+                .stroke(isActive ? Color.brandGreen.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
     }

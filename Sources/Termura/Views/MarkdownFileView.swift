@@ -95,7 +95,7 @@ struct MarkdownFileView: View {
                 Button("Save") { saveFile() }
                     .font(AppUI.Font.label)
                     .buttonStyle(.plain)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(.brandGreen)
                 Spacer().frame(width: AppUI.Spacing.xxl)
             }
             modeToggle

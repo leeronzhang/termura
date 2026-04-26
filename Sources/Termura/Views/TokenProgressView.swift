@@ -42,7 +42,7 @@ struct TokenProgressView: View {
     private var progressColor: Color {
         if fraction >= AppConfig.UI.tokenProgressCriticalFraction { return .red }
         if fraction >= AppConfig.UI.tokenProgressWarningFraction { return .orange }
-        return .accentColor
+        return .brandGreen
     }
 
     private var formattedTokens: String {

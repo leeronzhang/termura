@@ -107,13 +107,13 @@ struct SidebarHarnessContent: View {
                     .padding(.vertical, AppUI.Spacing.smMd)
                     .background(
                         isSelected
-                            ? Color.accentColor.opacity(AppUI.Opacity.selected)
+                            ? Color.brandGreen.opacity(AppUI.Opacity.selected)
                             : Color.clear
                     )
                     .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))
                     .overlay(
                         RoundedRectangle(cornerRadius: AppUI.Radius.md)
-                            .stroke(isSelected ? Color.accentColor.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
+                            .stroke(isSelected ? Color.brandGreen.opacity(AppUI.Opacity.border) : .clear, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)

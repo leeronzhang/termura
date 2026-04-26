@@ -38,13 +38,13 @@ extension MainView {
             .id(sessionID)
             .overlay(alignment: .top) {
                 if isFocused {
-                    Rectangle().fill(Color.accentColor).frame(height: 2)
+                    Rectangle().fill(Color.brandGreen).frame(height: 2)
                 }
             }
             .overlay {
                 if dropTargetSlot == slot {
                     RoundedRectangle(cornerRadius: AppUI.Radius.sm)
-                        .stroke(Color.accentColor.opacity(AppUI.Opacity.border), lineWidth: 2)
+                        .stroke(Color.brandGreen.opacity(AppUI.Opacity.border), lineWidth: 2)
                         .allowsHitTesting(false)
                 }
             }

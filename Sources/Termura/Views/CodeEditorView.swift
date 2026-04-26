@@ -107,7 +107,7 @@ struct CodeEditorView: View {
                 Button("Save") { saveFile() }
                     .font(AppUI.Font.label)
                     .buttonStyle(.plain)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(.brandGreen)
             }
         }
         .padding(.horizontal, AppUI.Spacing.xxl)

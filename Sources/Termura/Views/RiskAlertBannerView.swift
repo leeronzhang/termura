@@ -84,7 +84,7 @@ struct RiskAlertBannerView: View {
             .foregroundStyle(.white)
             .padding(.horizontal, AppUI.Spacing.md)
             .padding(.vertical, AppUI.Spacing.sm)
-            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: AppUI.Spacing.xs))
+            .background(Color.brandGreen, in: RoundedRectangle(cornerRadius: AppUI.Spacing.xs))
             .overlay(AppKitClickableOverlay(action: onAllow))
             .accessibilityLabel("Allow")
             .accessibilityHint("Allows the detected operation to continue")

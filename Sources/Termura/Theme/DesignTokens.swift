@@ -1,5 +1,12 @@
 import SwiftUI
 
+// MARK: - Brand Color
+
+extension Color {
+    /// Brand accent green from landing page (#4ade80).
+    static let brandGreen = Color(red: 0.290, green: 0.871, blue: 0.502)
+}
+
 /// Centralized design tokens for consistent spacing, typography, radii, and opacity.
 /// All magic numbers in views must reference `DS` instead of inline literals.
 enum AppUI {

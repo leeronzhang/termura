@@ -92,7 +92,7 @@ struct SessionRowView: View {
             if splitInfo != nil {
                 Image(systemName: "rectangle.split.2x1")
                     .font(.system(size: 9))
-                    .foregroundColor(.accentColor.opacity(
+                    .foregroundColor(.brandGreen.opacity(
                         (isActive || isInSplit) ? AppUI.Opacity.strong : AppUI.Opacity.tertiary
                     ))
             }

@@ -49,12 +49,12 @@ struct RuleHistoryView: View {
                     }
                     .font(AppUI.Font.caption)
                     .buttonStyle(.plain)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(.brandGreen)
                 }
             }
             .padding(.horizontal, AppUI.Spacing.md)
             .padding(.vertical, AppUI.Spacing.md)
-            .background(selectedIndex == index ? Color.accentColor.opacity(AppUI.Opacity.highlight) : Color.clear)
+            .background(selectedIndex == index ? Color.brandGreen.opacity(AppUI.Opacity.highlight) : Color.clear)
             .cornerRadius(AppUI.Radius.sm)
         }
         .buttonStyle(.plain)

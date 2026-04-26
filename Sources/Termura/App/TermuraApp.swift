@@ -12,6 +12,7 @@ struct TermuraApp: App {
                 themeImportService: appDelegate.services.themeImportService,
                 shellHookInstaller: appDelegate.services.shellHookInstaller
             )
+            .tint(.brandGreen)
         }
         .commands {
             AppCommands(dispatcher: appDelegate)

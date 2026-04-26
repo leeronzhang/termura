@@ -98,7 +98,7 @@ struct SidebarProjectContent: View {
             // Right: ahead/behind + file stats (all inline, no pill backgrounds)
             HStack(spacing: AppUI.Spacing.mdLg) {
                 if git.ahead > 0 {
-                    gitInlineStat("\u{2191}\(git.ahead)", color: .accentColor)
+                    gitInlineStat("\u{2191}\(git.ahead)", color: .brandGreen)
                 }
                 if git.behind > 0 {
                     gitInlineStat("\u{2193}\(git.behind)", color: .orange)

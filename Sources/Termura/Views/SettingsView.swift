@@ -176,7 +176,7 @@ struct ShellIntegrationSettingsView: View {
     private func featureRow(icon: String, text: String) -> some View {
         HStack(spacing: AppUI.Spacing.md) {
             Image(systemName: icon)
-                .foregroundColor(.accentColor)
+                .foregroundColor(.brandGreen)
                 .frame(width: AppUI.Size.iconFrameLarge)
                 .accessibilityHidden(true)
             Text(text).font(.callout)

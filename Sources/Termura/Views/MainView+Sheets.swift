@@ -98,7 +98,7 @@ extension MainView {
                     .foregroundColor(.white)
                     .padding(.horizontal, AppUI.Spacing.xxxl)
                     .padding(.vertical, AppUI.Spacing.md)
-                    .background(Color.accentColor)
+                    .background(Color.brandGreen)
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -132,7 +132,7 @@ extension MainView {
                     .foregroundColor(.white)
                     .padding(.horizontal, AppUI.Spacing.xxxl)
                     .padding(.vertical, AppUI.Spacing.md)
-                    .background(Color.accentColor)
+                    .background(Color.brandGreen)
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)

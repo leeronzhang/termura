@@ -102,13 +102,13 @@ private struct ThemeCard: View {
         .background(
             RoundedRectangle(cornerRadius: AppUI.Radius.lg)
                 .fill(isSelected
-                    ? Color.accentColor.opacity(AppUI.Opacity.selected)
+                    ? Color.brandGreen.opacity(AppUI.Opacity.selected)
                     : Color(nsColor: .windowBackgroundColor))
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppUI.Radius.lg)
                 .stroke(
-                    isSelected ? Color.accentColor : Color(nsColor: .separatorColor),
+                    isSelected ? Color.brandGreen : Color(nsColor: .separatorColor),
                     lineWidth: 1
                 )
         )

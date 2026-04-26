@@ -86,7 +86,7 @@ struct SidebarTabBar: View {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: selectedTab == tab ? tab.activeIcon : tab.icon)
                     .font(AppUI.Font.tabBarIcon)
-                    .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
+                    .foregroundColor(selectedTab == tab ? .brandGreen : .secondary)
 
                 if tab == .project && diagnosticErrorCount > 0 {
                     // Errors take priority — red dot replaces the uncommitted-changes dot.
@@ -96,7 +96,7 @@ struct SidebarTabBar: View {
                         .offset(x: 3, y: -1)
                 } else if tab == .project && hasUncommittedChanges {
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(Color.brandGreen)
                         .frame(width: AppUI.Size.dotSmall, height: AppUI.Size.dotSmall)
                         .offset(x: 3, y: -1)
                 }

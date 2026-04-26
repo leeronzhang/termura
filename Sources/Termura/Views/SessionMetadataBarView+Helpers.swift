@@ -30,7 +30,7 @@ extension SessionMetadataBarView {
                     Button {
                         withAnimation(.easeInOut(duration: AppUI.Animation.quick)) { showAllTurns = true }
                     } label: {
-                        Text("Show all").font(AppUI.Font.caption).foregroundColor(.accentColor)
+                        Text("Show all").font(AppUI.Font.caption).foregroundColor(.brandGreen)
                             .frame(maxWidth: .infinity).padding(.vertical, AppUI.Spacing.smMd)
                     }.buttonStyle(.plain)
                 }

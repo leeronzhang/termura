@@ -47,14 +47,14 @@ struct ShellIntegrationOnboardingView: View {
             featureRow(icon: "doc.text.magnifyingglass", text: "Accurate token counting")
         }
         .padding(AppUI.Spacing.lg)
-        .background(Color.accentColor.opacity(AppUI.Opacity.tint))
+        .background(Color.brandGreen.opacity(AppUI.Opacity.tint))
         .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.lg))
     }
 
     private func featureRow(icon: String, text: String) -> some View {
         HStack(spacing: AppUI.Spacing.md) {
             Image(systemName: icon)
-                .foregroundColor(.accentColor)
+                .foregroundColor(.brandGreen)
                 .frame(width: AppUI.Size.iconFrameLarge)
                 .accessibilityHidden(true)
             Text(text)

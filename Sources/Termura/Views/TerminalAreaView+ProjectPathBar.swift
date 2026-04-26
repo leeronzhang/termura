@@ -15,7 +15,7 @@ extension TerminalAreaView {
                 Button { localUI.showContextSheet = true } label: {
                     Image(systemName: "distribute.vertical")
                         .font(AppUI.Font.toolbarIcon)
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(.brandGreen)
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, AppUI.Spacing.xxl)
@@ -45,7 +45,7 @@ extension TerminalAreaView {
                    viewModel.currentMetadata.currentAgentStatus == .toolRunning {
                     Text(abbreviatedFilePath(filePath))
                         .font(AppUI.Font.pathMono)
-                        .foregroundColor(.accentColor.opacity(AppUI.Opacity.strong))
+                        .foregroundColor(.brandGreen.opacity(AppUI.Opacity.strong))
                         .lineLimit(1)
                         .truncationMode(.head)
                 } else {
@@ -96,7 +96,7 @@ extension TerminalAreaView {
         } label: {
             Image(systemName: "menubar.dock.rectangle")
                 .font(AppUI.Font.toolbarIcon)
-                .foregroundColor(commandRouter.showComposer ? .accentColor : .secondary)
+                .foregroundColor(commandRouter.showComposer ? .brandGreen : .secondary)
         }
         .buttonStyle(.plain)
         .help("Composer (Cmd+K)")
@@ -108,7 +108,7 @@ extension TerminalAreaView {
         } label: {
             Image(systemName: "rectangle.split.2x1")
                 .font(AppUI.Font.toolbarIcon)
-                .foregroundColor(commandRouter.isDualPaneActive ? .accentColor : .secondary)
+                .foregroundColor(commandRouter.isDualPaneActive ? .brandGreen : .secondary)
         }
         .buttonStyle(.plain)
         .help(commandRouter.isDualPaneActive ? "Exit Split View" : "Split View")
@@ -138,7 +138,7 @@ extension TerminalAreaView {
         } label: {
             Image(systemName: "info.windshield")
                 .font(AppUI.Font.toolbarIcon)
-                .foregroundColor(infoVisible ? .accentColor : .secondary)
+                .foregroundColor(infoVisible ? .brandGreen : .secondary)
         }
         .buttonStyle(.plain)
         .help(infoVisible ? "Hide Inspector (Cmd+Shift+I)" : "Show Inspector (Cmd+Shift+I)")

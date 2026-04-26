@@ -63,7 +63,7 @@ struct ComposerOverlayView: View {
         Image(systemName: isNotesActive
             ? "text.rectangle.fill" : "text.rectangle")
             .font(AppUI.Font.title2Regular)
-            .foregroundColor(isNotesActive ? .accentColor : .secondary)
+            .foregroundColor(isNotesActive ? .brandGreen : .secondary)
             .frame(width: 32, height: 32)
             .overlay(AppKitClickableOverlay(action: onToggleNotes))
     }
@@ -97,7 +97,7 @@ struct ComposerOverlayView: View {
             .font(AppUI.Font.title2Regular)
             .foregroundColor(hasContent ? .white : Color.white.opacity(0.4))
             .frame(width: 36, height: 36)
-            .background(Circle().fill(hasContent ? Color.accentColor : Color.secondary.opacity(0.4)))
+            .background(Circle().fill(hasContent ? Color.brandGreen : Color.secondary.opacity(0.4)))
             .shadow(color: .black.opacity(hasContent ? 0.3 : 0), radius: 4, y: 2)
             .overlay(AppKitClickableOverlay(action: {
                 let hasText = !editorViewModel.currentText
