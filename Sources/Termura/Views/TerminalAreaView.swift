@@ -171,27 +171,25 @@ struct TerminalAreaView: View {
         )
     }
 
-    /// Registers a one-shot callback on the TerminalViewModel to pre-fill the Composer
+    /// Registers a one-shot callback on the TerminalViewModel to pre-fill the terminal
     /// with the previous agent's resume command when the first shell prompt is detected.
     /// Only fires for restored sessions with a known agent type.
-    /// Skipped when ContextInjectionService is available — PTY injection already sends
-    /// the resume command directly to the terminal, making Composer pre-fill redundant.
+    /// The command is sent without a trailing newline so the user can press Enter to
+    /// resume or edit/delete the command to start a fresh session.
     private func setupAgentResumeIfNeeded() {
-        // PTY-level injection handles resume; terminal pre-fill is the fallback path only.
-        guard !viewModel.sessionServices.hasContextInjection else { return }
         let store = sessionScope.store
         guard store.isRestoredSession(id: sessionID) else { return }
         guard let session = store.session(id: sessionID) else { return }
         let agentType = session.agentType
         guard agentType != .unknown, !agentType.resumeCommand.isEmpty else { return }
         let command = agentType.resumeCommand
-        let eng = engine
+        let editor = editorViewModel
         let vm = viewModel
-        // Pre-fill the resume command directly on the shell prompt (no newline).
-        // The text appears as if the user typed it; they press Enter to execute
-        // or delete to start a fresh session instead.
+        // Pre-fill the resume command into the Composer (not the PTY).
+        // One Enter in the Composer sends + executes. User can also edit
+        // (e.g. delete --continue) before pressing Enter.
         vm.onShellPromptReadyForResume = {
-            Task { await eng.send(command) }
+            editor.setText(command)
         }
     }
 

@@ -16,11 +16,6 @@ actor SessionServices {
     let sessionHandoffService: (any SessionHandoffServiceProtocol)?
     let isRestoredSession: Bool
 
-    /// True when PTY-level context injection is available for this restored session.
-    /// Checked synchronously by TerminalAreaView to skip redundant Composer pre-fill.
-    /// Safe as `nonisolated let` — immutable value set at init.
-    nonisolated let hasContextInjection: Bool
-
     // MARK: - Internal state
 
     private var hasInjectedContext = false
@@ -41,7 +36,6 @@ actor SessionServices {
         self.contextInjectionService = contextInjectionService
         self.sessionHandoffService = sessionHandoffService
         self.isRestoredSession = isRestoredSession
-        hasContextInjection = isRestoredSession && contextInjectionService != nil
     }
 
     deinit {

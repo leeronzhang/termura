@@ -33,13 +33,11 @@ actor ContextInjectionService: ContextInjectionServiceProtocol {
 
     // MARK: - Formatting per agent type
 
-    /// Agents with a known resume command: send `resumeCommand` directly to PTY.
-    /// Falls back to shell context injection for agents without a resume command
-    /// or when the agent type is unknown.
-    private func formatForAgent(_ context: HandoffContext, agentType: AgentType) -> String {
-        let command = agentType.resumeCommand
-        guard !command.isEmpty else { return "" }
-        return command + "\n"
+    /// Agent resume is handled by TerminalAreaView.setupAgentResumeIfNeeded()
+    /// which pre-fills the command without auto-executing, giving the user control
+    /// to press Enter or modify it. Context injection does not duplicate that path.
+    private func formatForAgent(_: HandoffContext, agentType _: AgentType) -> String {
+        ""
     }
 
     private func formatForShell(_ context: HandoffContext) -> String {
