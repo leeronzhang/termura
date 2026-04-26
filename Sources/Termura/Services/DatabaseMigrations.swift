@@ -15,6 +15,7 @@ enum DatabaseMigrations {
         registerV7AgentType(into: &migrator)
         registerV8Snippets(into: &migrator)
         registerV9SessionEndedAt(into: &migrator)
+        registerV10NoteRelationships(into: &migrator)
     }
 
     // MARK: - v1: sessions table
@@ -234,6 +235,55 @@ enum DatabaseMigrations {
                 table.add(column: "ended_at", .double)
             }
             logger.info("v9 migration complete: ended_at column on sessions")
+        }
+    }
+
+    // MARK: - v10: note relationship tables (links / file references / tags)
+
+    /// Adds three derived-relationship tables synced from note frontmatter + body
+    /// content on every note save. These power Backlinks, "which notes mention
+    /// this file" lookups, and tag clouds without scanning every note in memory.
+    /// Source of truth lives in the .md files; these are a rebuilable index.
+    private static func registerV10NoteRelationships(into migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v10_note_relationships") { db in
+            try db.execute(sql: """
+            CREATE TABLE note_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_note_id TEXT NOT NULL,
+                to_note_title TEXT NOT NULL,
+                link_kind TEXT NOT NULL,
+                UNIQUE(from_note_id, to_note_title, link_kind)
+            )
+            """)
+            try db.execute(sql: "CREATE INDEX idx_note_links_from ON note_links(from_note_id)")
+            try db.execute(sql: "CREATE INDEX idx_note_links_to ON note_links(to_note_title)")
+
+            try db.execute(sql: """
+            CREATE TABLE note_file_references (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                note_id TEXT NOT NULL,
+                project_file_path TEXT NOT NULL,
+                mention_count INTEGER NOT NULL,
+                UNIQUE(note_id, project_file_path)
+            )
+            """)
+            try db.execute(sql: """
+            CREATE INDEX idx_note_file_refs_file ON note_file_references(project_file_path)
+            """)
+            try db.execute(sql: "CREATE INDEX idx_note_file_refs_note ON note_file_references(note_id)")
+
+            try db.execute(sql: """
+            CREATE TABLE note_tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                note_id TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                UNIQUE(note_id, tag)
+            )
+            """)
+            try db.execute(sql: "CREATE INDEX idx_note_tags_tag ON note_tags(tag)")
+            try db.execute(sql: "CREATE INDEX idx_note_tags_note ON note_tags(note_id)")
+
+            logger.info("v10 migration complete: note_links / note_file_references / note_tags tables")
         }
     }
 }

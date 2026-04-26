@@ -158,7 +158,10 @@ extension ProjectContext {
         #endif
         let notesDir = notesDirectory(for: projectURL)
         let noteRepo = FileBackedNoteRepository(
-            notesDirectory: notesDir, fileService: NoteFileService(), db: db
+            notesDirectory: notesDir,
+            projectRoot: projectURL,
+            fileService: NoteFileService(),
+            db: db
         )
         return ProjectRepositories(
             session: SessionRepository(db: db),

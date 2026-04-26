@@ -6,6 +6,17 @@ protocol NoteRepositoryProtocol: Actor {
     func delete(id: NoteID) async throws
     func search(query: String) async throws -> [NoteRecord]
 
+    // MARK: - Relationship queries (derived from note frontmatter + body)
+
+    /// Notes whose body or frontmatter links to a target note title (wiki-link or `compiled_from`).
+    /// Returned records are sorted by `updatedAt` descending. Empty if the title has no inbound links.
+    func backlinks(toTitle title: String) async throws -> [NoteRecord]
+    /// Notes that mention the given project-relative file path (e.g. "Sources/Foo.swift").
+    /// Useful for "which notes reference this file?" lookups.
+    func notes(mentioningProjectFile path: String) async throws -> [NoteRecord]
+    /// Notes carrying a given tag.
+    func notes(taggedWith tag: String) async throws -> [NoteRecord]
+
     // MARK: - Lifecycle
 
     /// Begin monitoring the backing store for external changes (e.g. file-system watcher).
@@ -18,4 +29,7 @@ protocol NoteRepositoryProtocol: Actor {
 extension NoteRepositoryProtocol {
     func startWatching() async throws {}
     func stopWatching() async {}
+    func backlinks(toTitle _: String) async throws -> [NoteRecord] { [] }
+    func notes(mentioningProjectFile _: String) async throws -> [NoteRecord] { [] }
+    func notes(taggedWith _: String) async throws -> [NoteRecord] { [] }
 }
