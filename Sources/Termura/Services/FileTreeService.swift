@@ -33,9 +33,16 @@ actor FileTreeService: FileTreeServiceProtocol {
     ]
 
     /// Scans the directory at `projectRoot` and returns a sorted tree.
+    /// Injects `.termura/knowledge/sources` and `.termura/knowledge/log` as virtual
+    /// top-level entries so they appear in the Project sidebar alongside project files.
     func scan(at projectRoot: String) -> [FileTreeNode] {
         let rootURL = URL(fileURLWithPath: projectRoot)
-        return buildChildren(at: rootURL, relativeTo: rootURL, depth: 0)
+        var tree = buildChildren(at: rootURL, relativeTo: rootURL, depth: 0)
+        let knowledgeNodes = buildKnowledgeNodes(rootURL: rootURL)
+        if !knowledgeNodes.isEmpty {
+            tree.append(contentsOf: knowledgeNodes)
+        }
+        return tree
     }
 
     /// Annotates tree nodes with git status from a `GitStatusResult`.
@@ -189,5 +196,40 @@ actor FileTreeService: FileTreeServiceProtocol {
             }
             return annotated
         }
+    }
+
+    // MARK: - Knowledge directory injection
+
+    /// Builds FileTreeNodes for `.termura/knowledge/sources` and `.termura/knowledge/log`
+    /// so they appear in the Project sidebar. Returns empty if the directories don't exist.
+    private func buildKnowledgeNodes(rootURL: URL) -> [FileTreeNode] {
+        let knowledgeURL = rootURL.appendingPathComponent(".termura/knowledge")
+        let allowedSubdirs = ["sources", "log"]
+        var nodes: [FileTreeNode] = []
+
+        for name in allowedSubdirs {
+            let subdirURL = knowledgeURL.appendingPathComponent(name)
+            let isDir: Bool
+            do {
+                isDir = try subdirURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory ?? false
+            } catch {
+                continue
+            }
+            guard isDir else { continue }
+            let relativePath = ".termura/knowledge/\(name)"
+            let children = buildChildren(at: subdirURL, relativeTo: rootURL, depth: 3)
+            nodes.append(FileTreeNode(name: name, relativePath: relativePath, isDirectory: true, children: children))
+        }
+
+        guard !nodes.isEmpty else { return [] }
+        // Wrap in .termura/knowledge/ hierarchy for tree display.
+        let knowledgeNode = FileTreeNode(
+            name: "knowledge", relativePath: ".termura/knowledge",
+            isDirectory: true, children: nodes
+        )
+        return [FileTreeNode(
+            name: ".termura", relativePath: ".termura",
+            isDirectory: true, children: [knowledgeNode]
+        )]
     }
 }

@@ -55,64 +55,21 @@ final class NotesViewModel {
     /// Currently active tag filter in Notes tab. Nil = show all notes.
     var selectedTagFilter: String?
 
-    /// Browse mode for Knowledge tab.
-    enum KnowledgeBrowseMode: String, CaseIterable, Identifiable {
-        case tags, timeline, graph, sources, log
+    /// Browse mode for Notes sidebar: list view or knowledge graph.
+    enum NotesBrowseMode: String, CaseIterable, Identifiable {
+        case list, graph
         var id: String { rawValue }
         var label: String {
             switch self {
-            case .tags: "Tags"
-            case .timeline: "Timeline"
+            case .list: "List"
             case .graph: "Graph"
-            case .sources: "Sources"
-            case .log: "Log"
             }
         }
     }
 
-    var knowledgeBrowseMode: KnowledgeBrowseMode = .tags
+    var notesBrowseMode: NotesBrowseMode = .list
 
     /// Notes grouped by tag, sorted by tag frequency descending.
-    var notesByTag: [(tag: String, notes: [NoteRecord])] {
-        var groups: [String: [NoteRecord]] = [:]
-        for note in notes {
-            for tag in note.tags {
-                groups[tag, default: []].append(note)
-            }
-        }
-        let untagged = notes.filter(\.tags.isEmpty)
-        var result = groups.sorted { $0.value.count > $1.value.count }
-            .map { (tag: $0.key, notes: $0.value) }
-        if !untagged.isEmpty {
-            result.append((tag: "Untagged", notes: untagged))
-        }
-        return result
-    }
-
-    /// Notes grouped by time period (Today, Yesterday, This Week, This Month, Older).
-    var notesByTimePeriod: [(period: String, notes: [NoteRecord])] {
-        let calendar = Calendar.current
-        var today: [NoteRecord] = [], yesterday: [NoteRecord] = []
-        var thisWeek: [NoteRecord] = [], thisMonth: [NoteRecord] = []
-        var older: [NoteRecord] = []
-        for note in notes {
-            if calendar.isDateInToday(note.updatedAt) {
-                today.append(note)
-            } else if calendar.isDateInYesterday(note.updatedAt) {
-                yesterday.append(note)
-            } else if calendar.isDate(note.updatedAt, equalTo: Date(), toGranularity: .weekOfYear) {
-                thisWeek.append(note)
-            } else if calendar.isDate(note.updatedAt, equalTo: Date(), toGranularity: .month) {
-                thisMonth.append(note)
-            } else {
-                older.append(note)
-            }
-        }
-        return [("Today", today), ("Yesterday", yesterday),
-                ("This Week", thisWeek), ("This Month", thisMonth),
-                ("Older", older)].filter { !$0.1.isEmpty }
-    }
-
     /// All unique tags across all notes, sorted by frequency descending.
     var allTags: [(tag: String, count: Int)] {
         var counts: [String: Int] = [:]
@@ -147,28 +104,6 @@ final class NotesViewModel {
     var selectedNoteBacklinks: [(id: NoteID, title: String)] {
         guard let title = selectedNote?.title else { return [] }
         return backlinkIndex.backlinks(for: title)
-    }
-
-    /// Files in knowledge/sources/ grouped by subdirectory.
-    var sourceEntries: [KnowledgeFileEntry] {
-        guard let dir = sourcesDirectoryURL else { return [] }
-        return KnowledgeFileLister.listSources(in: dir)
-    }
-
-    /// Files in knowledge/log/ grouped by date directory.
-    var logEntries: [KnowledgeFileEntry] {
-        guard let dir = logDirectoryURL else { return [] }
-        return KnowledgeFileLister.listLogs(in: dir)
-    }
-
-    /// Sibling directory of notesDirectoryURL for sources.
-    private var sourcesDirectoryURL: URL? {
-        notesDirectoryURL?.deletingLastPathComponent().appendingPathComponent("sources")
-    }
-
-    /// Sibling directory of notesDirectoryURL for log.
-    private var logDirectoryURL: URL? {
-        notesDirectoryURL?.deletingLastPathComponent().appendingPathComponent("log")
     }
 
     init(repository: any NoteRepositoryProtocol, clock: any AppClock = LiveClock(),

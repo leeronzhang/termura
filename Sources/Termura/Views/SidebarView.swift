@@ -58,8 +58,6 @@ struct SidebarView: View {
             agentsContent
         case .project:
             projectContent
-        case .knowledge:
-            knowledgeContent
         case .notes:
             notesContent
         case .harness:

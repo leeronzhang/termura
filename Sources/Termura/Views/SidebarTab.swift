@@ -5,7 +5,6 @@ enum SidebarTab: String, CaseIterable, Identifiable {
     case sessions
     case agents
     case harness
-    case knowledge
     case notes
     case project
 
@@ -16,7 +15,6 @@ enum SidebarTab: String, CaseIterable, Identifiable {
         case .sessions: "terminal"
         case .agents: "poweroutlet.type.f"
         case .harness: "pano"
-        case .knowledge: "book.closed"
         case .notes: "text.rectangle"
         case .project: "folder"
         }
@@ -27,7 +25,6 @@ enum SidebarTab: String, CaseIterable, Identifiable {
         case .sessions: "terminal.fill"
         case .agents: "poweroutlet.type.f.fill"
         case .harness: "pano.fill"
-        case .knowledge: "book.closed.fill"
         case .notes: "text.rectangle.fill"
         case .project: "folder.fill"
         }
@@ -38,7 +35,6 @@ enum SidebarTab: String, CaseIterable, Identifiable {
         case .sessions: "Sessions"
         case .agents: "Agents"
         case .harness: "Harness"
-        case .knowledge: "Knowledge"
         case .notes: "Notes"
         case .project: "Project"
         }

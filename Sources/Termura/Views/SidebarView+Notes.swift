@@ -7,16 +7,37 @@ extension SidebarView {
     var notesContent: some View {
         VStack(spacing: 0) {
             notesHeader(vm: notesViewModel)
-            if !notesViewModel.allTags.isEmpty {
-                TagChipsBar(
-                    tags: notesViewModel.allTags,
-                    selectedTag: notesViewModel.selectedTagFilter,
-                    onSelect: { notesViewModel.selectedTagFilter = $0 }
-                )
+            switch notesViewModel.notesBrowseMode {
+            case .list:
+                if !notesViewModel.allTags.isEmpty {
+                    TagChipsBar(
+                        tags: notesViewModel.allTags,
+                        selectedTag: notesViewModel.selectedTagFilter,
+                        onSelect: { notesViewModel.selectedTagFilter = $0 }
+                    )
+                }
+                notesList(vm: notesViewModel)
+            case .graph:
+                notesGraphView
             }
-            notesList(vm: notesViewModel)
         }
         .task { await notesViewModel.loadNotes() }
+    }
+
+    private var notesGraphView: some View {
+        KnowledgeGraphView(
+            theme: themeManager.current,
+            graphJSON: notesViewModel.knowledgeGraphJSON,
+            onOpenNote: { title in
+                guard let note = notesViewModel.findNote(byTitle: title) else { return }
+                notesViewModel.notesBrowseMode = .list
+                onOpenNote?(note.id, note.title)
+            },
+            onFilterTag: { tag in
+                notesViewModel.selectedTagFilter = tag
+                notesViewModel.notesBrowseMode = .list
+            }
+        )
     }
 
     func notesHeader(vm: NotesViewModel) -> some View {
@@ -24,16 +45,45 @@ extension SidebarView {
             Text("Notes")
                 .panelHeaderStyle()
             Spacer()
-            Button { commandRouter.pendingCommand = .createNote } label: {
-                Image(systemName: "plus")
-                    .font(AppUI.Font.label)
-                    .foregroundColor(.secondary)
+            notesBrowseModeMenu
+            if vm.notesBrowseMode == .list {
+                Button { commandRouter.pendingCommand = .createNote } label: {
+                    Image(systemName: "plus")
+                        .font(AppUI.Font.label)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("New Note")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("New Note")
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
+    }
+
+    private var notesBrowseModeMenu: some View {
+        Menu {
+            ForEach(NotesViewModel.NotesBrowseMode.allCases) { mode in
+                Button {
+                    notesViewModel.notesBrowseMode = mode
+                } label: {
+                    if mode == notesViewModel.notesBrowseMode {
+                        Label(mode.label, systemImage: "checkmark")
+                    } else {
+                        Text(mode.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: AppUI.Spacing.xs) {
+                Text(notesViewModel.notesBrowseMode.label)
+                    .font(AppUI.Font.caption)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundColor(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     func notesList(vm: NotesViewModel) -> some View {
