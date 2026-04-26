@@ -73,9 +73,9 @@ struct ContentTabBar: View {
         // alignment: .leading so the icon's left edge sits exactly at the padding origin,
         // matching the leading edge of projectPathBar content (xxl = 20pt).
         // The extra frame width beyond the icon provides hit-area padding to the right.
-        .frame(width: AppUI.Spacing.xxxxl, height: AppConfig.UI.trafficLightContainerHeight, alignment: .leading)
-        // Non-fullscreen: align with traffic-light group (safeLeading + topInset).
-        // Fullscreen: no traffic lights, align icon left edge with path-bar content (xxl).
+        // Vertically center with traffic-light buttons: icon top at trafficLightTopInset (17pt),
+        // icon center at ~24pt = traffic-light center (topInset + buttonHeight/2).
+        .frame(width: AppUI.Spacing.xxxxl, alignment: .leading)
         .padding(.leading, isFullScreen ? AppUI.Spacing.xxl : AppConfig.UI.trafficLightSafeLeading)
         .padding(.top, isFullScreen ? AppUI.Spacing.smMd : AppConfig.UI.trafficLightTopInset)
         .help("Show Sidebar (Cmd+B)")
