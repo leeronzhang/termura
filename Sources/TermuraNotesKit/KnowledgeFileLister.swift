@@ -99,7 +99,10 @@ public enum KnowledgeFileLister {
                     return nil
                 }
                 let isDir = values.isDirectory ?? false
-                let relative = url.path.replacingOccurrences(of: baseDir.path + "/", with: "")
+                // WHY: resolve symlinks on both sides to avoid /var vs /private/var mismatch
+                let resolvedFile = url.resolvingSymlinksInPath().path
+                let resolvedBase = baseDir.resolvingSymlinksInPath().path
+                let relative = resolvedFile.replacingOccurrences(of: resolvedBase + "/", with: "")
                 return KnowledgeFileEntry(
                     id: relative,
                     name: url.lastPathComponent,

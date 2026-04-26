@@ -53,10 +53,6 @@ targets:
           - $(SRCROOT)/vendor/.ghostty-build-stamp
         script: |
           "$SRCROOT/scripts/build-libghostty.sh"
-      - name: Build tn CLI
-        basedOnDependencyAnalysis: false
-        script: |
-          "$SRCROOT/scripts/build-tn.sh"
       - name: SwiftLint
         basedOnDependencyAnalysis: false
         script: |
