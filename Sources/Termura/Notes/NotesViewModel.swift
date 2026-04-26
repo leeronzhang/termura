@@ -59,12 +59,6 @@ final class NotesViewModel {
     enum NotesBrowseMode: String, CaseIterable, Identifiable {
         case list, graph
         var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .list: "List"
-            case .graph: "Graph"
-            }
-        }
     }
 
     var notesBrowseMode: NotesBrowseMode = .list

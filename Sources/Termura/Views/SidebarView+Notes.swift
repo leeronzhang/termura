@@ -45,8 +45,12 @@ extension SidebarView {
             Text("Notes")
                 .panelHeaderStyle()
             Spacer()
-            notesBrowseModeMenu
+            HStack(spacing: AppUI.Spacing.xxl) {
+                browseToggle(.list, icon: "checklist.unchecked")
+                browseToggle(.graph, icon: "point.3.connected.trianglepath.dotted")
+            }
             if vm.notesBrowseMode == .list {
+                Spacer().frame(width: AppUI.Spacing.xxl)
                 Button { commandRouter.pendingCommand = .createNote } label: {
                     Image(systemName: "plus")
                         .font(AppUI.Font.label)
@@ -60,30 +64,17 @@ extension SidebarView {
         .padding(.vertical, AppUI.Spacing.mdLg)
     }
 
-    private var notesBrowseModeMenu: some View {
-        Menu {
-            ForEach(NotesViewModel.NotesBrowseMode.allCases) { mode in
-                Button {
-                    notesViewModel.notesBrowseMode = mode
-                } label: {
-                    if mode == notesViewModel.notesBrowseMode {
-                        Label(mode.label, systemImage: "checkmark")
-                    } else {
-                        Text(mode.label)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: AppUI.Spacing.xs) {
-                Text(notesViewModel.notesBrowseMode.label)
-                    .font(AppUI.Font.caption)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-            }
-            .foregroundColor(.secondary)
+    private func browseToggle(
+        _ mode: NotesViewModel.NotesBrowseMode, icon: String
+    ) -> some View {
+        let isActive = notesViewModel.notesBrowseMode == mode
+        return Button { notesViewModel.notesBrowseMode = mode } label: {
+            Image(systemName: isActive ? icon + ".fill" : icon)
+                .font(AppUI.Font.label)
+                .foregroundColor(isActive ? .primary : .secondary)
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .buttonStyle(.plain)
+        .help(mode == .list ? "List" : "Graph")
     }
 
     func notesList(vm: NotesViewModel) -> some View {
