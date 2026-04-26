@@ -1,0 +1,499 @@
+/* Termura Markdown styles — adapted from marktext One Dark typography.
+   Color variables are injected at runtime by ThemeCSSGenerator.
+   Fallbacks below match the default dark theme. */
+
+:root {
+  --termura-background: #1e1e1e;
+  --termura-foreground: #eeeeee;
+  --termura-selection-background: #486cb2;
+  --termura-ansi-red: #e43639;
+  --termura-ansi-green: #75b85b;
+  --termura-ansi-yellow: #fed04c;
+  --termura-ansi-blue: #5e81f4;
+  --termura-ansi-magenta: #b95fcd;
+  --termura-ansi-cyan: #4cc4d0;
+  --termura-sidebar-background: #181818;
+  --termura-sidebar-text: #cccccc;
+
+  /* Derived tokens for markdown readability */
+  --md-text: var(--termura-foreground);
+  --md-text-muted: var(--termura-sidebar-text);
+  --md-heading: var(--termura-foreground);
+  --md-link: var(--termura-ansi-blue);
+  --md-code-bg: var(--termura-sidebar-background);
+  --md-border: rgba(255, 255, 255, 0.12);
+  --md-blockquote-bar: var(--termura-ansi-blue);
+  --md-blockquote-text: var(--termura-sidebar-text);
+  --md-table-border: rgba(255, 255, 255, 0.15);
+  --md-table-header-bg: var(--termura-sidebar-background);
+  --md-table-stripe: rgba(255, 255, 255, 0.04);
+}
+
+/* ── Reset ── */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ── Scrollbar (One Dark) ── */
+
+::-webkit-scrollbar,
+::-webkit-scrollbar-corner {
+  background: var(--termura-background);
+}
+::-webkit-scrollbar:vertical {
+  width: 10px;
+}
+::-webkit-scrollbar:vertical:hover {
+  width: 12px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ── Base typography ── */
+
+html, body {
+  background: var(--termura-background);
+  color: var(--md-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--termura-selection-background);
+}
+
+#content {
+  max-width: 750px;
+  margin: 0 auto;
+  padding: 20px 50px;
+}
+
+/* ── Headings ── */
+
+h1, h2, h3, h4, h5, h6 {
+  position: relative;
+  margin-top: 1.5em;
+  margin-bottom: 0.6em;
+  font-weight: bold;
+  line-height: 1.4;
+  color: var(--md-heading);
+}
+
+h1 { font-size: 1.875em; }
+h2 { font-size: 1.5em; }
+h3 { font-size: 1.375em; }
+h4 { font-size: 1.25em; }
+h5 { font-size: 1.125em; }
+h6 { font-size: 1em; color: var(--md-text-muted); }
+
+/* h1/h2 bottom border */
+h1 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--md-border);
+}
+h2 {
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--md-border);
+}
+
+/* Inline code inside headings inherits heading size */
+h1 tt, h1 code,
+h2 tt, h2 code,
+h3 tt, h3 code,
+h4 tt, h4 code,
+h5 tt, h5 code,
+h6 tt, h6 code {
+  font-size: inherit;
+}
+
+/* First child heading removes top gap */
+#content > h1:first-child,
+#content > h2:first-child,
+#content > h3:first-child,
+#content > h4:first-child,
+#content > h5:first-child,
+#content > h6:first-child {
+  margin-top: 0;
+}
+
+/* ── Paragraph / block margin ── */
+
+p, blockquote, ul, ol, dl, table {
+  margin: 0.5em 0;
+}
+
+/* ── Links ── */
+
+a {
+  color: var(--md-link);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* ── Inline code ── */
+
+code {
+  font-family: "Source Code Pro", ui-monospace, Menlo, Monaco, monospace;
+  background: var(--md-code-bg);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-size: 85%;
+  color: var(--md-text);
+}
+
+/* ── Code blocks ── */
+
+pre {
+  margin: 1em 0;
+  padding: 14px 16px;
+  background: var(--md-code-bg);
+  border-radius: 3px;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 90%;
+  color: var(--md-text-muted);
+}
+
+/* Override highlight.js background to use our theme */
+.hljs {
+  background: var(--md-code-bg) !important;
+  color: var(--md-text) !important;
+}
+
+/* ── Blockquote ── */
+
+blockquote {
+  position: relative;
+  padding: 0 30px;
+  color: var(--md-blockquote-text);
+}
+
+blockquote::before {
+  content: '';
+  display: block;
+  position: absolute;
+  left: 15px;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  background: var(--md-blockquote-bar);
+  border-radius: 1px;
+}
+
+blockquote p {
+  margin-bottom: 0.4em;
+}
+
+blockquote blockquote {
+  padding-right: 0;
+}
+
+/* ── Lists ── */
+
+ul, ol {
+  padding-left: 30px;
+}
+
+ul:first-child, ol:first-child { margin-top: 0; }
+ul:last-child, ol:last-child { margin-bottom: 0; }
+
+li {
+  margin-bottom: 0.2em;
+  line-height: 1.6;
+}
+
+li > ol, li > ul {
+  margin: 0;
+}
+
+li > p {
+  margin-bottom: 0.2em;
+}
+
+/* ── Task list checkboxes ── */
+
+li.task-list-item {
+  list-style-type: none;
+  position: relative;
+}
+
+li.task-list-item > input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  left: -24px;
+  top: 0.2em;
+  border: 1.5px solid var(--md-muted, #888);
+  border-radius: 2px;
+  background: transparent;
+  cursor: default;
+}
+
+li.task-list-item > input[type="checkbox"]:checked {
+  border-color: var(--md-link);
+}
+
+li.task-list-item > input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 4px;
+  height: 8px;
+  border: solid var(--md-link);
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+
+/* ── Highlight / mark ==text== ── */
+
+mark {
+  background-color: rgba(255, 208, 0, 0.25);
+  color: inherit;
+  padding: 0 0.2em;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* ── Tables ── */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+  padding: 0;
+  word-break: initial;
+  border-top: 1px solid var(--md-table-border);
+  border-bottom: 1px solid var(--md-table-border);
+}
+
+th, td {
+  text-align: left;
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 0.9em;
+  line-height: 1.5;
+  border-bottom: 0.5px solid var(--md-table-border);
+}
+
+tr:last-child > td {
+  border-bottom: none;
+}
+
+th {
+  font-weight: bold;
+  background: var(--md-table-header-bg);
+  border-bottom: 0.5px solid var(--md-table-border);
+}
+
+/* ── Horizontal rule ── */
+
+hr {
+  height: 2px;
+  padding: 0;
+  margin: 16px 0;
+  background-color: var(--md-border);
+  border: 0 none;
+  overflow: hidden;
+  box-sizing: content-box;
+}
+
+/* ── Images ── */
+
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 0.5em 0;
+}
+
+/* ── Definition lists ── */
+
+dl {
+  margin: 0.5em 0;
+}
+
+dt {
+  font-weight: 600;
+  margin-top: 0.5em;
+}
+
+dd {
+  margin-left: 28px;
+  margin-bottom: 0.3em;
+}
+
+/* ── kbd ── */
+
+kbd {
+  color: var(--md-text);
+  background: var(--md-code-bg);
+  border: 1px solid var(--md-border);
+  border-radius: 4px;
+  display: inline-block;
+  font-size: 0.8em;
+  padding: 0 5px;
+  box-shadow: inset 0 -1px 0 var(--md-border);
+}
+
+/* ── Strong / em / mark ── */
+
+strong {
+  font-weight: 600;
+  color: var(--md-heading);
+}
+
+mark {
+  background: rgba(254, 208, 76, 0.25);
+  color: var(--md-text);
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+}
+
+/* ── Chunk separator (agent output) ── */
+
+.chunk-separator {
+  border-top: 1px solid var(--md-border);
+  margin: 16px 0 8px;
+  padding-top: 8px;
+  opacity: 0.5;
+}
+
+.chunk-command {
+  font-family: "Source Code Pro", ui-monospace, Menlo, Monaco, monospace;
+  font-size: 0.85em;
+  color: var(--termura-ansi-green);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.chunk-error {
+  color: var(--termura-ansi-red);
+}
+
+/* ── References section ── */
+
+section.references {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--md-border);
+}
+
+section.references h2 {
+  font-size: 1.1em;
+  margin-bottom: 0.5em;
+  color: var(--md-text-muted);
+}
+
+section.references ol {
+  padding-left: 24px;
+  font-size: 0.9em;
+  color: var(--md-text-muted);
+}
+
+section.references li {
+  margin-bottom: 4px;
+}
+
+/* ── Superscript / Subscript ── */
+
+sup, sub {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+sup {
+  top: -0.5em;
+}
+
+sub {
+  bottom: -0.25em;
+}
+
+/* ── Footnotes (markdown-it-footnote) ─�� */
+
+section.footnotes {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--md-border);
+  font-size: 0.88em;
+  color: var(--md-text-muted);
+}
+
+section.footnotes ol {
+  padding-left: 24px;
+}
+
+section.footnotes li {
+  margin-bottom: 0.4em;
+}
+
+section.footnotes li p {
+  margin: 0;
+}
+
+sup.footnote-ref a,
+a.footnote-backref {
+  color: var(--md-link);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+sup.footnote-ref a:hover,
+a.footnote-backref:hover {
+  text-decoration: underline;
+}
+
+hr.footnotes-sep {
+  display: none;
+}
+
+/* ── KaTeX ── */
+
+.katex {
+  color: var(--md-text) !important;
+}
+
+/* ── Mermaid ── */
+
+.mermaid {
+  margin: 1em 0;
+  text-align: center;
+}
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  color: var(--termura-ansi-red);
+  font-size: 0.85em;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: rgba(228, 54, 57, 0.1);
+  border-radius: 4px;
+}

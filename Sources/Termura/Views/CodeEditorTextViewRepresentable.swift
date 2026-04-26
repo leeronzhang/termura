@@ -35,6 +35,17 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
         return highlightr
     }()
 
+    /// Brand green replacement for atom-one-dark red tones in markdown syntax highlighting.
+    /// Replaces #e06c75 (section/heading) and nearby reds with #308C50.
+    private static let markdownGreen = NSColor(red: 0x30 / 255.0, green: 0x8C / 255.0, blue: 0x50 / 255.0, alpha: 1)
+
+    private static func remapMarkdownRed(_ color: NSColor) -> NSColor {
+        guard let srgb = color.usingColorSpace(.sRGB) else { return color }
+        // atom-one-dark red: #e06c75 (r≈0.88, g≈0.42, b≈0.46)
+        let isRed = srgb.redComponent > 0.7 && srgb.greenComponent < 0.55 && srgb.blueComponent < 0.6
+        return isRed ? markdownGreen : color
+    }
+
     private func resolvedFont() -> NSFont {
         NSFont(name: fontFamily, size: fontSize)
             ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
@@ -166,12 +177,14 @@ struct CodeEditorTextViewRepresentable: NSViewRepresentable {
             highlightr.theme.setCodeFont(baseFont)
             if let highlighted = highlightr.highlight(content, as: lang),
                highlighted.length == textStorage.length {
+                let isMarkdown = lang == "markdown"
                 let hlRange = NSRange(location: 0, length: highlighted.length)
                 highlighted.enumerateAttribute(
                     .foregroundColor, in: hlRange, options: []
                 ) { value, range, _ in
                     if let color = value as? NSColor {
-                        textStorage.addAttribute(.foregroundColor, value: color, range: range)
+                        let resolved = isMarkdown ? Self.remapMarkdownRed(color) : color
+                        textStorage.addAttribute(.foregroundColor, value: resolved, range: range)
                     }
                 }
             }
