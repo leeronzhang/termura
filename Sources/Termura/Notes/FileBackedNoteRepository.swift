@@ -10,9 +10,6 @@ private let logger = Logger(subsystem: "com.termura.app", category: "FileBackedN
 /// GRDB is used only as a rebuild-able FTS5 search cache.
 actor FileBackedNoteRepository: NoteRepositoryProtocol {
     let notesDirectory: URL
-    /// Project root (the directory containing `.termura/`). Used by the relation
-    /// extractor to verify that mentioned paths resolve to real project files.
-    let projectRoot: URL
     let fileService: any NoteFileServiceProtocol
     let db: any DatabaseServiceProtocol
     private let clock: any AppClock
@@ -35,13 +32,11 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
     }
 
     init(notesDirectory: URL,
-         projectRoot: URL,
          fileService: any NoteFileServiceProtocol,
          db: any DatabaseServiceProtocol,
          clock: any AppClock = LiveClock(),
          fileManager: any FileManagerProtocol = FileManager.default) {
         self.notesDirectory = notesDirectory
-        self.projectRoot = projectRoot
         self.fileService = fileService
         self.db = db
         self.clock = clock
@@ -155,7 +150,7 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
                 arguments: [id, note.title, note.body, fav, created, updated]
             )
         }
-        try await syncRelationsForNote(note, projectRoot: projectRoot)
+        try await syncRelationsForNote(note)
     }
 
     func deleteCache(id: NoteID) async throws {

@@ -159,7 +159,6 @@ extension ProjectContext {
         let notesDir = notesDirectory(for: projectURL)
         let noteRepo = FileBackedNoteRepository(
             notesDirectory: notesDir,
-            projectRoot: projectURL,
             fileService: NoteFileService(),
             db: db
         )

@@ -8,23 +8,14 @@ public enum ProjectDiscoveryError: LocalizedError {
     }
 }
 
-/// Resolves the Termura project root and knowledge directory paths.
+/// Resolves the Termura project root and notes directory paths.
+/// `.termura/knowledge/` historically held sources/log/attachments siblings;
+/// after the knowledge layer was scoped down to notes-only, only
+/// `knowledge/notes/` remains as a meaningful subpath.
 public struct ProjectDiscovery: Sendable {
     public let projectRoot: URL
     public let knowledgeRoot: URL
     public let notesDirectory: URL
-    public let sourcesDirectory: URL
-    public let logDirectory: URL
-    /// Shared attachments live under notes/, scoped to the curated output layer
-    /// (per `docs/knowledge-visualization-roadmap.md`). The pre-migration location
-    /// was `knowledge/attachments/`; `KnowledgeStructureMigrationService` moves it.
-    public let attachmentsDirectory: URL
-
-    /// Source-bucket subdirectories created by `ensureDirectories()`.
-    /// `articles` covers all long-form material — web clippings (.md/.html) and
-    /// PDF papers — distinguished by extension. `images` for screenshots, `data`
-    /// for CSV/JSON datasets.
-    public static let sourcesBuckets: [String] = ["articles", "images", "data"]
 
     /// Walk up from `startURL` until a directory containing `.termura/` is found.
     public init(from startURL: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)) throws {
@@ -36,9 +27,6 @@ public struct ProjectDiscovery: Sendable {
                 projectRoot = current
                 knowledgeRoot = candidate.appendingPathComponent("knowledge")
                 notesDirectory = knowledgeRoot.appendingPathComponent("notes")
-                sourcesDirectory = knowledgeRoot.appendingPathComponent("sources")
-                logDirectory = knowledgeRoot.appendingPathComponent("log")
-                attachmentsDirectory = notesDirectory.appendingPathComponent("attachments")
                 return
             }
             let parent = current.deletingLastPathComponent()
@@ -47,14 +35,13 @@ public struct ProjectDiscovery: Sendable {
         }
     }
 
-    /// Ensures the knowledge directory structure exists, creating missing subdirectories.
+    /// Ensures the knowledge directory structure exists. Currently only
+    /// `knowledge/notes/` is created — sources/log/attachments are not part
+    /// of the active layout. Old user data in those legacy paths is left
+    /// untouched on disk.
     public func ensureDirectories() throws {
         let fm = FileManager.default
-        var dirs = [notesDirectory, attachmentsDirectory, sourcesDirectory, logDirectory]
-        for bucket in Self.sourcesBuckets {
-            dirs.append(sourcesDirectory.appendingPathComponent(bucket))
-        }
-        for dir in dirs where !fm.fileExists(atPath: dir.path) {
+        for dir in [notesDirectory] where !fm.fileExists(atPath: dir.path) {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }

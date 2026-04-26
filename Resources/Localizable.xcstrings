@@ -926,9 +926,6 @@
     "Learn More & Upgrade" : {
 
     },
-    "Loading diff…" : {
-
-    },
     "Merge Branch Summary" : {
       "comment" : "Sheet title for summarising and merging a branch back to the parent",
       "extractionState" : "manual",
@@ -1098,9 +1095,6 @@
       }
     },
     "No semantic matches for “%@”" : {
-
-    },
-    "No tracked file changes" : {
 
     },
     "Not installed" : {

@@ -11,9 +11,6 @@ protocol NoteRepositoryProtocol: Actor {
     /// Notes whose body or frontmatter links to a target note title (wiki-link or `compiled_from`).
     /// Returned records are sorted by `updatedAt` descending. Empty if the title has no inbound links.
     func backlinks(toTitle title: String) async throws -> [NoteRecord]
-    /// Notes that mention the given project-relative file path (e.g. "Sources/Foo.swift").
-    /// Useful for "which notes reference this file?" lookups.
-    func notes(mentioningProjectFile path: String) async throws -> [NoteRecord]
     /// Notes carrying a given tag.
     func notes(taggedWith tag: String) async throws -> [NoteRecord]
 
@@ -30,6 +27,5 @@ extension NoteRepositoryProtocol {
     func startWatching() async throws {}
     func stopWatching() async {}
     func backlinks(toTitle _: String) async throws -> [NoteRecord] { [] }
-    func notes(mentioningProjectFile _: String) async throws -> [NoteRecord] { [] }
     func notes(taggedWith _: String) async throws -> [NoteRecord] { [] }
 }

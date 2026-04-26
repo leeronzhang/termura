@@ -55,14 +55,6 @@ final class NotesViewModel {
     /// Currently active tag filter in Notes tab. Nil = show all notes.
     var selectedTagFilter: String?
 
-    /// Browse mode for Notes sidebar: list view or knowledge graph.
-    enum NotesBrowseMode: String, CaseIterable, Identifiable {
-        case list, graph
-        var id: String { rawValue }
-    }
-
-    var notesBrowseMode: NotesBrowseMode = .list
-
     /// Notes grouped by tag, sorted by tag frequency descending.
     /// All unique tags across all notes, sorted by frequency descending.
     var allTags: [(tag: String, count: Int)] {
@@ -73,19 +65,6 @@ final class NotesViewModel {
             }
         }
         return counts.sorted { $0.value > $1.value }.map { (tag: $0.key, count: $0.value) }
-    }
-
-    /// JSON-serialized graph data for the D3.js knowledge graph visualization.
-    /// Recomputed from `notes` + `backlinkIndex` when accessed.
-    var knowledgeGraphJSON: String {
-        let data = KnowledgeGraphData.build(from: notes, backlinkIndex: backlinkIndex)
-        do {
-            let jsonData = try JSONEncoder().encode(data)
-            return String(data: jsonData, encoding: .utf8) ?? "{}"
-        } catch {
-            logger.error("Failed to encode knowledge graph: \(error)")
-            return "{}"
-        }
     }
 
     /// Notes filtered by the active tag filter. Returns all notes when no filter is set.
