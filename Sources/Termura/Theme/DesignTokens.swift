@@ -169,6 +169,10 @@ enum AppUI {
         static let themeCheckbox: CGFloat = 14
         /// 7pt — directory expansion chevron
         static let directoryChevron: CGFloat = 7
+        /// 10pt — disclosure chevron fixed width
+        static let chevronFrame: CGFloat = 10
+        /// 14pt — sidebar row icon fixed width
+        static let sidebarIcon: CGFloat = 14
         /// 1pt — branch indicator line width
         static let branchIndicatorLine: CGFloat = 1
     }

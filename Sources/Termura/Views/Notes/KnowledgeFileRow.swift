@@ -12,7 +12,7 @@ struct KnowledgeFileRow: View {
                 Image(systemName: iconName)
                     .font(AppUI.Font.caption)
                     .foregroundColor(iconColor)
-                    .frame(width: 14)
+                    .frame(width: AppUI.Size.sidebarIcon)
                 Text(entry.name)
                     .font(AppUI.Font.caption)
                     .foregroundColor(.primary)

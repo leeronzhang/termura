@@ -26,7 +26,7 @@ struct KnowledgeGroupSection: View {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(AppUI.Font.micro)
                     .foregroundColor(.secondary)
-                    .frame(width: 10)
+                    .frame(width: AppUI.Size.chevronFrame)
                 Text(title)
                     .font(AppUI.Font.labelMedium)
                     .foregroundColor(.primary)
