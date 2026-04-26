@@ -160,8 +160,7 @@ struct TerminalAreaView: View {
             },
             onSendToNotes: { [weak notes] text in
                 let title = String(text.prefix(40)).trimmingCharacters(in: .whitespacesAndNewlines)
-                let body = "```\n\(text)\n```"
-                notes?.silentlyCreateNote(title: title, body: body)
+                notes?.silentlyCreateNote(title: title, body: text)
                 notes?.showToast("Saved to Notes")
             },
             onClearTerminal: { [weak eng] in
