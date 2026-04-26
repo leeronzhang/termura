@@ -25,18 +25,22 @@ struct CommitPopover: View {
     @State private var detectedSessionLabel: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
             AICommitPopoverHeader(agent: detectedAgent, sessionLabel: detectedSessionLabel)
-            Divider()
             CommitDiffList(stats: diffStats, isLoading: isLoadingStats)
                 .frame(minHeight: 120, maxHeight: 240)
-            Divider()
+                .padding(.horizontal, AppUI.Spacing.lg)
             noteSection
-            Divider()
-            footer
+            AICommitPopoverFooter(
+                primaryLabel: "Commit",
+                primaryEnabled: canSubmit,
+                onCancel: { isPresented = false },
+                onPrimary: submit
+            )
         }
         .frame(width: 420)
         .frame(maxHeight: 520)
+        .padding(.vertical, AppUI.Spacing.xs)
         .onAppear { onAppear() }
     }
 
@@ -52,30 +56,13 @@ struct CommitPopover: View {
                 .frame(minHeight: 60, maxHeight: 100)
                 .padding(AppUI.Spacing.xs)
                 .background(
-                    RoundedRectangle(cornerRadius: AppUI.Radius.sm)
+                    RoundedRectangle(cornerRadius: AppUI.Spacing.xs)
                         .stroke(Color.secondary.opacity(AppUI.Opacity.border), lineWidth: 1)
                 )
                 .accessibilityLabel("Optional note for the AI commit")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, AppUI.Spacing.lg)
-        .padding(.vertical, AppUI.Spacing.md)
-    }
-
-    private var footer: some View {
-        HStack {
-            Spacer()
-            Button("Cancel") { isPresented = false }
-                .keyboardShortcut(.escape)
-            Button(action: submit) {
-                Text("Commit")
-                    .padding(.horizontal, AppUI.Spacing.sm)
-            }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.return, modifiers: .command)
-            .disabled(!canSubmit)
-        }
-        .padding(.horizontal, AppUI.Spacing.lg)
-        .padding(.vertical, AppUI.Spacing.md)
     }
 
     // MARK: - Logic

@@ -23,16 +23,24 @@ struct RemoteSetupPopover: View {
     @State private var detectedSessionLabel: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
             AICommitPopoverHeader(agent: detectedAgent, sessionLabel: detectedSessionLabel)
-            Divider()
             currentStateSection
-            Divider()
             noteSection
-            Divider()
-            footer
+            AICommitPopoverFooter(
+                primaryLabel: currentRemoteURL == nil ? "Set Up Remote" : "Apply",
+                primaryEnabled: canSubmit,
+                onCancel: { isPresented = false },
+                onPrimary: submit
+            )
         }
         .frame(width: 420)
+        .padding(.vertical, AppUI.Spacing.xs)
+        .background(
+            // Tight 2pt radius — see CommitPopover for the platform-radius caveat.
+            RoundedRectangle(cornerRadius: AppUI.Spacing.xs)
+                .fill(Color.clear)
+        )
         .onAppear { onAppear() }
     }
 
@@ -45,8 +53,6 @@ struct RemoteSetupPopover: View {
                 .foregroundColor(.secondary)
             if let url = currentRemoteURL {
                 HStack(spacing: AppUI.Spacing.sm) {
-                    Image(systemName: "arrow.up.forward.app")
-                        .foregroundColor(.brandGreen)
                     Text(url)
                         .font(AppUI.Font.captionMono)
                         .foregroundColor(.primary)
@@ -59,17 +65,13 @@ struct RemoteSetupPopover: View {
                     }
                 }
             } else {
-                HStack(spacing: AppUI.Spacing.sm) {
-                    Image(systemName: "arrow.up.forward.app")
-                        .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
-                    Text("No remote configured")
-                        .font(AppUI.Font.caption)
-                        .foregroundColor(.secondary)
-                }
+                Text("No remote configured")
+                    .font(AppUI.Font.caption)
+                    .foregroundColor(.secondary.opacity(AppUI.Opacity.dimmed))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, AppUI.Spacing.lg)
-        .padding(.vertical, AppUI.Spacing.md)
     }
 
     private var noteSection: some View {
@@ -84,30 +86,13 @@ struct RemoteSetupPopover: View {
                 .frame(minHeight: 60, maxHeight: 100)
                 .padding(AppUI.Spacing.xs)
                 .background(
-                    RoundedRectangle(cornerRadius: AppUI.Radius.sm)
+                    RoundedRectangle(cornerRadius: AppUI.Spacing.xs)
                         .stroke(Color.secondary.opacity(AppUI.Opacity.border), lineWidth: 1)
                 )
                 .accessibilityLabel("Remote setup instructions for the AI")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, AppUI.Spacing.lg)
-        .padding(.vertical, AppUI.Spacing.md)
-    }
-
-    private var footer: some View {
-        HStack {
-            Spacer()
-            Button("Cancel") { isPresented = false }
-                .keyboardShortcut(.escape)
-            Button(action: submit) {
-                Text(currentRemoteURL == nil ? "Set Up Remote" : "Apply")
-                    .padding(.horizontal, AppUI.Spacing.sm)
-            }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.return, modifiers: .command)
-            .disabled(!canSubmit)
-        }
-        .padding(.horizontal, AppUI.Spacing.lg)
-        .padding(.vertical, AppUI.Spacing.md)
     }
 
     // MARK: - Logic
