@@ -3,11 +3,19 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "KnowledgeStructureMigrationService")
 
-/// Ensures the `<project>/.termura/knowledge/` three-tier directory structure exists.
-/// Migrates the legacy `<project>/.termura/notes/` directory to `knowledge/notes/` if present.
+/// Ensures the `<project>/.termura/knowledge/` directory layout matches the
+/// current spec (`docs/knowledge-visualization-roadmap.md`).
 ///
-/// Idempotent: safe to call on every project open. The structure check is fast (4 stat calls)
-/// and migration runs at most once per project.
+/// Idempotent: safe to call on every project open. Each branch checks whether
+/// the source path exists before doing work, so projects already on the new
+/// layout pay only stat-call cost.
+///
+/// Migrations performed (in order):
+///   1. Legacy `<project>/.termura/notes/` → `knowledge/notes/`
+///   2. `knowledge/sources/papers/*` → `knowledge/sources/articles/`, drop papers/
+///   3. `knowledge/sources/code/*`   → `knowledge/sources/articles/`, drop code/
+///   4. `knowledge/attachments/*`    → `knowledge/notes/attachments/`, drop attachments/
+///   5. Create the canonical subdirectory set under `knowledge/`
 actor KnowledgeStructureMigrationService {
     private let projectURL: URL
     private let fileManager: any FileManagerProtocol
@@ -19,75 +27,159 @@ actor KnowledgeStructureMigrationService {
 
     /// Result of an `ensureStructure()` call.
     struct Result: Sendable {
-        /// True if a legacy migration was performed.
+        /// True if any of the four migration branches actually moved something.
         let migrated: Bool
-        /// Number of `.md` files moved during migration (0 if no migration).
-        let migratedCount: Int
+        /// Number of `.md` files moved by the legacy notes migration (branch 1 only).
+        let migratedNoteCount: Int
     }
 
-    /// Ensures the knowledge directory structure exists; migrates legacy notes if needed.
-    /// Throws if directory creation or move fails — caller should log and continue.
     @discardableResult
     func ensureStructure() async throws -> Result {
         let knowledgeRoot = projectURL
             .appendingPathComponent(AppConfig.Persistence.directoryName)
             .appendingPathComponent(AppConfig.Knowledge.directoryName)
 
-        let migrationResult = try migrateLegacyIfNeeded(knowledgeRoot: knowledgeRoot)
+        var migrated = false
+        var migratedNoteCount = 0
+
+        let notesResult = try migrateLegacyNotesIfNeeded(knowledgeRoot: knowledgeRoot)
+        migrated = migrated || notesResult.migrated
+        migratedNoteCount = notesResult.migratedCount
+
+        if try mergeLegacySourcesBucketsIntoArticles(knowledgeRoot: knowledgeRoot) {
+            migrated = true
+        }
+        if try migrateLegacyAttachmentsIntoNotes(knowledgeRoot: knowledgeRoot) {
+            migrated = true
+        }
+
         try createSubdirectories(under: knowledgeRoot)
 
-        return migrationResult
+        return Result(migrated: migrated, migratedNoteCount: migratedNoteCount)
     }
 
-    // MARK: - Private
+    // MARK: - Branch 1: legacy notes → knowledge/notes
 
-    private func migrateLegacyIfNeeded(knowledgeRoot: URL) throws -> Result {
+    private struct LegacyNotesResult { let migrated: Bool; let migratedCount: Int }
+
+    private func migrateLegacyNotesIfNeeded(knowledgeRoot: URL) throws -> LegacyNotesResult {
         let newNotesDir = knowledgeRoot.appendingPathComponent(AppConfig.Knowledge.notesSubdirectory)
         let oldNotesDir = projectURL
             .appendingPathComponent(AppConfig.Persistence.directoryName)
             .appendingPathComponent(AppConfig.Notes.legacyNotesDirectoryName)
 
-        // Skip if old doesn't exist or new already exists.
         guard fileManager.fileExists(atPath: oldNotesDir.path),
               !fileManager.fileExists(atPath: newNotesDir.path) else {
-            return Result(migrated: false, migratedCount: 0)
+            return LegacyNotesResult(migrated: false, migratedCount: 0)
         }
 
-        // Ensure parent (knowledge/) exists before moving.
         try fileManager.createDirectory(at: knowledgeRoot, withIntermediateDirectories: true)
         try fileManager.moveItem(at: oldNotesDir, to: newNotesDir)
-
         let count = countMarkdownFiles(in: newNotesDir)
-        logger.info("Migrated legacy notes/ to knowledge/notes/ (\(count) files)")
-        return Result(migrated: true, migratedCount: count)
+        logger.info("Migrated legacy notes/ → knowledge/notes/ (\(count) files)")
+        return LegacyNotesResult(migrated: true, migratedCount: count)
     }
 
-    private func createSubdirectories(under knowledgeRoot: URL) throws {
-        let subdirs = [
-            AppConfig.Knowledge.notesSubdirectory,
-            AppConfig.Knowledge.sourcesSubdirectory,
-            AppConfig.Knowledge.logSubdirectory,
-            AppConfig.Knowledge.attachmentsSubdirectory
-        ]
-        for sub in subdirs {
-            let url = knowledgeRoot.appendingPathComponent(sub)
-            if !fileManager.fileExists(atPath: url.path) {
-                try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+    // MARK: - Branch 2 + 3: legacy sources buckets → articles
+
+    /// Returns true if anything was moved or any legacy bucket dir was removed.
+    private func mergeLegacySourcesBucketsIntoArticles(knowledgeRoot: URL) throws -> Bool {
+        let sourcesDir = knowledgeRoot.appendingPathComponent(AppConfig.Knowledge.sourcesSubdirectory)
+        let articlesDir = sourcesDir.appendingPathComponent("articles")
+        var didWork = false
+        for bucket in AppConfig.Knowledge.legacySourcesBuckets {
+            let legacyDir = sourcesDir.appendingPathComponent(bucket)
+            guard fileManager.fileExists(atPath: legacyDir.path) else { continue }
+
+            try fileManager.createDirectory(at: articlesDir, withIntermediateDirectories: true)
+            let entries = listEntries(at: legacyDir)
+            for entry in entries {
+                let dest = articlesDir.appendingPathComponent(entry.lastPathComponent)
+                if fileManager.fileExists(atPath: dest.path) {
+                    logger.warning("Skipping migration of \(entry.lastPathComponent): already exists in articles/")
+                    continue
+                }
+                try fileManager.moveItem(at: entry, to: dest)
+                didWork = true
             }
+            try removeIfEmpty(at: legacyDir)
+            logger.info("Migrated knowledge/sources/\(bucket) → articles/")
         }
+        return didWork
+    }
+
+    // MARK: - Branch 4: knowledge/attachments → knowledge/notes/attachments
+
+    /// Returns true if anything was moved or the legacy attachments dir was removed.
+    private func migrateLegacyAttachmentsIntoNotes(knowledgeRoot: URL) throws -> Bool {
+        let legacyAttachments = knowledgeRoot
+            .appendingPathComponent(AppConfig.Knowledge.legacyAttachmentsSubdirectoryName)
+        guard fileManager.fileExists(atPath: legacyAttachments.path) else { return false }
+
+        let newAttachments = knowledgeRoot
+            .appendingPathComponent(AppConfig.Knowledge.notesSubdirectory)
+            .appendingPathComponent(AppConfig.Knowledge.attachmentsSubdirectoryWithinNotes)
+        try fileManager.createDirectory(at: newAttachments, withIntermediateDirectories: true)
+
+        let entries = listEntries(at: legacyAttachments)
+        var movedAny = false
+        for entry in entries {
+            let dest = newAttachments.appendingPathComponent(entry.lastPathComponent)
+            if fileManager.fileExists(atPath: dest.path) {
+                logger.warning("Skipping migration of attachment \(entry.lastPathComponent): already exists in notes/attachments/")
+                continue
+            }
+            try fileManager.moveItem(at: entry, to: dest)
+            movedAny = true
+        }
+        try removeIfEmpty(at: legacyAttachments)
+        logger.info("Migrated knowledge/attachments → knowledge/notes/attachments")
+        return movedAny || true
+    }
+
+    // MARK: - Canonical subdirectory creation
+
+    private func createSubdirectories(under knowledgeRoot: URL) throws {
+        let notesDir = knowledgeRoot.appendingPathComponent(AppConfig.Knowledge.notesSubdirectory)
+        let sourcesDir = knowledgeRoot.appendingPathComponent(AppConfig.Knowledge.sourcesSubdirectory)
+        let logDir = knowledgeRoot.appendingPathComponent(AppConfig.Knowledge.logSubdirectory)
+        let attachmentsDir = notesDir.appendingPathComponent(
+            AppConfig.Knowledge.attachmentsSubdirectoryWithinNotes
+        )
+
+        var dirs = [notesDir, attachmentsDir, sourcesDir, logDir]
+        for bucket in AppConfig.Knowledge.sourcesBuckets {
+            dirs.append(sourcesDir.appendingPathComponent(bucket))
+        }
+        for url in dirs where !fileManager.fileExists(atPath: url.path) {
+            try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func removeIfEmpty(at url: URL) throws {
+        guard listEntries(at: url).isEmpty else { return }
+        try fileManager.removeItem(at: url)
     }
 
     private func countMarkdownFiles(in directory: URL) -> Int {
+        listEntries(at: directory).count(where: { $0.pathExtension.lowercased() == "md" })
+    }
+
+    /// Reads directory contents tolerantly: any I/O failure returns an empty array
+    /// (the surrounding migration logic treats empty / unreadable as "nothing to do").
+    private func listEntries(at url: URL) -> [URL] {
         do {
-            let entries = try fileManager.contentsOfDirectory(
-                at: directory,
+            return try fileManager.contentsOfDirectory(
+                at: url,
                 includingPropertiesForKeys: nil,
                 options: [.skipsHiddenFiles]
             )
-            return entries.count(where: { $0.pathExtension.lowercased() == "md" })
         } catch {
-            logger.warning("Failed to count migrated notes: \(error.localizedDescription)")
-            return 0
+            // Non-critical: directory may not exist yet or be unreadable; log and skip.
+            logger.debug("Could not enumerate \(url.path): \(error.localizedDescription)")
+            return []
         }
     }
 }

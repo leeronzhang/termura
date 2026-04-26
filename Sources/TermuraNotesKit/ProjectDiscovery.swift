@@ -15,7 +15,16 @@ public struct ProjectDiscovery: Sendable {
     public let notesDirectory: URL
     public let sourcesDirectory: URL
     public let logDirectory: URL
+    /// Shared attachments live under notes/, scoped to the curated output layer
+    /// (per `docs/knowledge-visualization-roadmap.md`). The pre-migration location
+    /// was `knowledge/attachments/`; `KnowledgeStructureMigrationService` moves it.
     public let attachmentsDirectory: URL
+
+    /// Source-bucket subdirectories created by `ensureDirectories()`.
+    /// `articles` covers all long-form material — web clippings (.md/.html) and
+    /// PDF papers — distinguished by extension. `images` for screenshots, `data`
+    /// for CSV/JSON datasets.
+    public static let sourcesBuckets: [String] = ["articles", "images", "data"]
 
     /// Walk up from `startURL` until a directory containing `.termura/` is found.
     public init(from startURL: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)) throws {
@@ -29,7 +38,7 @@ public struct ProjectDiscovery: Sendable {
                 notesDirectory = knowledgeRoot.appendingPathComponent("notes")
                 sourcesDirectory = knowledgeRoot.appendingPathComponent("sources")
                 logDirectory = knowledgeRoot.appendingPathComponent("log")
-                attachmentsDirectory = knowledgeRoot.appendingPathComponent("attachments")
+                attachmentsDirectory = notesDirectory.appendingPathComponent("attachments")
                 return
             }
             let parent = current.deletingLastPathComponent()
@@ -41,12 +50,10 @@ public struct ProjectDiscovery: Sendable {
     /// Ensures the knowledge directory structure exists, creating missing subdirectories.
     public func ensureDirectories() throws {
         let fm = FileManager.default
-        let dirs = [notesDirectory, sourcesDirectory, logDirectory, attachmentsDirectory,
-                    sourcesDirectory.appendingPathComponent("articles"),
-                    sourcesDirectory.appendingPathComponent("papers"),
-                    sourcesDirectory.appendingPathComponent("images"),
-                    sourcesDirectory.appendingPathComponent("code"),
-                    sourcesDirectory.appendingPathComponent("data")]
+        var dirs = [notesDirectory, attachmentsDirectory, sourcesDirectory, logDirectory]
+        for bucket in Self.sourcesBuckets {
+            dirs.append(sourcesDirectory.appendingPathComponent(bucket))
+        }
         for dir in dirs where !fm.fileExists(atPath: dir.path) {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }

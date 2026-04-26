@@ -2,8 +2,12 @@ import Foundation
 import SwiftUI
 
 /// Knowledge sub-view inside the Project sidebar tab.
-/// Lists `.termura/knowledge/{sources,log,attachments}` contents grouped by category.
+/// Lists `.termura/knowledge/{sources,log}` contents grouped by category.
 /// Embedded by `SidebarProjectContent` when the inline view-mode toggle is set to `.knowledge`.
+///
+/// Note: cross-note attachments live under `notes/attachments/` and are not
+/// surfaced here — they're an internal output-layer concern, not a user
+/// investment bucket. Users / agents drop input material into Sources only.
 struct SidebarKnowledgeContent: View {
     let discovery: ProjectDiscovery
     var onOpenFile: ((String, FileOpenMode) -> Void)?
@@ -15,14 +19,12 @@ struct SidebarKnowledgeContent: View {
 
     @State private var sourceGroups: [CategoryGroup] = []
     @State private var logGroups: [CategoryGroup] = []
-    @State private var attachments: [KnowledgeFileEntry] = []
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
                 sourcesSection
                 logSection
-                attachmentsSection
             }
             .padding(.leading, AppUI.Spacing.xxxl)
             .padding(.trailing, AppUI.Spacing.lg)
@@ -67,21 +69,6 @@ struct SidebarKnowledgeContent: View {
         }
     }
 
-    private var attachmentsSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            sectionTitle("Attachments")
-            if attachments.isEmpty {
-                sectionPlaceholder("No attachments yet")
-            } else {
-                KnowledgeGroupSection(
-                    title: "All",
-                    files: attachments,
-                    onOpenFile: { open(entry: $0, in: discovery.attachmentsDirectory) }
-                )
-            }
-        }
-    }
-
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
             .panelHeaderStyle()
@@ -105,9 +92,6 @@ struct SidebarKnowledgeContent: View {
         logGroups = KnowledgeFileLister
             .listSubdirGroups(in: discovery.logDirectory, descending: true)
             .map { CategoryGroup(id: $0.category, files: $0.files) }
-        attachments = KnowledgeFileLister.listFlat(
-            in: discovery.attachmentsDirectory, category: "all"
-        )
     }
 
     // MARK: - Open

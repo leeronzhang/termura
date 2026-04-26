@@ -39,18 +39,31 @@ enum AppConfig {
 
     /// Knowledge management directory layout under `<project>/.termura/`.
     /// Three-tier structure: sources (raw inputs), log (agent conversations),
-    /// notes (curated outputs), plus shared attachments.
+    /// notes (curated outputs). Per-note attachments live under notes/attachments/.
     enum Knowledge {
         /// Top-level container under `.termura/`.
         static let directoryName = "knowledge"
         /// Curated notes — the user/agent-edited markdown layer.
         static let notesSubdirectory = "notes"
-        /// Raw input materials (articles, PDFs, screenshots, datasets).
+        /// Cross-note shared resources, scoped under notes/.
+        static let attachmentsSubdirectoryWithinNotes = "attachments"
+        /// Raw input materials (long-form articles incl. PDFs, screenshots, datasets).
         static let sourcesSubdirectory = "sources"
         /// Human ↔ AI conversation logs (filled by P2 capture).
         static let logSubdirectory = "log"
-        /// Cross-note shared resources (images, diagrams, data).
-        static let attachmentsSubdirectory = "attachments"
+
+        /// Curated set of source-bucket subdirectories created at startup.
+        /// `articles` covers all long-form material (web clippings, MD, HTML, PDF papers);
+        /// `images` for screenshots/visual assets; `data` for CSV/JSON datasets.
+        /// Legacy `papers/` and `code/` buckets are migrated into `articles/`.
+        static let sourcesBuckets: [String] = ["articles", "images", "data"]
+
+        /// Buckets that previous versions may still have on disk; the migrator
+        /// folds their contents into `articles/` and removes them.
+        static let legacySourcesBuckets: [String] = ["papers", "code"]
+
+        /// Legacy location for shared attachments (now under `notes/attachments/`).
+        static let legacyAttachmentsSubdirectoryName = "attachments"
     }
 
     enum Search {
