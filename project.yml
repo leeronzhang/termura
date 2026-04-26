@@ -19,8 +19,10 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: "P52BUR2PMS"
-    MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "1"
+    # WHY: Versions live in Resources/Info.plist (CFBundleShortVersionString /
+    # CFBundleVersion) so Xcode's UI edits land in the only git-tracked source
+    # of truth. Setting MARKETING_VERSION / CURRENT_PROJECT_VERSION here would
+    # overwrite Xcode's edits on the next `xcodegen generate`.
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
