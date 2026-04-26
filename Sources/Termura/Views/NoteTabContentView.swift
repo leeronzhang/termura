@@ -87,31 +87,43 @@ struct NoteTabContentView: View {
                 autoFocus: false
             )
         case .reading:
-            NoteRenderedView(
-                pool: webViewPool,
-                bridge: webRendererBridge,
-                theme: themeManager.current,
-                markdown: notesViewModel.editingBody,
-                references: notesViewModel.selectedNote?.references ?? [],
-                backlinks: notesViewModel.selectedNoteBacklinks.map(\.title),
-                projectURL: noteBaseURL(for: notesViewModel.selectedNote),
-                onOpenBacklink: { notesViewModel.navigateToBacklink(title: $0) }
-            )
+            VStack(spacing: 0) {
+                NoteRenderedView(
+                    pool: webViewPool,
+                    bridge: webRendererBridge,
+                    theme: themeManager.current,
+                    markdown: notesViewModel.editingBody,
+                    references: notesViewModel.selectedNote?.references ?? [],
+                    backlinks: notesViewModel.selectedNoteBacklinks.map(\.title),
+                    projectURL: noteBaseURL(for: notesViewModel.selectedNote),
+                    onOpenBacklink: { notesViewModel.navigateToBacklink(title: $0) }
+                )
+                BacklinksPanel(
+                    backlinks: notesViewModel.selectedNoteBacklinks,
+                    onOpenBacklink: { notesViewModel.navigateToBacklink(title: $0) }
+                )
+            }
         }
     }
 
     /// Non-focused pane always renders in reading mode from the notes array.
     private var readOnlyContent: some View {
-        NoteRenderedView(
-            pool: webViewPool,
-            bridge: webRendererBridge,
-            theme: themeManager.current,
-            markdown: inactiveNote?.body ?? "",
-            references: inactiveNote?.references ?? [],
-            backlinks: notesViewModel.selectedNoteBacklinks.map(\.title),
-            projectURL: noteBaseURL(for: inactiveNote),
-            onOpenBacklink: { notesViewModel.navigateToBacklink(title: $0) }
-        )
+        VStack(spacing: 0) {
+            NoteRenderedView(
+                pool: webViewPool,
+                bridge: webRendererBridge,
+                theme: themeManager.current,
+                markdown: inactiveNote?.body ?? "",
+                references: inactiveNote?.references ?? [],
+                backlinks: notesViewModel.selectedNoteBacklinks.map(\.title),
+                projectURL: noteBaseURL(for: inactiveNote),
+                onOpenBacklink: { notesViewModel.navigateToBacklink(title: $0) }
+            )
+            BacklinksPanel(
+                backlinks: notesViewModel.selectedNoteBacklinks,
+                onOpenBacklink: { notesViewModel.navigateToBacklink(title: $0) }
+            )
+        }
     }
 
     private func noteBaseURL(for note: NoteRecord?) -> URL {
