@@ -100,25 +100,25 @@ public enum ConventionTemplate {
 
     ```bash
     # 创建 note
-    termura-notes create --title "note-title" --body "内容" --tags "tag1,tag2"
+    tn create --title "note-title" --body "内容" --tags "tag1,tag2"
 
     # 追加内容
-    termura-notes append --to "note-title" "追加的内容"
+    tn append --to "note-title" "追加的内容"
 
     # 搜索
-    termura-notes search "关键词"
+    tn search "关键词"
 
     # 建立 backlink
-    termura-notes link --from "note-a" --to "note-b"
+    tn link --from "note-a" --to "note-b"
 
     # 导入素材
-    termura-notes import file /path/to/file
-    termura-notes import url https://example.com/article
+    tn import file /path/to/file
+    tn import url https://example.com/article
     ```
 
     ## MCP 工具参考
 
-    如果已配置 MCP Server (`termura-notes mcp`)，可通过以下工具直接操作：
+    如果已配置 MCP Server (`tn mcp`)，可通过以下工具直接操作：
 
     - `list_notes` — 列出所有 notes
     - `read_note` — 读取 note 内容

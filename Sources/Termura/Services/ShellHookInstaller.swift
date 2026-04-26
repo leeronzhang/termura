@@ -122,6 +122,9 @@ actor ShellHookInstaller: ShellHookInstallerProtocol {
 
 private let zshHookScript = """
 \(AppConfig.ShellIntegration.hookSentinelComment)
+if [ -n "$TERMURA_APP_BUNDLE" ]; then
+  export PATH="$TERMURA_APP_BUNDLE/Contents/Resources/bin:$PATH"
+fi
 _termura_exit=0
 precmd_termura() {
     printf '\\033]133;D;%s\\007' "${_termura_exit:-0}"
@@ -135,10 +138,21 @@ preexec_termura() {
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd precmd_termura
 add-zsh-hook preexec preexec_termura
+_termura_accept_line() {
+    if [[ "$BUFFER" == '>> '* ]]; then
+        local query="${BUFFER#>> }"
+        BUFFER="tn ask \\"${query//\\"/\\\\\\"}\\""
+    fi
+    zle .accept-line
+}
+zle -N accept-line _termura_accept_line
 """
 
 private let bashHookScript = """
 \(AppConfig.ShellIntegration.hookSentinelComment)
+if [ -n "$TERMURA_APP_BUNDLE" ]; then
+  export PATH="$TERMURA_APP_BUNDLE/Contents/Resources/bin:$PATH"
+fi
 _termura_exit=0
 _termura_precmd() {
     printf '\\033]133;D;%s\\007' "${_termura_exit:-0}"
@@ -151,6 +165,13 @@ _termura_preexec() {
 }
 PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND; }_termura_precmd"
 trap '_termura_preexec' DEBUG
+_termura_accept_line() {
+    if [[ "$READLINE_LINE" == '>> '* ]]; then
+        local query="${READLINE_LINE#>> }"
+        READLINE_LINE="tn ask \\"${query//\\"/\\\\\\"}\\""
+    fi
+}
+bind -x '"\\C-m": _termura_accept_line'
 """
 
 // MARK: - Errors

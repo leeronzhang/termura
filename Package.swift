@@ -3,11 +3,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "termura-notes",
+    name: "tn",
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "TermuraNotesKit", targets: ["TermuraNotesKit"]),
-        .executable(name: "termura-notes", targets: ["TermuraNotesCLI"]),
+        .executable(name: "tn", targets: ["TermuraNotesCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.5.0"),

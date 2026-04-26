@@ -3,7 +3,7 @@ import ArgumentParser
 @main
 struct TermuraNotesCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "termura-notes",
+        commandName: "tn",
         abstract: "Knowledge management CLI for Termura projects.",
         version: "0.1.0",
         subcommands: [
@@ -13,7 +13,9 @@ struct TermuraNotesCommand: ParsableCommand {
             LinkCommand.self,
             ImportCommand.self,
             MCPCommand.self,
-            InitConventionCommand.self
+            InitConventionCommand.self,
+            CompileCommand.self,
+            AskCommand.self
         ]
     )
 }

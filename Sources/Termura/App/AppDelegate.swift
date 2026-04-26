@@ -85,6 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let launchStart = ContinuousClock.now
 
+        // Expose the app bundle path so spawned shells can find bundled CLIs (tn).
+        setenv("TERMURA_APP_BUNDLE", Bundle.main.bundlePath, 1)
+
         // UI-testing: apply env-var overrides before any persistent state is read.
         let env = ProcessInfo.processInfo.environment
         if env["UI_TESTING_SKIP_SHELL_ONBOARDING"] != nil {

@@ -8,7 +8,7 @@ public struct MCPServer: Sendable {
     private let serverName: String
     private let serverVersion: String
 
-    public init(registry: MCPToolRegistry, name: String = "termura-notes", version: String = "0.1.0") {
+    public init(registry: MCPToolRegistry, name: String = "tn", version: String = "0.1.0") {
         self.registry = registry
         serverName = name
         serverVersion = version

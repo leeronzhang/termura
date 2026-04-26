@@ -17,7 +17,7 @@ struct MCPCommand: ParsableCommand {
         )
         let server = MCPServer(registry: registry)
         // WHY: Stderr logging so stdout stays clean for JSON-RPC
-        FileHandle.standardError.write(Data("termura-notes MCP server started\n".utf8))
+        FileHandle.standardError.write(Data("tn MCP server started\n".utf8))
         try server.runStdio()
     }
 }

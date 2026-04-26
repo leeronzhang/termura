@@ -1,0 +1,167 @@
+name: Termura
+options:
+  bundleIdPrefix: com.termura
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "26.0"
+  generateEmptyDirectories: true
+  createIntermediateGroups: true
+
+configs:
+  Debug: debug
+  Release: release
+  Free: release
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: "P52BUR2PMS"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    exactVersion: "7.10.0"
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    exactVersion: "2.4.0"
+  Highlightr:
+    url: https://github.com/raspu/Highlightr
+    exactVersion: "2.2.1"
+  swift-collections:
+    url: https://github.com/apple/swift-collections
+    exactVersion: "1.1.4"
+
+targets:
+  Termura:
+    type: application
+    platform: macOS
+    preBuildScripts:
+      - name: Build libghostty
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/scripts/build-libghostty.sh
+          - $(SRCROOT)/vendor/ghostty/.git/HEAD
+        outputFiles:
+          - $(SRCROOT)/vendor/.ghostty-build-stamp
+        script: |
+          "$SRCROOT/scripts/build-libghostty.sh"
+      - name: Build tn CLI
+        basedOnDependencyAnalysis: false
+        script: |
+          "$SRCROOT/scripts/build-tn.sh"
+      - name: SwiftLint
+        basedOnDependencyAnalysis: false
+        script: |
+          export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+          if which swiftlint > /dev/null; then
+            swiftlint lint --strict
+          else
+            echo "warning: SwiftLint not installed. Run: brew install swiftlint"
+          fi
+    sources:
+      - Sources/Termura
+      - Sources/TermuraNotesKit
+      - path: ../termura-harness/Sources
+        buildPhase: sources
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+      - path: Resources/shell
+        buildPhase: resources
+      - path: Resources/Fonts
+        buildPhase: resources
+      - path: Resources/Localizable.xcstrings
+        buildPhase: resources
+      - path: Resources/WebRenderer
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.termura.app
+        INFOPLIST_FILE: Resources/Info.plist
+        ENTITLEMENTS_FILE_PATH: Resources/Termura.entitlements
+        SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ARCHS: "arm64 x86_64"
+        INFOPLIST_KEY_CFBundleDisplayName: Termura
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        OTHER_LDFLAGS: "$(inherited) -framework Carbon -framework Metal -framework MetalKit"
+      configs:
+        Debug:
+          OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
+        Release:
+          OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
+          SKIP_INSTALL: NO
+          INSTALL_PATH: /Applications
+        Free:
+          OTHER_SWIFT_FLAGS: "$(inherited)"
+          SKIP_INSTALL: NO
+          INSTALL_PATH: /Applications
+    dependencies:
+      - framework: vendor/GhosttyKit.xcframework
+        embed: false
+      - package: GRDB
+        product: GRDB
+      - package: KeyboardShortcuts
+        product: KeyboardShortcuts
+      - package: Highlightr
+        product: Highlightr
+      - package: swift-collections
+        product: DequeModule
+
+  TermuraTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/TermuraTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.termura.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Termura
+
+  TermuraUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - Tests/TermuraUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.termura.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Termura
+    dependencies:
+      - target: Termura
+
+schemes:
+  Termura:
+    build:
+      targets:
+        Termura: all
+    run:
+      config: Debug
+      environmentVariables:
+        # ghostty's Metal renderer reads CALayer properties (bounds, contentsScale)
+        # from the renderer thread. This is safe (read-only, no CA transaction) but
+        # triggers Debug-only dispatch_assert_queue(main) assertions on macOS 14+.
+        # Ghostty's own macOS app has the same pattern.
+        - variable: CA_ASSERT_MAIN_THREAD_TRANSACTIONS
+          value: "0"
+          isEnabled: true
+    test:
+      config: Debug
+      targets:
+        - TermuraTests
+        - TermuraUITests
+    profile:
+      config: Release
+    archive:
+      config: Release
