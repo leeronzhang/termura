@@ -67,8 +67,8 @@ extension ProjectContext {
         let pool = try await DatabaseService.makePool(at: projectURL)
         let db = try await DatabaseService(pool: pool, metrics: fallbackMetrics)
 
-        // P1: Establish knowledge/{notes,sources,log,attachments}/ structure and
-        // migrate legacy <project>/.termura/notes/ to knowledge/notes/ if present.
+        // Ensure knowledge/notes/ exists and migrate legacy
+        // <project>/.termura/notes/ to knowledge/notes/ if present.
         let knowledgeMigration = KnowledgeStructureMigrationService(projectURL: projectURL)
         do {
             _ = try await knowledgeMigration.ensureStructure()

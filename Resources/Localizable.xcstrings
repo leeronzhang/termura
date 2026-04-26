@@ -16,6 +16,9 @@
     "(%@)" : {
 
     },
+    "[[%@]]" : {
+
+    },
     "%@" : {
 
     },
@@ -225,6 +228,9 @@
           }
         }
       }
+    },
+    "Backlinks" : {
+
     },
     "bin" : {
 
@@ -1049,9 +1055,6 @@
     "No CLI agent detected" : {
 
     },
-    "No knowledge directory" : {
-
-    },
     "No Note Open" : {
       "comment" : "Empty-state heading shown when no note is open in the content area",
       "extractionState" : "manual",
@@ -1387,9 +1390,6 @@
           }
         }
       }
-    },
-    "Run a Termura command to create `.termura/`." : {
-
     },
     "Save" : {
       "comment" : "Confirm button: save changes (e.g. in the context file or code editor)",
@@ -2001,18 +2001,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Version History"
-          }
-        }
-      }
-    },
-    "When enabled, reopening a project pre-fills the Composer with the last AI launch command." : {
-      "comment" : "Footer text below the Agent Resume toggle in Settings",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "When enabled, reopening a project pre-fills the Composer with the last AI launch command."
           }
         }
       }
