@@ -14,7 +14,7 @@ struct ConventionTemplateTests {
         #expect(content.contains("Frontmatter 要求"))
         #expect(content.contains("CLI 命令参考"))
         #expect(content.contains("MCP 工具参考"))
-        #expect(content.contains("termura-notes create"))
+        #expect(content.contains("tn create"))
     }
 
     @Test("claude reference snippet references CONVENTION.md")

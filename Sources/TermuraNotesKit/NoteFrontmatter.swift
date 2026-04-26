@@ -32,7 +32,8 @@ public enum NoteFrontmatter {
         public let body: String
 
         public init(id: NoteID, title: String, isFavorite: Bool, tags: [String],
-                    references: [String], isFolder: Bool, createdAt: Date, updatedAt: Date, body: String) {
+                    references: [String], isFolder: Bool,
+                    createdAt: Date, updatedAt: Date, body: String) {
             self.id = id; self.title = title; self.isFavorite = isFavorite
             self.tags = tags; self.references = references; self.isFolder = isFolder
             self.createdAt = createdAt; self.updatedAt = updatedAt; self.body = body

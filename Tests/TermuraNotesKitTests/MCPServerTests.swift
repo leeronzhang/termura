@@ -41,7 +41,7 @@ struct MCPServerTests {
         let result = resp["result"] as? [String: Any]
         #expect(result?["protocolVersion"] as? String == "2024-11-05")
         let serverInfo = result?["serverInfo"] as? [String: Any]
-        #expect(serverInfo?["name"] as? String == "termura-notes")
+        #expect(serverInfo?["name"] as? String == "tn")
         let capabilities = result?["capabilities"] as? [String: Any]
         #expect(capabilities?["tools"] != nil)
     }

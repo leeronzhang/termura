@@ -13,9 +13,7 @@ struct TermuraNotesCommand: ParsableCommand {
             LinkCommand.self,
             ImportCommand.self,
             MCPCommand.self,
-            InitConventionCommand.self,
-            CompileCommand.self,
-            AskCommand.self
+            InitConventionCommand.self
         ]
     )
 }
