@@ -8,29 +8,25 @@ extension SidebarProjectContent {
         if viewModel.tree.isEmpty && !viewModel.isLoading {
             sidebarEmpty
         } else {
-            List(viewModel.flatVisibleItems, selection: $selectedItemID) { item in
-                FileTreeRowView(
-                    node: item.node,
-                    depth: item.depth,
-                    isExpanded: viewModel.expandedNodeIDs.contains(item.node.id),
-                    isActive: isFileActive(item.node),
-                    onTap: {}
-                )
-                .tag(item.id)
-                .listRowInsets(EdgeInsets(
-                    top: 0, leading: AppUI.Spacing.lg,
-                    bottom: 0, trailing: 0
-                ))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .onChange(of: selectedItemID) { _, newValue in
-                guard let id = newValue else { return }
-                // Clear selection immediately so the same row can be tapped again
-                selectedItemID = nil
-                handleItemTap(id: id)
+            // WHY: Using ScrollView + LazyVStack instead of List so the leading edge of
+            // each row's content (the chevron) lines up exactly with the PROJECT header
+            // padding (`AppUI.Spacing.xxxl`). macOS `List` adds its own platform-driven
+            // leading inset that listRowInsets can't fully override.
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(viewModel.flatVisibleItems) { item in
+                        FileTreeRowView(
+                            node: item.node,
+                            depth: item.depth,
+                            isExpanded: viewModel.expandedNodeIDs.contains(item.node.id),
+                            isActive: isFileActive(item.node),
+                            onTap: { handleItemTap(id: item.id) }
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture { handleItemTap(id: item.id) }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

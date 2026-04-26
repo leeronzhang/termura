@@ -81,7 +81,12 @@ private struct ProjectScopeKey: EnvironmentKey {
                 commandRouter: router,
                 fileTreeService: DebugFileTreeService()
             ),
-            diagnosticsStore: DiagnosticsStore(commandRouter: router, projectRoot: "")
+            diagnosticsStore: DiagnosticsStore(commandRouter: router, projectRoot: ""),
+            aiCommitService: AICommitService(
+                runner: CLIProcessRunner(),
+                shellEnv: StaticUserShellEnvironment(path: ""),
+                gitService: gitService
+            )
         )
     }
     #else
@@ -91,7 +96,12 @@ private struct ProjectScopeKey: EnvironmentKey {
         return ProjectScope(
             gitService: gitService,
             viewModel: ProjectViewModel(gitService: gitService, projectRoot: ""),
-            diagnosticsStore: DiagnosticsStore(commandRouter: router, projectRoot: "")
+            diagnosticsStore: DiagnosticsStore(commandRouter: router, projectRoot: ""),
+            aiCommitService: AICommitService(
+                runner: CLIProcessRunner(),
+                shellEnv: StaticUserShellEnvironment(path: ""),
+                gitService: gitService
+            )
         )
     }
     #endif

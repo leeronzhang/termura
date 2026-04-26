@@ -67,6 +67,41 @@ public enum KnowledgeFileLister {
         return entries
     }
 
+    /// Flat enumeration of `directory/` (e.g. attachments/) under a single category bucket.
+    /// Each entry's `relativePath` is computed against `directory` itself.
+    public static func listFlat(in directory: URL, category: String) -> [KnowledgeFileEntry] {
+        listFiles(in: directory, category: category, baseDir: directory)
+    }
+
+    /// Lists each immediate subdirectory of `parent` together with its files, including empty
+    /// subdirectories. Sort order is alphabetical when `descending` is false, descending when true.
+    /// Used to render the Knowledge sidebar's section structure even when categories are empty.
+    public static func listSubdirGroups(
+        in parent: URL,
+        descending: Bool = false
+    ) -> [(category: String, files: [KnowledgeFileEntry])] {
+        let subdirs: [URL]
+        do {
+            subdirs = try FileManager.default.contentsOfDirectory(
+                at: parent, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            // Non-critical: parent may not exist yet.
+            return []
+        }
+        let sorted = subdirs.sorted { lhs, rhs in
+            let lhsName = lhs.lastPathComponent
+            let rhsName = rhs.lastPathComponent
+            return descending ? lhsName > rhsName : lhsName < rhsName
+        }
+        return sorted.compactMap { subdir in
+            guard isDirectory(subdir) else { return nil }
+            let files = listFiles(in: subdir, category: subdir.lastPathComponent, baseDir: parent)
+            return (subdir.lastPathComponent, files)
+        }
+    }
+
     // MARK: - Private
 
     private static func isDirectory(_ url: URL) -> Bool {

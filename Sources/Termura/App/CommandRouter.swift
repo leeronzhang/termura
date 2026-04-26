@@ -71,6 +71,43 @@ final class CommandRouter {
 
     var hasUncommittedChanges = false
 
+    // MARK: - Cross-cutting toast
+
+    /// Currently visible toast message. nil when no toast is showing.
+    /// `MainView` overlays a banner whenever this is set; auto-dismisses after a delay.
+    private(set) var toastMessage: String?
+    /// WHY: Auto-dismiss task is owned here so `showToast` can cancel any pending dismissal
+    /// before showing a fresh message (otherwise a rapid sequence would race).
+    /// OWNER: This actor (CommandRouter) cancels the prior task on each new toast.
+    /// TEARDOWN: Task is also cancelled in dismissToast() and replaced on each call.
+    /// TEST: Cover rapid sequential toast calls.
+    @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
+
+    func showToast(_ message: String, autoDismiss: Duration = .seconds(3)) {
+        toastDismissTask?.cancel()
+        toastMessage = message
+        // WHY: Strong self is fine — CommandRouter outlives all toast tasks (project-scope lifetime),
+        // and the cancellation-on-replace pattern prevents the task from firing after the next toast.
+        // OWNER: This actor (CommandRouter) cancels the prior task before issuing a new one.
+        // TEARDOWN: dismissToast() also cancels; deinit isn't a concern because lifetime spans the project.
+        // TEST: Cover rapid sequential toasts and explicit dismiss.
+        toastDismissTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: autoDismiss)
+                self.toastMessage = nil
+            } catch {
+                // Non-critical: cancellation by a follow-up toast or dismissToast(); just exit.
+                return
+            }
+        }
+    }
+
+    func dismissToast() {
+        toastDismissTask?.cancel()
+        toastDismissTask = nil
+        toastMessage = nil
+    }
+
     // MARK: - Chunk completed callbacks
 
     /// Registered observers for chunk completion events, keyed by UUID token.

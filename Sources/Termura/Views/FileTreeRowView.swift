@@ -61,7 +61,8 @@ struct FileTreeRowView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, AppUI.Spacing.lg)
+        .padding(.leading, AppUI.Spacing.xxxl)
+        .padding(.trailing, AppUI.Spacing.lg)
         .padding(.vertical, AppUI.Spacing.smMd)
         .background(isActive ? Color.brandGreen.opacity(AppUI.Opacity.selected) : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: AppUI.Radius.md))

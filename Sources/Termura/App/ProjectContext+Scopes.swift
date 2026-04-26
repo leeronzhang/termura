@@ -37,6 +37,11 @@ extension ProjectContext {
             metricsCollector: supplements.metricsCollector,
             notificationService: supplements.notificationService
         ))
+        let aiCommit = AICommitService(
+            runner: CLIProcessRunner(),
+            shellEnv: UserShellEnvironment(),
+            gitService: services.git
+        )
         return ProjectScopes(
             session: session, data: data,
             project: ProjectScope(
@@ -45,7 +50,8 @@ extension ProjectContext {
                 diagnosticsStore: DiagnosticsStore(
                     commandRouter: services.router,
                     projectRoot: supplements.projectVM.projectRootPath
-                )
+                ),
+                aiCommitService: aiCommit
             ),
             viewState: viewState
         )

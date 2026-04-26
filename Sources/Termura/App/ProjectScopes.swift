@@ -66,14 +66,17 @@ final class ProjectScope {
     let gitService: any GitServiceProtocol
     let viewModel: ProjectViewModel
     let diagnosticsStore: DiagnosticsStore
+    let aiCommitService: any AICommitServiceProtocol
 
     init(
         gitService: any GitServiceProtocol,
         viewModel: ProjectViewModel,
-        diagnosticsStore: DiagnosticsStore
+        diagnosticsStore: DiagnosticsStore,
+        aiCommitService: any AICommitServiceProtocol
     ) {
         self.gitService = gitService
         self.viewModel = viewModel
         self.diagnosticsStore = diagnosticsStore
+        self.aiCommitService = aiCommitService
     }
 }

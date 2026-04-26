@@ -33,16 +33,11 @@ actor FileTreeService: FileTreeServiceProtocol {
     ]
 
     /// Scans the directory at `projectRoot` and returns a sorted tree.
-    /// Injects `.termura/knowledge/sources` and `.termura/knowledge/log` as virtual
-    /// top-level entries so they appear in the Project sidebar alongside project files.
+    /// `.termura/` is filtered out by the dotfile rule in `classifyEntries` —
+    /// knowledge contents are surfaced via the dedicated Knowledge sidebar tab.
     func scan(at projectRoot: String) -> [FileTreeNode] {
         let rootURL = URL(fileURLWithPath: projectRoot)
-        var tree = buildChildren(at: rootURL, relativeTo: rootURL, depth: 0)
-        let knowledgeNodes = buildKnowledgeNodes(rootURL: rootURL)
-        if !knowledgeNodes.isEmpty {
-            tree.append(contentsOf: knowledgeNodes)
-        }
-        return tree
+        return buildChildren(at: rootURL, relativeTo: rootURL, depth: 0)
     }
 
     /// Annotates tree nodes with git status from a `GitStatusResult`.

@@ -60,10 +60,19 @@ struct MainView: View {
     var engineStore: TerminalEngineStore { sessionScope.engines }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebarPanel
-            contentArea
+        ZStack(alignment: .bottom) {
+            HStack(spacing: 0) {
+                sidebarPanel
+                contentArea
+            }
+            if let toast = commandRouter.toastMessage {
+                ToastBannerView(message: toast)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.bottom, AppUI.Spacing.xxl)
+                    .allowsHitTesting(false)
+            }
         }
+        .animation(.easeInOut(duration: AppUI.Animation.tabSwitch), value: commandRouter.toastMessage)
         .background(themeManager.current.background)
         .modifier(FullScreenObservingModifier(isFullScreen: $isFullScreen, hostingWindow: $hostingWindow))
         // onChange × 5 — CLAUDE.md §5.5 cap. Adding a 6th requires PR justification.
