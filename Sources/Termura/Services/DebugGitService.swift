@@ -27,6 +27,12 @@ actor DebugGitService: GitServiceProtocol {
     func showFile(at path: String, directory: String) async throws -> String {
         stubbedFileContent
     }
+
+    var stubbedNumstat: [DiffStat] = []
+
+    func numstat(at directory: String) async throws -> [DiffStat] {
+        stubbedNumstat
+    }
 }
 
 #endif

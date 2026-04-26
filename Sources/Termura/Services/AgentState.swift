@@ -59,6 +59,22 @@ enum AgentType: String, Sendable, Codable, CaseIterable {
         default: defaultLaunchCommand
         }
     }
+
+    /// Arguments for a non-interactive one-shot invocation that prints a single response and exits.
+    /// Used by the AI commit flow to delegate work to the user's CLI agent without occupying
+    /// any interactive session. Returns nil for agents whose headless mode is not yet validated.
+    func headlessArgs(prompt: String) -> [String]? {
+        switch self {
+        case .claudeCode: ["-p", prompt]
+        case .codex: ["exec", prompt]
+        case .aider, .openCode, .gemini, .pi, .unknown: nil
+        }
+    }
+
+    /// True when `headlessArgs(prompt:)` returns a non-nil invocation for this agent.
+    var supportsHeadless: Bool {
+        headlessArgs(prompt: "") != nil
+    }
 }
 
 /// Current operational status of a detected agent.

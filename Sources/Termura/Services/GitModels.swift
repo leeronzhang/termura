@@ -25,6 +25,9 @@ struct GitStatusResult: Sendable {
     var lastCommit: String?
     /// Short remote host label (e.g. "GitHub", "GitLab"), nil if no remote.
     var remoteHost: String?
+    /// Full origin remote URL (e.g. `git@github.com:user/repo.git`), nil if no remote.
+    /// Surfaces to the user as a tooltip / popover detail; AI agent uses it for context too.
+    var remoteURL: String?
 
     static let notARepo = GitStatusResult(
         branch: "", files: [], isGitRepo: false, ahead: 0, behind: 0
@@ -37,4 +40,15 @@ struct GitStatusResult: Sendable {
     var stagedCount: Int { stagedFiles.count }
     var modifiedCount: Int { modifiedFiles.count }
     var untrackedCount: Int { untrackedFiles.count }
+}
+
+/// Per-file added/removed line counts as produced by `git diff --numstat`.
+/// Binary files report `added == nil && removed == nil`.
+struct DiffStat: Sendable, Hashable, Identifiable {
+    var id: String { path }
+    let path: String
+    let added: Int?
+    let removed: Int?
+
+    var isBinary: Bool { added == nil && removed == nil }
 }

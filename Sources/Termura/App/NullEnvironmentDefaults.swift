@@ -66,6 +66,7 @@ struct NullGitService: GitServiceProtocol {
     func diff(file: String, staged: Bool, at directory: String) async throws -> String { "" }
     func trackedFiles(at directory: String) async throws -> Set<String> { [] }
     func showFile(at path: String, directory: String) async throws -> String { "" }
+    func numstat(at directory: String) async throws -> [DiffStat] { [] }
 }
 
 // MARK: - File Tree

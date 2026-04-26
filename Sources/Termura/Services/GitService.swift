@@ -12,6 +12,9 @@ protocol GitServiceProtocol: Sendable {
     func trackedFiles(at directory: String) async throws -> Set<String>
     /// Returns the full file content at `path` relative to `directory` (used for untracked files).
     func showFile(at path: String, directory: String) async throws -> String
+    /// Returns per-file added/removed line counts for the working tree (staged + unstaged combined).
+    /// Untracked files are not included by `git diff`; callers that need them must combine with `status`.
+    func numstat(at directory: String) async throws -> [DiffStat]
 }
 
 // MARK: - Live Implementation
@@ -66,7 +69,9 @@ actor GitService: GitServiceProtocol {
         // Collect remote host label (non-fatal if no remote configured)
         do {
             let url = try await remoteFuture
-            result.remoteHost = Self.parseRemoteHost(from: url.trimmingCharacters(in: .whitespacesAndNewlines))
+            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            result.remoteURL = trimmed.isEmpty ? nil : trimmed
+            result.remoteHost = Self.parseRemoteHost(from: trimmed)
         } catch {
             logger.debug("No remote origin: \(error.localizedDescription)")
         }
@@ -100,6 +105,50 @@ actor GitService: GitServiceProtocol {
             throw GitServiceError.notARepo
         }
         return Set(output.split(separator: "\n").map(String.init))
+    }
+
+    /// Per-file numeric diff stats (added / removed line counts) for the union of
+    /// staged + unstaged changes against HEAD. Untracked files are not reported by
+    /// `git diff`; callers that want full coverage must merge with `status().untrackedFiles`.
+    func numstat(at directory: String) async throws -> [DiffStat] {
+        let signpostID = signposter.makeSignpostID()
+        let state = signposter.beginInterval("GitNumstat", id: signpostID)
+        defer { signposter.endInterval("GitNumstat", state) }
+
+        let output: String
+        do {
+            output = try await run(["diff", "--numstat", "HEAD"], at: directory)
+        } catch let GitServiceError.commandFailed(_, code, _) where Self.isNotARepoExitCode(code) {
+            throw GitServiceError.notARepo
+        } catch let GitServiceError.commandFailed(_, _, stderr)
+            where stderr.contains("unknown revision") || stderr.contains("ambiguous argument 'HEAD'") {
+            // Empty repo with no HEAD yet — fall back to staged-only stats.
+            return try await numstatStagedOnly(at: directory)
+        }
+        return Self.parseNumstat(output)
+    }
+
+    private func numstatStagedOnly(at directory: String) async throws -> [DiffStat] {
+        let output = try await run(["diff", "--numstat", "--cached"], at: directory)
+        return Self.parseNumstat(output)
+    }
+
+    /// Parses `git diff --numstat` lines:
+    ///   "12\t3\tpath/to/file.swift"
+    ///   "-\t-\tpath/to/binary.png"        (binary files use `-` for both)
+    /// Renamed files appear as e.g. "5\t2\told => new" — we keep `old => new` as the path
+    /// since it's user-readable and the popover will display it as-is.
+    static func parseNumstat(_ output: String) -> [DiffStat] {
+        output.split(separator: "\n").compactMap { rawLine -> DiffStat? in
+            let parts = rawLine.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count == 3 else { return nil }
+            let addedField = String(parts[0])
+            let removedField = String(parts[1])
+            let path = String(parts[2])
+            let added = addedField == "-" ? nil : Int(addedField)
+            let removed = removedField == "-" ? nil : Int(removedField)
+            return DiffStat(path: path, added: added, removed: removed)
+        }
     }
 
     /// Returns the full file content for untracked files (no diff available).
