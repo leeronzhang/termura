@@ -98,8 +98,18 @@ extension MainView {
                 lastContentTabBySidebarTab[oldTab] = current
             }
         }
-        // Composer-triggered notes view is temporary — don't open a note tab in the right panel.
-        if newTab == .notes, commandRouter.isComposerNotesActive { return }
+        // Composer-triggered notes view is temporary — don't restore/open a note tab.
+        // In dual-pane mode the .onChange(of: selectedSidebarTab) can fire before
+        // isComposerNotesActive has propagated through SwiftUI's observation pass,
+        // so also accept the (showComposer + stashed previous tab) signal that
+        // toggleComposerWithNotes() set before withAnimation. Without this, the
+        // switch falls through to restoreNotesTab(), which mutates the content tab
+        // and triggers dismissComposer() at MainView.swift:137 — composer never renders.
+        let isTemporaryComposerNotesSwitch = newTab == .notes && (
+            commandRouter.isComposerNotesActive
+                || (commandRouter.showComposer && commandRouter.tabBeforeComposer != nil)
+        )
+        if isTemporaryComposerNotesSwitch { return }
 
         switch newTab {
         case .sessions:
