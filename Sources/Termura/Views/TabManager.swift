@@ -39,17 +39,19 @@ final class TabManager {
     func buildSplitMemberships() -> [SessionID: SplitMembership] {
         var result: [SessionID: SplitMembership] = [:]
         let activeID = resolvedSelectedTab?.id
+        var groupIndex = 0
         for tab in terminalItems {
             guard case let .split(left, right, leftTitle, rightTitle) = tab else { continue }
             let isActive = tab.id == activeID
             result[left] = SplitMembership(
                 partnerSessionID: right, partnerTitle: rightTitle,
-                isActiveTab: isActive, paneSlot: .left
+                isActiveTab: isActive, paneSlot: .left, groupIndex: groupIndex
             )
             result[right] = SplitMembership(
                 partnerSessionID: left, partnerTitle: leftTitle,
-                isActiveTab: isActive, paneSlot: .right
+                isActiveTab: isActive, paneSlot: .right, groupIndex: groupIndex
             )
+            groupIndex += 1
         }
         return result
     }

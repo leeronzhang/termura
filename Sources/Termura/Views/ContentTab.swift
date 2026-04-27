@@ -7,6 +7,10 @@ struct SplitMembership: Hashable {
     /// Whether this split tab is the currently selected tab.
     let isActiveTab: Bool
     let paneSlot: PaneSlot
+    /// Stable index identifying which split pair this belongs to. Both members of
+    /// the same pair share the same value; used to colour the split indicator so
+    /// users can visually associate paired sessions in the sidebar.
+    let groupIndex: Int
 }
 
 /// Identifies an open tab in the main content area.

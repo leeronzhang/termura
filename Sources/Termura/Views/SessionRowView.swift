@@ -89,10 +89,10 @@ struct SessionRowView: View {
             } else if let type = agentType {
                 AgentIconView(agentType: type, size: 14, isActive: agentStatus != nil)
             }
-            if splitInfo != nil {
+            if let info = splitInfo {
                 Image(systemName: "rectangle.split.2x1")
                     .font(.system(size: 9))
-                    .foregroundColor(.brandGreen.opacity(
+                    .foregroundColor(colorForSplitGroup(info.groupIndex).opacity(
                         (isActive || isInSplit) ? AppUI.Opacity.strong : AppUI.Opacity.tertiary
                     ))
             }

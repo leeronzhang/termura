@@ -74,6 +74,19 @@ extension SessionRowView {
         case .purple: .purple
         }
     }
+
+    /// Distinct hue for each split-pair group so users can visually associate
+    /// paired sessions in the sidebar. Cycles through the palette by index.
+    /// Red is reserved for failure dots; these hues are chosen to be visually
+    /// distinguishable from each other and from the agent/status icons.
+    static let splitGroupPalette: [Color] = [
+        .brandGreen, .blue, .orange, .purple, .pink, .cyan
+    ]
+
+    func colorForSplitGroup(_ groupIndex: Int) -> Color {
+        let palette = Self.splitGroupPalette
+        return palette[((groupIndex % palette.count) + palette.count) % palette.count]
+    }
 }
 
 // MARK: - Preview
