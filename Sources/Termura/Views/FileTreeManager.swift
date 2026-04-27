@@ -2,6 +2,7 @@ import Foundation
 
 /// Manages the state and incremental mutations of a visible file tree.
 /// Handles expansion tracking and provides a flat list for efficient list rendering.
+@Observable
 @MainActor
 final class FileTreeManager {
     private(set) var expandedNodeIDs: Set<String> = []
@@ -10,9 +11,9 @@ final class FileTreeManager {
     /// Cached flat list of visible tree items.
     private(set) var flatVisibleItems: [FlatTreeItem] = []
 
-    private var tree: [FileTreeNode] = []
-    private var _unfilteredFlatItems: [FlatTreeItem] = []
-    private var _unfilteredDirty = true
+    @ObservationIgnored private var tree: [FileTreeNode] = []
+    @ObservationIgnored private var _unfilteredFlatItems: [FlatTreeItem] = []
+    @ObservationIgnored private var _unfilteredDirty = true
 
     init(expandedNodeIDs: Set<String>, hideIgnoredFiles: Bool) {
         self.expandedNodeIDs = expandedNodeIDs
