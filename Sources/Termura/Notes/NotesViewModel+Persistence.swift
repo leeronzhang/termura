@@ -51,13 +51,28 @@ extension NotesViewModel {
         notes[idx].updatedAt = clock.now()
         backlinkIndex.rebuild(from: notes)
         let updated = notes[idx]
-        if let oldID = noteSavePendingID {
-            pendingWrites[oldID]?.cancel()
-            pendingWrites.removeValue(forKey: oldID)
+        // Serialize saves into a chain instead of cancel-and-replace. Swift Task
+        // cancellation is cooperative and `repository.save` has no check points,
+        // so a "cancelled" old save still races the new one on the actor — under
+        // reentrancy at fileService awaits, the older save's deleteNote can win
+        // and the newer save's writeNote silently throws (file already gone),
+        // leaving disk pinned to the older content. Chaining ensures only one
+        // save touches the actor at a time.
+        let previous = noteSavePendingID.flatMap { pendingWrites[$0] }
+        let trackingID = UUID()
+        let task = Task { [weak self] in
+            defer { self?.pendingWrites.removeValue(forKey: trackingID) }
+            await previous?.value
+            guard let self else { return }
+            do {
+                try await repository.save(updated)
+            } catch {
+                errorMessage = "\(error.localizedDescription)"
+                logger.error("Note save error: \(error)")
+            }
         }
-        noteSavePendingID = persistTracked { [repository] in
-            try await repository.save(updated)
-        }
+        pendingWrites[trackingID] = task
+        noteSavePendingID = trackingID
     }
 
     // MARK: - Tracked persistence
