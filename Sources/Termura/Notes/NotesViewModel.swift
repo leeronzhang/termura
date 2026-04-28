@@ -52,6 +52,15 @@ final class NotesViewModel {
     /// In-memory reverse index: maps note titles to notes that link to them via [[...]].
     @ObservationIgnored var backlinkIndex = BacklinkIndex()
 
+    /// True after the first successful loadNotes(). Subsequent calls are no-ops so
+    /// that view re-mounts (sidebar tab cycling, split layout changes, etc.) do not
+    /// clobber in-memory edits with stale repository state. Local mutations
+    /// (createNote, deleteNote, persistCurrentNote) keep `notes` in sync directly.
+    @ObservationIgnored private var isLoaded = false
+    /// In-flight load Task — used to dedupe concurrent loadNotes() callers so two
+    /// view re-mounts firing simultaneously share a single fetchAll() roundtrip.
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
+
     /// Currently active tag filter in Notes tab. Nil = show all notes.
     var selectedTagFilter: String?
 
@@ -147,14 +156,27 @@ final class NotesViewModel {
     }
 
     func loadNotes() async {
-        do {
-            notes = try await repository.fetchAll()
-            backlinkIndex.rebuild(from: notes)
-            errorMessage = nil
-        } catch {
-            errorMessage = "Failed to load notes: \(error.localizedDescription)"
-            logger.error("Failed to load notes: \(error)")
+        if isLoaded { return }
+        if let inFlight = loadTask {
+            await inFlight.value
+            return
         }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer { self.loadTask = nil }
+            do {
+                let fetched = try await repository.fetchAll()
+                notes = fetched
+                backlinkIndex.rebuild(from: notes)
+                isLoaded = true
+                errorMessage = nil
+            } catch {
+                errorMessage = "Failed to load notes: \(error.localizedDescription)"
+                logger.error("Failed to load notes: \(error)")
+            }
+        }
+        loadTask = task
+        await task.value
     }
 
     /// Shows a transient toast banner with `message` and auto-dismisses after the configured delay.
