@@ -29,10 +29,14 @@ Sources/Termura/Harness/*
 !.github/workflows/
 !.github/workflows/ci.yml
 Makefile
-scripts/
+# scripts/* (not scripts/) so the negations below can re-include specific files —
+# git ignores `!foo` when the parent directory itself is excluded by `scripts/`.
+scripts/*
+!scripts/check-version-sync.sh
 !scripts/check-xcstrings-coverage.sh
 !scripts/pre-commit
 !scripts/quality-gate.sh
+!scripts/sync-version-from-xcode.sh
 project.yml
 .swiftlint.yml
 .swiftformat

@@ -180,6 +180,7 @@ run_gate_check "xcstrings coverage check" bash scripts/check-xcstrings-coverage.
 run_gate_check "TextEditor accessibility check" bash scripts/check-texteditor-accessibility.sh Sources/Termura/Views
 run_gate_check "Bare Date() check" bash scripts/check-bare-date.sh
 run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
+run_gate_check "Version sync check" bash scripts/check-version-sync.sh
 
 echo "-> Forbidden Swift pattern checks..."
 if ! FORBIDDEN_OUTPUT="$(python3 - "$MODE" <<'PYEOF'
