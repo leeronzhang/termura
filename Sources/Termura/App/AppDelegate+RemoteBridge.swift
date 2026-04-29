@@ -5,6 +5,26 @@ import Foundation
 // `AppDelegate.swift` under the 250-line soft cap and to make the boundary
 // between "Composition Root wiring" and "Remote-control bridge logic" explicit.
 extension AppDelegate {
+    /// PR8 Phase 2 — fires the agent ↔ app bridge `start()` from
+    /// `applicationDidFinishLaunching`. The bridge is `async`, so we
+    /// route through `Task { await … }` (best-effort): app launch
+    /// returns immediately and the bridge converges in the background.
+    /// Failure is non-fatal — Settings UI still works without the
+    /// agent and pairing flows continue via direct LAN/CloudKit.
+    @MainActor
+    static func startRemoteAgentBridge(_ bridge: any RemoteAgentBridgeLifecycle) {
+        Task { await bridge.start() }
+    }
+
+    /// PR8 Phase 2 — fires the agent ↔ app bridge `stop()` from
+    /// `applicationWillTerminate`. Best-effort: termination does not
+    /// block on bridge teardown; the agent process notices the lost
+    /// connection and proceeds with its own shutdown timeout.
+    @MainActor
+    static func stopRemoteAgentBridge(_ bridge: any RemoteAgentBridgeLifecycle) {
+        Task { await bridge.stop() }
+    }
+
     @MainActor
     static func gatherActiveSessions(coordinator: ProjectCoordinator?) -> [RemoteSessionInfo] {
         guard let scope = coordinator?.activeContext?.sessionScope else { return [] }

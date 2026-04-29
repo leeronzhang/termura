@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let coordinator = ProjectCoordinator()
         let remoteAdapter = Self.makeRemoteAdapter(coordinator: coordinator)
         let remoteIntegration = RemoteIntegrationFactory.make(adapter: remoteAdapter)
+        let remoteAgentBridge = RemoteIntegrationFactory.makeAgentBridge(integration: remoteIntegration)
         services = AppServices(
             engineFactory: engineFactory,
             themeManager: ThemeManager(),
@@ -62,7 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             webViewPool: WebViewPool(),
             remoteSessionsAdapter: remoteAdapter,
             remoteIntegration: remoteIntegration,
-            remoteControlController: RemoteControlController(integration: remoteIntegration)
+            remoteControlController: RemoteControlController(integration: remoteIntegration),
+            remoteAgentBridge: remoteAgentBridge
         )
         projectCoordinator = coordinator
 
@@ -145,6 +147,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // or `isRunning == false` in the live harness).
         NSApp.registerForRemoteNotifications()
 
+        // PR8 Phase 2 — kick off the agent ↔ app bridge. Free build is
+        // a no-op; harness build constructs the XPC client + ingress
+        // + auto-connector and demand-launches the LaunchAgent. Skip
+        // when an env flag is set so unit tests / UI tests can opt
+        // out of CloudKit / Keychain side-effects during launch.
+        if env["TERMURA_DISABLE_REMOTE_AGENT_BRIDGE"] == nil {
+            Self.startRemoteAgentBridge(services.remoteAgentBridge)
+        }
+
         let launchElapsed = ContinuousClock.now - launchStart
         let collector = services.metricsCollector
         Task { await collector.recordDuration(.launchDuration, seconds: launchElapsed.totalSeconds) }
@@ -173,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        Self.stopRemoteAgentBridge(services.remoteAgentBridge)
         projectCoordinator.tearDown()
         // Metrics flush is handled in applicationShouldTerminate's handleTermination task group.
     }

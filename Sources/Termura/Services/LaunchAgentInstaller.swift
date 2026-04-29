@@ -33,19 +33,26 @@ struct LaunchAgentInstaller: Sendable {
         let runAtLoad: Bool
         let standardOutPath: String?
         let standardErrPath: String?
+        /// PR8 Phase 2 — names of mach services owned by this agent. The
+        /// main app process opens an `NSXPCConnection(machServiceName:)`
+        /// against each, and launchd demand-launches the agent on first
+        /// connection. Empty by default to keep PR2/PR7 tests untouched.
+        let machServices: [String]
 
         init(
             label: String,
             executablePath: String,
             runAtLoad: Bool = true,
             standardOutPath: String? = nil,
-            standardErrPath: String? = nil
+            standardErrPath: String? = nil,
+            machServices: [String] = []
         ) {
             self.label = label
             self.executablePath = executablePath
             self.runAtLoad = runAtLoad
             self.standardOutPath = standardOutPath
             self.standardErrPath = standardErrPath
+            self.machServices = machServices
         }
     }
 
@@ -135,6 +142,16 @@ struct LaunchAgentInstaller: Sendable {
         }
         if let stderr = config.standardErrPath {
             dict["StandardErrorPath"] = stderr
+        }
+        if !config.machServices.isEmpty {
+            // Each entry maps `machServiceName -> true` so launchd
+            // registers the named bootstrap service and routes incoming
+            // NSXPC connections to the agent process.
+            var services: [String: Bool] = [:]
+            for name in config.machServices {
+                services[name] = true
+            }
+            dict["MachServices"] = services
         }
         do {
             return try PropertyListSerialization.data(

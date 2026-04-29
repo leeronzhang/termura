@@ -30,4 +30,11 @@ struct AppServices {
     /// SwiftUI-bindable wrapper over `remoteIntegration`. Owned at the app
     /// scope so the Settings window can re-open without losing state.
     let remoteControlController: RemoteControlController
+    /// PR8 Phase 2 — agent ↔ app bridge lifecycle. Free build:
+    /// `NullRemoteAgentBridgeLifecycle` (no-op). Harness build: a
+    /// concrete impl wired by `RemoteIntegrationFactory.makeAgentBridge`
+    /// that owns the XPC client + ingress + auto-connector. Call sites
+    /// only see the protocol surface (no harness concrete types leak
+    /// into the open-core repo).
+    let remoteAgentBridge: any RemoteAgentBridgeLifecycle
 }

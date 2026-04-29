@@ -90,10 +90,29 @@ struct NullRemoteSessionsAdapter: RemoteSessionsAdapter {
     }
 }
 
+// PR8 Phase 2 — minimal hook surface for the agent ↔ app bridge.
+// The Free build sees only this protocol; the harness build supplies a
+// concrete implementation through `RemoteIntegrationFactory.makeAgentBridge`.
+// `AppDelegate+RemoteBridge.swift` is the single call site and never
+// references any harness concrete type.
+protocol RemoteAgentBridgeLifecycle: Sendable {
+    func start() async
+    func stop() async
+}
+
+struct NullRemoteAgentBridgeLifecycle: RemoteAgentBridgeLifecycle {
+    func start() async {}
+    func stop() async {}
+}
+
 #if !HARNESS_ENABLED
 enum RemoteIntegrationFactory {
     static func make(adapter _: any RemoteSessionsAdapter) -> any RemoteIntegration {
         NullRemoteIntegration()
+    }
+
+    static func makeAgentBridge(integration _: any RemoteIntegration) -> any RemoteAgentBridgeLifecycle {
+        NullRemoteAgentBridgeLifecycle()
     }
 }
 #endif
