@@ -164,6 +164,10 @@ final class TerminalSessionController {
             await detectAgentFromCurrentLine()
         case .commandStarted:
             break
+        case .commandMetadata:
+            // Metadata is forwarded to `outputProcessor.handleShellEvent` below;
+            // no UI-level reaction is required.
+            break
         }
 
         if await outputProcessor.handleShellEvent(event) != nil {

@@ -40,27 +40,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let collector = MetricsCollector()
         let environment = ProcessInfo.processInfo.environment
-        let engineFactory: any TerminalEngineFactory
-        #if DEBUG
-        if environment["UI_TESTING_MOCK_TERMINAL_ENGINE"] != nil {
-            engineFactory = DebugTerminalEngineFactory()
-        } else {
-            engineFactory = LiveTerminalEngineFactory()
-        }
-        #else
-        engineFactory = LiveTerminalEngineFactory()
-        #endif
-        // UI-testing: swap in a mock shell installer so tests never write to ~/.zshrc.
-        let shellInstaller: any ShellHookInstallerProtocol
-        #if DEBUG
-        if environment["UI_TESTING_MOCK_SHELL_INSTALLER"] != nil {
-            shellInstaller = DebugShellHookInstaller()
-        } else {
-            shellInstaller = ShellHookInstaller()
-        }
-        #else
-        shellInstaller = ShellHookInstaller()
-        #endif
+        let engineFactory = Self.makeEngineFactory(environment: environment)
+        let shellInstaller = Self.makeShellInstaller(environment: environment)
+        // Coordinator is needed before AppServices because the remote adapter closures
+        // capture it weakly to resolve the active project's session store on demand.
+        let coordinator = ProjectCoordinator()
+        let remoteAdapter = Self.makeRemoteAdapter(coordinator: coordinator)
+        let remoteIntegration = RemoteIntegrationFactory.make(adapter: remoteAdapter)
         services = AppServices(
             engineFactory: engineFactory,
             themeManager: ThemeManager(),
@@ -73,11 +59,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             metricsCollector: collector,
             metricsPersistenceService: MetricsPersistenceService(metrics: collector),
             shellHookInstaller: shellInstaller,
-            webViewPool: WebViewPool()
+            webViewPool: WebViewPool(),
+            remoteSessionsAdapter: remoteAdapter,
+            remoteIntegration: remoteIntegration,
+            remoteControlController: RemoteControlController(integration: remoteIntegration)
         )
-        projectCoordinator = ProjectCoordinator()
+        projectCoordinator = coordinator
 
         super.init()
+    }
+
+    private static func makeEngineFactory(environment: [String: String]) -> any TerminalEngineFactory {
+        #if DEBUG
+        if environment["UI_TESTING_MOCK_TERMINAL_ENGINE"] != nil {
+            return DebugTerminalEngineFactory()
+        }
+        #endif
+        return LiveTerminalEngineFactory()
+    }
+
+    private static func makeShellInstaller(environment: [String: String]) -> any ShellHookInstallerProtocol {
+        // UI-testing: swap in a mock shell installer so tests never write to ~/.zshrc.
+        #if DEBUG
+        if environment["UI_TESTING_MOCK_SHELL_INSTALLER"] != nil {
+            return DebugShellHookInstaller()
+        }
+        #endif
+        return ShellHookInstaller()
+    }
+
+    private static func makeRemoteAdapter(coordinator: ProjectCoordinator) -> LiveRemoteSessionsAdapter {
+        LiveRemoteSessionsAdapter(
+            listProvider: { [weak coordinator] in
+                Self.gatherActiveSessions(coordinator: coordinator)
+            },
+            commandRunner: { [weak coordinator] line, sessionId in
+                try await Self.runRemoteCommand(coordinator: coordinator, line: line, sessionId: sessionId)
+            }
+        )
     }
 
     // MARK: - NSApplicationDelegate
@@ -118,6 +137,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openOnLaunchURL: launchProjectURL
         ))
         logger.info("Termura launched")
+
+        // Register for remote notifications so CloudKit silent pushes can wake
+        // the remote-control transport. The handler `application(_:didReceiveRemoteNotification:)`
+        // routes them into `services.remoteIntegration`; if remote control is
+        // disabled, the integration's notify is a no-op (NullRemoteIntegration
+        // or `isRunning == false` in the live harness).
+        NSApp.registerForRemoteNotifications()
 
         let launchElapsed = ContinuousClock.now - launchStart
         let collector = services.metricsCollector

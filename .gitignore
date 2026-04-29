@@ -13,6 +13,10 @@ DerivedData/
 # Generated Xcode project
 *.xcodeproj/
 
+# Local-only workspace that bundles termura + termura-harness/iOS for parallel
+# Xcode editing. Each developer can regenerate with their own paths.
+Termura.xcworkspace/
+
 # Tests (internal)
 Tests/
 
@@ -23,6 +27,7 @@ Sources/Termura/Harness/*
 !Sources/Termura/Harness/RuleFileRepositoryProtocol.swift
 !Sources/Termura/Harness/HarnessViewModel+Stub.swift
 !Sources/Termura/Harness/ExperienceCodifier+Stub.swift
+!Sources/Termura/Harness/RemoteIntegration+Stub.swift
 
 # CI/CD and internal build tooling
 .github/

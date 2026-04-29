@@ -16,6 +16,10 @@ enum ShellIntegrationPhase: Sendable {
 /// Invalid transitions are silently ignored — no crashes.
 struct ShellIntegrationState: Sendable {
     private(set) var phase: ShellIntegrationPhase = .idle
+    /// Metadata accumulated from `OSC 133;X` sequences received between
+    /// `promptStarted` and `executionFinished`. Cleared after each command
+    /// completes so the next command starts with a fresh map.
+    private(set) var pendingMetadata: [String: String] = [:]
 
     // MARK: - Transitions
 
@@ -27,6 +31,7 @@ struct ShellIntegrationState: Sendable {
         case (.idle, .promptStarted),
              (.executing, .promptStarted):
             phase = .promptActive
+            pendingMetadata.removeAll(keepingCapacity: true)
 
         case (.promptActive, .commandStarted):
             phase = .commandInput("")
@@ -40,11 +45,25 @@ struct ShellIntegrationState: Sendable {
         // Allow prompt to restart from promptActive for chained commands
         case (.promptActive, .promptStarted):
             phase = .promptActive
+            pendingMetadata.removeAll(keepingCapacity: true)
+
+        // Metadata events merge into pendingMetadata regardless of phase so
+        // late arrivals before `executionStarted` are still captured.
+        case let (_, .commandMetadata(pairs)):
+            for (key, value) in pairs {
+                pendingMetadata[key] = value
+            }
 
         default:
             // Invalid transition — silently ignore
             break
         }
+    }
+
+    mutating func consumePendingMetadata() -> [String: String] {
+        let snapshot = pendingMetadata
+        pendingMetadata.removeAll(keepingCapacity: true)
+        return snapshot
     }
 
     // MARK: - Accessors

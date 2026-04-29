@@ -69,7 +69,9 @@ func ghosttyPtyOutputCb(_ userdata: UnsafeMutableRawPointer?, _ buf: UnsafePoint
 
 // OSC 133 prefix: ESC ] 1 3 3 ;  (6 bytes)
 // Terminated by BEL (\x07) or ST (ESC \).
-// Only A/B/C are emitted here; D is handled by GHOSTTY_ACTION_COMMAND_FINISHED.
+// A/B/C/X are emitted here; D is handled by GHOSTTY_ACTION_COMMAND_FINISHED.
+// X is Termura's private extension carrying `key=value;...` metadata that
+// `PTYCommandBridge` injects to tag remote-issued commands.
 private func scanOSC133ShellEvents(
     _ buf: UnsafePointer<UInt8>,
     len: Int,
@@ -97,11 +99,49 @@ private func scanOSC133ShellEvents(
         else { i += 2; continue }
         let cmdByte = buf[i + 6]
         switch cmdByte {
-        case 0x41: continuation.yield(.promptStarted)
-        case 0x42: continuation.yield(.commandStarted)
-        case 0x43: continuation.yield(.executionStarted)
-        default: break // 'D' handled by action callback
+        case 0x41: // 'A'
+            continuation.yield(.promptStarted)
+            i += 7
+        case 0x42: // 'B'
+            continuation.yield(.commandStarted)
+            i += 7
+        case 0x43: // 'C'
+            continuation.yield(.executionStarted)
+            i += 7
+        case 0x58: // 'X' — variable-length metadata, scan until BEL or ST
+            let payloadStart = i + 6
+            let terminatorIndex = findOSCTerminator(buf: buf, len: len, from: payloadStart)
+            if terminatorIndex == -1 {
+                // Unterminated sequence — skip past the prefix and keep scanning.
+                i += 7
+            } else {
+                let slice = ArraySlice(UnsafeBufferPointer(start: buf + payloadStart,
+                                                           count: terminatorIndex - payloadStart))
+                if let event = OSC133Parser.parse(slice) {
+                    continuation.yield(event)
+                }
+                // Advance past the terminator byte (BEL is 1 byte; ST is 2 bytes).
+                let terminatorByte = buf[terminatorIndex]
+                i = terminatorIndex + (terminatorByte == 0x1B ? 2 : 1)
+            }
+        default: // 'D' handled by action callback
+            i += 7
         }
-        i += 7
     }
+}
+
+/// Returns the index of the BEL (0x07) or ESC (0x1B, start of ST) byte that
+/// terminates the OSC sequence starting at `from`, or -1 if none found within
+/// the buffer.
+private func findOSCTerminator(buf: UnsafePointer<UInt8>, len: Int, from: Int) -> Int {
+    var j = from
+    while j < len {
+        let byte = buf[j]
+        if byte == 0x07 { return j }
+        if byte == 0x1B && j + 1 < len && buf[j + 1] == 0x5C {
+            return j
+        }
+        j += 1
+    }
+    return -1
 }

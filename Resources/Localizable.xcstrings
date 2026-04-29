@@ -539,6 +539,12 @@
         }
       }
     },
+    "Enable remote control" : {
+
+    },
+    "Enable remote control to generate a pairing invitation." : {
+
+    },
     "Enable smart output chunking and accurate command tracking." : {
       "comment" : "Shell integration onboarding subtitle",
       "extractionState" : "manual",
@@ -929,7 +935,13 @@
         }
       }
     },
+    "Last 50 commands shown. Stored locally in ~/Library/Application Support/Termura." : {
+
+    },
     "Learn More & Upgrade" : {
+
+    },
+    "Lets a paired iPhone send commands and receive output snapshots from this Mac." : {
 
     },
     "Merge Branch Summary" : {
@@ -1055,6 +1067,9 @@
     "No CLI agent detected" : {
 
     },
+    "No commands recorded yet." : {
+
+    },
     "No Note Open" : {
       "comment" : "Empty-state heading shown when no note is open in the content area",
       "extractionState" : "manual",
@@ -1066,6 +1081,9 @@
           }
         }
       }
+    },
+    "No paired devices yet." : {
+
     },
     "No remote configured" : {
 
@@ -1174,6 +1192,15 @@
           }
         }
       }
+    },
+    "Paired %@" : {
+
+    },
+    "Paired devices" : {
+
+    },
+    "Pairing" : {
+
     },
     "Paste" : {
       "comment" : "Context menu item: paste text from clipboard",
@@ -1319,6 +1346,9 @@
         }
       }
     },
+    "Recent commands" : {
+
+    },
     "Refresh" : {
       "comment" : "Tooltip on the refresh button in the Project file tree",
       "extractionState" : "manual",
@@ -1366,6 +1396,12 @@
           }
         }
       }
+    },
+    "revoked" : {
+
+    },
+    "Revoked devices can't send new commands. They'll need to pair again to reconnect." : {
+
     },
     "Rule (editable)" : {
       "comment" : "Text editor section header in the Codify Rule sheet",

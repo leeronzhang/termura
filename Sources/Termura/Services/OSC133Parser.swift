@@ -17,9 +17,36 @@ enum OSC133Parser {
             return .executionStarted
         case UInt8(ascii: "D"):
             return parseFinished(payload)
+        case UInt8(ascii: "X"):
+            return parseMetadata(payload)
         default:
             return nil
         }
+    }
+
+    /// Parses `X[;key=value[;key=value]...]` payloads. Termura private extension —
+    /// shells without OSC 133 X support simply produce no event. Empty payload
+    /// (just "X") yields an empty-metadata event so callers can still detect the
+    /// boundary marker if they need it.
+    private static func parseMetadata(_ payload: ArraySlice<UInt8>) -> ShellIntegrationEvent? {
+        let afterX = payload.dropFirst()
+        guard let body = String(bytes: afterX, encoding: .utf8) else { return nil }
+        var trimmed = body
+        if trimmed.hasPrefix(";") {
+            trimmed = String(trimmed.dropFirst())
+        }
+        if trimmed.isEmpty {
+            return .commandMetadata([:])
+        }
+        var pairs: [String: String] = [:]
+        for segment in trimmed.split(separator: ";") {
+            guard let separatorIndex = segment.firstIndex(of: "=") else { continue }
+            let key = String(segment[..<separatorIndex])
+            let value = String(segment[segment.index(after: separatorIndex)...])
+            guard !key.isEmpty else { continue }
+            pairs[key] = value
+        }
+        return .commandMetadata(pairs)
     }
 
     // MARK: - Private helpers

@@ -10,7 +10,8 @@ struct TermuraApp: App {
                 themeManager: appDelegate.services.themeManager,
                 fontSettings: appDelegate.services.fontSettings,
                 themeImportService: appDelegate.services.themeImportService,
-                shellHookInstaller: appDelegate.services.shellHookInstaller
+                shellHookInstaller: appDelegate.services.shellHookInstaller,
+                remoteControlController: appDelegate.services.remoteControlController
             )
             .tint(.brandGreen)
         }

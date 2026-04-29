@@ -1,3 +1,9 @@
+# SYNC NOTE: termura-harness/project-mac.yml mirrors this file's `sources` and
+# `dependencies` lists. When you edit those blocks, run
+# `bash scripts/check-open-core.sh` to validate that the public project still
+# generates and Free-builds without `../termura-harness/` present, then update
+# the harness mirror so the harness build keeps the same surface.
+
 name: Termura
 options:
   bundleIdPrefix: com.termura
@@ -42,6 +48,8 @@ packages:
   swift-collections:
     url: https://github.com/apple/swift-collections
     exactVersion: "1.1.4"
+  TermuraRemoteKit:
+    path: Packages/TermuraRemoteKit
 
 targets:
   Termura:
@@ -66,11 +74,37 @@ targets:
           else
             echo "warning: SwiftLint not installed. Run: brew install swiftlint"
           fi
+      - name: Bundle LaunchAgent helper
+        basedOnDependencyAnalysis: false
+        script: |
+          # Skip for the Free configuration (no harness, no LaunchAgent feature).
+          if [[ "$CONFIGURATION" == "Free" ]]; then
+            echo "Free build: skipping LaunchAgent bundling"
+            exit 0
+          fi
+          AGENT_PKG="$SRCROOT/../termura-harness/LaunchAgent"
+          if [[ ! -d "$AGENT_PKG" ]]; then
+            echo "warning: termura-harness/LaunchAgent not found; LaunchAgent will be missing from .app/Contents/Helpers"
+            exit 0
+          fi
+          export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin"
+          (cd "$AGENT_PKG" && swift build -c release --product termura-remote-agent)
+          BUILD_DIR="$AGENT_PKG/.build/release"
+          BIN_PATH="$BUILD_DIR/termura-remote-agent"
+          if [[ ! -f "$BIN_PATH" ]]; then
+            echo "error: termura-remote-agent build did not produce $BIN_PATH"
+            exit 1
+          fi
+          DEST_DIR="$BUILT_PRODUCTS_DIR/$EXECUTABLE_FOLDER_PATH/../Helpers"
+          mkdir -p "$DEST_DIR"
+          cp -f "$BIN_PATH" "$DEST_DIR/termura-remote-agent"
+          if [[ -n "$EXPANDED_CODE_SIGN_IDENTITY" ]]; then
+            codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --options runtime "$DEST_DIR/termura-remote-agent"
+          fi
+          echo "Bundled LaunchAgent at $DEST_DIR/termura-remote-agent"
     sources:
       - Sources/Termura
       - Sources/TermuraNotesKit
-      - path: ../termura-harness/Sources
-        buildPhase: sources
       - path: Resources/Assets.xcassets
         buildPhase: resources
       - path: Resources/shell
@@ -95,9 +129,9 @@ targets:
         OTHER_LDFLAGS: "$(inherited) -framework Carbon -framework Metal -framework MetalKit"
       configs:
         Debug:
-          OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
+          OTHER_SWIFT_FLAGS: "$(inherited)"
         Release:
-          OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
+          OTHER_SWIFT_FLAGS: "$(inherited)"
           SKIP_INSTALL: NO
           INSTALL_PATH: /Applications
         Free:
@@ -115,6 +149,8 @@ targets:
         product: Highlightr
       - package: swift-collections
         product: DequeModule
+      - package: TermuraRemoteKit
+        product: TermuraRemoteProtocol
 
   TermuraTests:
     type: bundle.unit-test

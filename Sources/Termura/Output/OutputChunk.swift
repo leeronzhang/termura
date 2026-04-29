@@ -29,6 +29,11 @@ struct OutputChunk: Identifiable, Sendable {
     let modelContent: String
     /// Structured data for UI rendering — the UI side of dual-track.
     let uiContent: UIContentBlock
+    /// Free-form metadata captured from `OSC 133;X;key=value` sequences.
+    /// Used by `PTYCommandBridge` (remote control) to tag commands with a
+    /// `remoteCmdId` so snapshots can be routed back to the originating
+    /// remote client. Empty for local-only commands.
+    let metadata: [String: String]
 
     init(
         id: UUID = UUID(),
@@ -41,7 +46,8 @@ struct OutputChunk: Identifiable, Sendable {
         finishedAt: Date?,
         isCollapsed: Bool = false,
         contentType: OutputContentType = .commandOutput,
-        uiContent: UIContentBlock? = nil
+        uiContent: UIContentBlock? = nil,
+        metadata: [String: String] = [:]
     ) {
         self.id = id
         self.sessionID = sessionID
@@ -60,5 +66,6 @@ struct OutputChunk: Identifiable, Sendable {
             exitCode: exitCode,
             displayLines: outputLines
         )
+        self.metadata = metadata
     }
 }

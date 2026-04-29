@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Bindable var fontSettings: FontSettings
     let themeImportService: any ThemeImportServiceProtocol
     let shellHookInstaller: any ShellHookInstallerProtocol
+    let remoteControlController: RemoteControlController
 
     var body: some View {
         TabView {
@@ -23,6 +24,9 @@ struct SettingsView: View {
 
             ShellIntegrationSettingsView(installer: shellHookInstaller)
                 .tabItem { Label("Shell", systemImage: "terminal") }
+
+            RemoteControlSettingsView(controller: remoteControlController)
+                .tabItem { Label("Remote", systemImage: "iphone.gen3") }
         }
         .frame(minWidth: 520, minHeight: 360)
     }
@@ -216,7 +220,8 @@ struct ShellIntegrationSettingsView: View {
         themeManager: ThemeManager(),
         fontSettings: FontSettings(),
         themeImportService: DebugThemeImportService(),
-        shellHookInstaller: DebugShellHookInstaller()
+        shellHookInstaller: DebugShellHookInstaller(),
+        remoteControlController: RemoteControlController(integration: NullRemoteIntegration())
     )
 }
 #endif

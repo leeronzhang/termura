@@ -38,7 +38,8 @@ actor ChunkDetector {
         state.apply(event, now: clock.now())
 
         if case let .executionFinished(exitCode) = event {
-            return buildChunk(from: previousPhase, exitCode: exitCode)
+            let metadata = state.consumePendingMetadata()
+            return buildChunk(from: previousPhase, exitCode: exitCode, metadata: metadata)
         }
         return nil
     }
@@ -67,7 +68,11 @@ actor ChunkDetector {
         }
     }
 
-    private func buildChunk(from phase: ShellIntegrationPhase, exitCode: Int?) -> OutputChunk? {
+    private func buildChunk(
+        from phase: ShellIntegrationPhase,
+        exitCode: Int?,
+        metadata: [String: String]
+    ) -> OutputChunk? {
         let command: String
         let startedAt: Date
 
@@ -85,13 +90,14 @@ actor ChunkDetector {
             pendingOutput = ""
             pendingRawANSI = ""
             guard !capturedOutput.isEmpty else { return nil }
-            return makeChunk(
+            return makeChunk(ChunkInput(
                 command: "",
                 output: capturedOutput,
                 raw: capturedRaw,
                 startedAt: clock.now(),
-                exitCode: exitCode
-            )
+                exitCode: exitCode,
+                metadata: metadata
+            ))
         }
 
         let capturedOutput = pendingOutput
@@ -99,39 +105,44 @@ actor ChunkDetector {
         pendingOutput = ""
         pendingRawANSI = ""
 
-        return makeChunk(
+        return makeChunk(ChunkInput(
             command: command,
             output: capturedOutput,
             raw: capturedRaw,
             startedAt: startedAt,
-            exitCode: exitCode
-        )
+            exitCode: exitCode,
+            metadata: metadata
+        ))
     }
 
-    private func makeChunk(
-        command: String,
-        output: String,
-        raw: String,
-        startedAt: Date,
-        exitCode: Int?
-    ) -> OutputChunk {
-        let lines = output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        let classification = SemanticParser.classify(lines, command: command)
+    private struct ChunkInput {
+        let command: String
+        let output: String
+        let raw: String
+        let startedAt: Date
+        let exitCode: Int?
+        let metadata: [String: String]
+    }
+
+    private func makeChunk(_ input: ChunkInput) -> OutputChunk {
+        let lines = input.output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let classification = SemanticParser.classify(lines, command: input.command)
         let uiBlock = SemanticParser.buildUIContent(
             from: classification,
             displayLines: lines,
-            exitCode: exitCode
+            exitCode: input.exitCode
         )
         return OutputChunk(
             sessionID: sessionID,
-            commandText: command,
+            commandText: input.command,
             outputLines: lines,
-            rawANSI: raw,
-            exitCode: exitCode,
-            startedAt: startedAt,
+            rawANSI: input.raw,
+            exitCode: input.exitCode,
+            startedAt: input.startedAt,
             finishedAt: clock.now(),
             contentType: classification.type,
-            uiContent: uiBlock
+            uiContent: uiBlock,
+            metadata: input.metadata
         )
     }
 }

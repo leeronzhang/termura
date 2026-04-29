@@ -21,4 +21,13 @@ struct AppServices {
     let shellHookInstaller: any ShellHookInstallerProtocol
     /// Shared WKWebView pool for note rendering. Preheated at app launch.
     let webViewPool: any WebViewPoolProtocol
+    /// Bridges the iOS remote-control feature to the active project's session store.
+    /// Always present; falls back to `NullRemoteSessionsAdapter` when unused.
+    let remoteSessionsAdapter: any RemoteSessionsAdapter
+    /// Remote-control server. `NullRemoteIntegration` in Free build; real implementation
+    /// from termura-harness when `HARNESS_ENABLED`. Lifecycle controlled via Settings UI.
+    let remoteIntegration: any RemoteIntegration
+    /// SwiftUI-bindable wrapper over `remoteIntegration`. Owned at the app
+    /// scope so the Settings window can re-open without losing state.
+    let remoteControlController: RemoteControlController
 }
