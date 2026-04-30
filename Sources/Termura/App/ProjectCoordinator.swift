@@ -3,7 +3,9 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.termura.app", category: "ProjectCoordinator")
 
-/// Manages project window lifecycle: open, close, focus tracking, and termination handoff.
+/// Manages project window lifecycle: open, hide/restore (shoebox close), focus tracking,
+/// and termination handoff. Window-close is treated as hide so PTY sessions survive
+/// across reopens; real teardown only happens on app termination.
 /// Extracted from AppDelegate to keep the composition root free of business logic.
 @MainActor
 final class ProjectCoordinator {
@@ -27,7 +29,8 @@ final class ProjectCoordinator {
 
     private var deps: Dependencies?
     private var windowObserver: NSObjectProtocol?
-    /// Tracks the chunk-handler token per open project so it can be removed on close.
+    /// Tracks the chunk-handler token per open project so tearDown can unregister
+    /// it during app termination. Lives for the project's full session lifetime.
     private var chunkHandlerTokens: [URL: UUID] = [:]
     /// Single-flight guard: URLs currently being opened. Prevents concurrent
     /// openProject calls from creating duplicate contexts during the async window.
@@ -63,7 +66,7 @@ final class ProjectCoordinator {
             return
         }
         if let existing = projectWindows[url] {
-            existing.window?.makeKeyAndOrderFront(nil)
+            existing.restore()
             return
         }
         openingInFlight.insert(url)
@@ -76,7 +79,7 @@ final class ProjectCoordinator {
         guard let deps else { return }
         // Re-check inside task — a concurrent open for the same URL may have completed.
         if let existing = projectWindows[url] {
-            existing.window?.makeKeyAndOrderFront(nil)
+            existing.restore()
             return
         }
         do {
@@ -96,7 +99,6 @@ final class ProjectCoordinator {
             )
             projectWindows[url] = controller
             activeContext = context
-            controller.onWindowClose = { [weak self] in self?.closeProject(at: url) }
             installLinkRouter(for: context, projectURL: url)
             // Fire the launch-time callback exactly once after the first window opens.
             if projectWindows.count == 1 {
@@ -126,25 +128,24 @@ final class ProjectCoordinator {
         }
     }
 
-    func closeProject(at url: URL) {
-        if let token = chunkHandlerTokens.removeValue(forKey: url) {
-            projectWindows[url]?.projectContext.commandRouter.removeChunkHandler(token: token)
+    /// Bring back every project window the user has hidden via the traffic-light close.
+    /// Called from `applicationShouldHandleReopen` when no visible windows remain.
+    /// Returns `true` if at least one hidden window was restored.
+    @discardableResult
+    func restoreHiddenWindows() -> Bool {
+        let hidden = projectWindows.values.filter(\.isHiddenByUser)
+        guard !hidden.isEmpty else { return false }
+        // Restore non-active first so the most-recently-active window ends up key.
+        let lastActiveURL = activeContext?.projectURL
+        let nonActive = hidden.filter { $0.projectContext.projectURL != lastActiveURL }
+        let active = hidden.filter { $0.projectContext.projectURL == lastActiveURL }
+        for controller in nonActive {
+            controller.restore()
         }
-        guard let controller = projectWindows.removeValue(forKey: url) else { return }
-        let context = controller.projectContext
-        if activeContext?.projectURL == url {
-            activeContext = projectWindows.values.first?.projectContext
+        for controller in active {
+            controller.restore()
         }
-        persistOpenProjects()
-        controller.close()
-        // Flush pending debounced writes (session rename, notes autosave, etc.)
-        // before tearing down resources. The window is already closed; this Task
-        // keeps the context alive until DB writes land.
-        Task { @MainActor [context] in
-            await context.flushPendingWrites()
-            await context.close()
-            logger.info("Closed project: \(url.path)")
-        }
+        return true
     }
 
     func showProjectPicker() {

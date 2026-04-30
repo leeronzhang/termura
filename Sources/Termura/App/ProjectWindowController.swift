@@ -97,28 +97,37 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    // MARK: - Close callback
+    // MARK: - Hide / restore (shoebox semantics)
 
-    /// Called by ProjectCoordinator so it can remove this window from its registry when
-    /// the user closes it via the traffic light. Must be set before the window becomes visible.
-    var onWindowClose: (() -> Void)?
+    /// True when the user has dismissed the window via the traffic-light close button.
+    /// The underlying ProjectContext (PTYs, sessions, DB) stays alive until app termination.
+    private(set) var isHiddenByUser: Bool = false
+
+    /// User-initiated hide: window leaves the screen but the controller, context,
+    /// and PTY engines remain in memory so sessions survive across reopens.
+    func hideForUser() {
+        isHiddenByUser = true
+        window?.isExcludedFromWindowsMenu = true
+        window?.orderOut(nil)
+    }
+
+    /// Bring the window back on screen. Idempotent for already-visible windows.
+    func restore() {
+        isHiddenByUser = false
+        window?.isExcludedFromWindowsMenu = false
+        window?.makeKeyAndOrderFront(nil)
+    }
 
     // MARK: - NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // When triggered by the traffic light close button (mouse click),
-        // allow the window to close normally. When triggered by Cmd+W
-        // (keyboard shortcut via performClose), TabAwareWindow routes it
-        // to tab closure instead, and this delegate method is never reached.
-        true
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        // Nil out before calling to prevent re-entrancy: closeProject(at:) calls
-        // controller.close() which could otherwise trigger this a second time.
-        let callback = onWindowClose
-        onWindowClose = nil
-        callback?()
+        // Shoebox semantics: traffic-light close (mouse) hides the window so PTY
+        // sessions survive while the app keeps running. Cmd+W is intercepted by
+        // TabAwareWindow.performClose and routed to tab closure before reaching here.
+        // Programmatic teardown (NSApp.terminate, controller.close()) bypasses this
+        // delegate entirely, so app-quit still releases everything cleanly.
+        hideForUser()
+        return false
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {

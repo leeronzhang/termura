@@ -199,8 +199,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            // Restore last project or show picker if no windows are visible
-            projectCoordinator.restoreLastProjectOrShowPicker()
+            // Shoebox semantics: prefer un-hiding existing project windows so PTY
+            // sessions stay attached. Only fall back to launcher (recents/picker)
+            // when no hidden window is alive in memory.
+            if !projectCoordinator.restoreHiddenWindows() {
+                projectCoordinator.restoreLastProjectOrShowPicker()
+            }
         }
         return true
     }
