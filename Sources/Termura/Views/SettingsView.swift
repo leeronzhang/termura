@@ -221,7 +221,11 @@ struct ShellIntegrationSettingsView: View {
         fontSettings: FontSettings(),
         themeImportService: DebugThemeImportService(),
         shellHookInstaller: DebugShellHookInstaller(),
-        remoteControlController: RemoteControlController(integration: NullRemoteIntegration())
+        remoteControlController: RemoteControlController(
+            integration: NullRemoteIntegration(),
+            agentBridge: NullRemoteAgentBridgeLifecycle(),
+            userDefaults: UserDefaults.standard
+        )
     )
 }
 #endif

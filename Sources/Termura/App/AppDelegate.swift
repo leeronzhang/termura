@@ -63,7 +63,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             webViewPool: WebViewPool(),
             remoteSessionsAdapter: remoteAdapter,
             remoteIntegration: remoteIntegration,
-            remoteControlController: RemoteControlController(integration: remoteIntegration),
+            remoteControlController: RemoteControlController(
+                integration: remoteIntegration,
+                agentBridge: remoteAgentBridge,
+                userDefaults: UserDefaults.standard
+            ),
             remoteAgentBridge: remoteAgentBridge
         )
         projectCoordinator = coordinator

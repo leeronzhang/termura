@@ -8,6 +8,12 @@
 // LaunchAgent plist via `LaunchAgentInstaller`, and disabling removes it,
 // so `~/Library/LaunchAgents/com.termura.remote-agent.plist` matches the
 // in-app state on every transition.
+//
+// PR9 Step 0: dependency-surface migration. The init now requires the
+// agent bridge lifecycle handle and a `UserDefaultsStoring` so future
+// PR9 steps can persist the on/off choice and tear the bridge down on
+// disable. Step 0 only widens the surface — semantics of `enable` /
+// `disable` / `generateInvitation` / `revokeDevice` are unchanged.
 
 import Foundation
 import OSLog
@@ -18,28 +24,52 @@ private let logger = Logger(subsystem: "com.termura.app", category: "RemoteContr
 @Observable
 @MainActor
 final class RemoteControlController {
-    private(set) var isEnabled = false
-    private(set) var isWorking = false
-    private(set) var latestInvitationJSON: String?
-    private(set) var lastError: String?
-    private(set) var pairedDevices: [PairedDeviceSummary] = []
-    private(set) var auditEntries: [RemoteAuditEntry] = []
+    // Read-only from the SwiftUI layer by convention; the actions
+    // extension writes them as part of the disable / revokeAll /
+    // resetPairings orchestration. Default `internal(set)` so the
+    // cross-file extension can mutate them.
+    var isEnabled = false
+    var isWorking = false
+    var latestInvitationJSON: String?
+    var lastError: String?
+    var pairedDevices: [PairedDeviceSummary] = []
+    var auditEntries: [RemoteAuditEntry] = []
 
-    private let integration: any RemoteIntegration
-    private let codec: any RemoteCodec
-    private let installer: LaunchAgentInstaller
-    private let plistConfig: LaunchAgentInstaller.PlistConfig
+    let integration: any RemoteIntegration
+    let agentBridge: any RemoteAgentBridgeLifecycle
+    let userDefaults: any UserDefaultsStoring
+    let codec: any RemoteCodec
+    let installer: LaunchAgentInstaller
+    let plistConfig: LaunchAgentInstaller.PlistConfig
+    let clock: any AppClock
+    let agentDeathProbe: any AgentDeathProbing
+    let fallbackCleaner: any AgentKeychainFallbackCleaning
 
     init(
         integration: any RemoteIntegration,
+        agentBridge: any RemoteAgentBridgeLifecycle,
+        userDefaults: any UserDefaultsStoring,
         installer: LaunchAgentInstaller = LaunchAgentInstaller(),
         plistConfig: LaunchAgentInstaller.PlistConfig = .defaultRemoteAgent,
-        codec: any RemoteCodec = JSONRemoteCodec()
+        codec: any RemoteCodec = JSONRemoteCodec(),
+        clock: any AppClock = LiveClock(),
+        agentDeathProbe: any AgentDeathProbing = AgentDeathProbe(),
+        fallbackCleaner: any AgentKeychainFallbackCleaning = AgentKeychainFallbackCleaner()
     ) {
         self.integration = integration
+        self.agentBridge = agentBridge
+        self.userDefaults = userDefaults
         self.installer = installer
         self.plistConfig = plistConfig
         self.codec = codec
+        self.clock = clock
+        self.agentDeathProbe = agentDeathProbe
+        self.fallbackCleaner = fallbackCleaner
+        // Restore the user's last explicit on/off choice across relaunches.
+        // Lazy: do NOT eagerly call `integration.start()` here — the actual
+        // transport assembly stays deferred to the first explicit `enable`,
+        // matching PR8 behaviour.
+        isEnabled = userDefaults.bool(forKey: AppConfig.UserDefaultsKeys.remoteControlEnabled)
     }
 
     func enable() async {
@@ -55,7 +85,7 @@ final class RemoteControlController {
         }
         do {
             try await installer.install(plistConfig)
-            isEnabled = true
+            setEnabledFlag(true)
             lastError = nil
             logger.info("Remote control enabled and LaunchAgent installed")
         } catch {
@@ -65,23 +95,13 @@ final class RemoteControlController {
         }
     }
 
-    func disable() async {
-        guard !isWorking else { return }
-        isWorking = true
-        defer { isWorking = false }
-        await integration.stop()
-        do {
-            try await installer.uninstall(label: plistConfig.label)
-        } catch {
-            // Server is already stopped; surface the plist removal failure
-            // but don't gate the disabled state on it (next enable will
-            // reinstall via the idempotent path).
-            lastError = "Server stopped but plist removal failed: \(error.localizedDescription)"
-            logger.error("Plist removal failed: \(error.localizedDescription)")
-        }
-        isEnabled = false
-        latestInvitationJSON = nil
-        logger.info("Remote control disabled")
+    /// Persists the on/off choice to `UserDefaults` and updates the
+    /// observable in-memory mirror in lock-step. Idempotent. Used by
+    /// `enable` (here) and the `disable` / `resetPairings` actions
+    /// extension so a relaunch reflects the user's last explicit toggle.
+    func setEnabledFlag(_ value: Bool) {
+        isEnabled = value
+        userDefaults.set(value, forKey: AppConfig.UserDefaultsKeys.remoteControlEnabled)
     }
 
     func generateInvitation() async {
@@ -120,21 +140,6 @@ final class RemoteControlController {
             logger.error("Failed to load audit log: \(error.localizedDescription)")
         }
     }
-
-    /// Marks the device as revoked. Subsequent envelopes from that device id
-    /// are rejected by the router. Refreshes the local list on success.
-    func revokeDevice(id: UUID) async {
-        guard !isWorking else { return }
-        isWorking = true
-        defer { isWorking = false }
-        do {
-            try await integration.revokePairedDevice(id: id)
-            await refreshDevicesAndAudit()
-        } catch {
-            lastError = "Revoke failed: \(error.localizedDescription)"
-            logger.error("Revoke failed: \(error.localizedDescription)")
-        }
-    }
 }
 
 extension LaunchAgentInstaller.PlistConfig {
@@ -142,9 +147,16 @@ extension LaunchAgentInstaller.PlistConfig {
     /// executable path resolves to the helper bundled with Termura.app once
     /// PR10c wires the build phase; for now it points at a placeholder that
     /// is overridable via init for tests and dev installs.
+    ///
+    /// PR9 — `machServices` advertises the agent's bootstrap mach name to
+    /// launchd. Without this, `NSXPCConnection(machServiceName:)` from the
+    /// main app side returns "service not found" because launchd never
+    /// registered the name; both the auto-connector and the resetPairings
+    /// flow's β-probe depend on this entry to ever reach the agent.
     static let defaultRemoteAgent = LaunchAgentInstaller.PlistConfig(
         label: "com.termura.remote-agent",
         executablePath: "/Applications/Termura.app/Contents/Helpers/termura-remote-agent",
-        runAtLoad: true
+        runAtLoad: true,
+        machServices: ["com.termura.remote-agent"]
     )
 }

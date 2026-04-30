@@ -17,6 +17,11 @@ extension AppConfig {
         /// Sentinel written after the one-time global-to-per-project DB migration completes.
         static let projectMigrationCompleted = "projectMigrationCompleted"
 
+        /// Persisted state of the remote-control toggle (Settings → Remote).
+        /// Read at controller init so a relaunch surfaces the user's last
+        /// explicit on/off choice; written by `disable()` / re-`enable()`.
+        static let remoteControlEnabled = "remoteControlEnabled"
+
         // MARK: - Per-project dynamic keys
 
         /// Persisted content-tab strip state for a given project root.
