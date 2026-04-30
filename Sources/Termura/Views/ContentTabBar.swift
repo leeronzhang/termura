@@ -70,14 +70,20 @@ struct ContentTabBar: View {
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
-        // alignment: .leading so the icon's left edge sits exactly at the padding origin,
-        // matching the leading edge of projectPathBar content (xxl = 20pt).
-        // The extra frame width beyond the icon provides hit-area padding to the right.
-        // Vertically center with traffic-light buttons: icon top at trafficLightTopInset (17pt),
-        // icon center at ~24pt = traffic-light center (topInset + buttonHeight/2).
-        .frame(width: AppUI.Spacing.xxxxl, alignment: .leading)
+        // Horizontal: alignment .leading anchors the icon's left edge at the padding origin
+        // (matching projectPathBar leading content); the extra frame width is right-side hit area.
+        // Vertical:
+        //   - Non-fullscreen: top padding = trafficLightTopInset places the icon next to the
+        //     traffic-light buttons (the visible reference in this mode).
+        //   - Fullscreen: no traffic lights — give the button the full contentTabBarHeight so
+        //     it vertically centers with the tab labels (which occupy the same height).
+        .frame(
+            width: AppUI.Spacing.xxxxl,
+            height: isFullScreen ? AppConfig.UI.contentTabBarHeight : nil,
+            alignment: .leading
+        )
         .padding(.leading, isFullScreen ? AppUI.Spacing.xxl : AppConfig.UI.trafficLightSafeLeading)
-        .padding(.top, isFullScreen ? AppUI.Spacing.smMd : AppConfig.UI.trafficLightTopInset)
+        .padding(.top, isFullScreen ? 0 : AppConfig.UI.trafficLightTopInset)
         .help("Show Sidebar (Cmd+B)")
         .accessibilityLabel(sidebarRevealAccessibilityLabel)
     }
