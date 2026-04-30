@@ -160,7 +160,7 @@ extension RemoteControlController {
             await inlineDisableForReset()
         }
         do {
-            try await installer.install(plistConfig)
+            try await installer.install(runtimePlistConfig())
         } catch {
             lastError = "Reset failed before agent reset: plist install error: \(error.localizedDescription)"
             logger.error("resetPairings step 3 install failed: \(error.localizedDescription)")
@@ -235,7 +235,7 @@ extension RemoteControlController {
             return
         }
         let probeResult = await agentDeathProbe.confirmUnreachable(
-            machServiceName: plistConfig.label
+            machServiceName: agentMetadata.label
         )
         switch probeResult {
         case .confirmedDead:
@@ -261,7 +261,7 @@ extension RemoteControlController {
     /// composition without making this a hard-failure step.
     private func uninstallAgentArtifacts() async -> String? {
         do {
-            try await installer.uninstall(label: plistConfig.label)
+            try await installer.uninstall(label: agentMetadata.label)
             return nil
         } catch {
             logger.warning("plist uninstall failed: \(error.localizedDescription)")

@@ -16,6 +16,7 @@ final class RemoteControlControllerDisableTests: XCTestCase {
     private var defaults: UserDefaults!
     private var defaultsSuiteName: String!
     private var recorder: OrderingRecorder!
+    private var helperResolver: StubHelperPathResolver!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -26,6 +27,10 @@ final class RemoteControlControllerDisableTests: XCTestCase {
         executor = OrderedLaunchControl(recorder: recorder)
         defaultsSuiteName = "termura-disable-tests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: defaultsSuiteName)
+        helperResolver = try StubHelperPathResolver.makeBundledHelper(
+            in: tempDir,
+            name: "termura-remote-agent"
+        )
     }
 
     override func tearDown() async throws {
@@ -47,7 +52,8 @@ final class RemoteControlControllerDisableTests: XCTestCase {
             integration: integration,
             agentBridge: bridge,
             userDefaults: defaults,
-            installer: installer
+            installer: installer,
+            helperResolver: helperResolver
         )
     }
 
@@ -58,8 +64,14 @@ final class RemoteControlControllerDisableTests: XCTestCase {
         let bridge = OrderedAgentBridge(recorder: recorder)
         let controller = makeController(integration: integration, bridge: bridge)
         // Pre-load the plist so uninstall has something to bootout.
-        try? await LaunchAgentInstaller(baseDirectory: tempDir, executor: executor)
-            .install(.defaultRemoteAgent)
+        let metadata = RemoteAgentMetadata.default
+        let preload = LaunchAgentInstaller.PlistConfig(
+            label: metadata.label,
+            executablePath: helperResolver.helperExecutableURL().path,
+            runAtLoad: metadata.runAtLoad,
+            machServices: metadata.machServices
+        )
+        try? await LaunchAgentInstaller(baseDirectory: tempDir, executor: executor).install(preload)
         await recorder.reset()
 
         await controller.disable()
@@ -140,7 +152,8 @@ final class RemoteControlControllerDisableTests: XCTestCase {
             integration: SilentIntegration(),
             agentBridge: SilentAgentBridge(),
             userDefaults: defaults,
-            installer: installer
+            installer: installer,
+            helperResolver: helperResolver
         )
         XCTAssertTrue(controller.isEnabled)
 

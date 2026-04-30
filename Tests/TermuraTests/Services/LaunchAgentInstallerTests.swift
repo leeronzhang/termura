@@ -33,19 +33,28 @@ final class LaunchAgentInstallerTests: XCTestCase {
         XCTAssertEqual(args, ["/usr/local/bin/termura-remote-agent"])
     }
 
-    func test_defaultRemoteAgent_includesMachServicesEntry() throws {
+    func test_defaultAgentMetadata_rendersMachServicesEntry() throws {
         // PR9 Step 5.1 — without this entry launchd doesn't register
         // the mach service name, so `NSXPCConnection(machServiceName:)`
         // from the main app would always invalidate. Both the auto-
         // connector and the resetPairings β-probe depend on the entry.
-        let data = try LaunchAgentInstaller.renderPlistData(
-            config: .defaultRemoteAgent
+        // PR10 Step 2 — the static config carrier moved from a
+        // PlistConfig with placeholder path into `RemoteAgentMetadata`;
+        // the executable path now comes from `RemoteHelperPathResolving`
+        // at runtime so this test feeds metadata + an arbitrary path.
+        let metadata = RemoteAgentMetadata.default
+        let config = LaunchAgentInstaller.PlistConfig(
+            label: metadata.label,
+            executablePath: "/tmp/does-not-have-to-exist",
+            runAtLoad: metadata.runAtLoad,
+            machServices: metadata.machServices
         )
+        let data = try LaunchAgentInstaller.renderPlistData(config: config)
         let parsed = try PropertyListSerialization.propertyList(from: data, format: nil)
         let dict = try XCTUnwrap(parsed as? [String: Any])
         let machServices = try XCTUnwrap(
             dict["MachServices"] as? [String: Bool],
-            "defaultRemoteAgent must declare a MachServices dictionary"
+            "RemoteAgentMetadata.default must declare a MachServices dictionary"
         )
         XCTAssertEqual(
             machServices,

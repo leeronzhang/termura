@@ -14,6 +14,17 @@
 // PR9 steps can persist the on/off choice and tear the bridge down on
 // disable. Step 0 only widens the surface — semantics of `enable` /
 // `disable` / `generateInvitation` / `revokeDevice` are unchanged.
+//
+// PR10 Step 2: helper path is no longer a static constant. The
+// controller now combines `RemoteAgentMetadata` (label / mach
+// services / runAtLoad) with `RemoteHelperPathResolving` to construct
+// a runtime `PlistConfig` whose `executablePath` reflects the actually
+// running `Termura.app` location. `enable()` validates the helper
+// (file exists + executable bit) before bootstrapping launchd; if the
+// validation fails, the integration is stopped and the toggle stays
+// disabled. The `resetPairings` install step uses the same runtime
+// config but skips the validation gate to preserve PR9's "best-effort
+// teardown" semantics.
 
 import Foundation
 import OSLog
@@ -40,7 +51,8 @@ final class RemoteControlController {
     let userDefaults: any UserDefaultsStoring
     let codec: any RemoteCodec
     let installer: LaunchAgentInstaller
-    let plistConfig: LaunchAgentInstaller.PlistConfig
+    let agentMetadata: RemoteAgentMetadata
+    let helperResolver: any RemoteHelperPathResolving
     let clock: any AppClock
     let agentDeathProbe: any AgentDeathProbing
     let fallbackCleaner: any AgentKeychainFallbackCleaning
@@ -50,7 +62,8 @@ final class RemoteControlController {
         agentBridge: any RemoteAgentBridgeLifecycle,
         userDefaults: any UserDefaultsStoring,
         installer: LaunchAgentInstaller = LaunchAgentInstaller(),
-        plistConfig: LaunchAgentInstaller.PlistConfig = .defaultRemoteAgent,
+        agentMetadata: RemoteAgentMetadata = .default,
+        helperResolver: any RemoteHelperPathResolving = LiveRemoteHelperPathResolver(),
         codec: any RemoteCodec = JSONRemoteCodec(),
         clock: any AppClock = LiveClock(),
         agentDeathProbe: any AgentDeathProbing = AgentDeathProbe(),
@@ -60,7 +73,8 @@ final class RemoteControlController {
         self.agentBridge = agentBridge
         self.userDefaults = userDefaults
         self.installer = installer
-        self.plistConfig = plistConfig
+        self.agentMetadata = agentMetadata
+        self.helperResolver = helperResolver
         self.codec = codec
         self.clock = clock
         self.agentDeathProbe = agentDeathProbe
@@ -84,7 +98,16 @@ final class RemoteControlController {
             return
         }
         do {
-            try await installer.install(plistConfig)
+            try validateHelperBundled()
+        } catch {
+            let message = describe(helperError: error)
+            lastError = message
+            logger.error("Helper validation failed; rolling back integration: \(message)")
+            await integration.stop()
+            return
+        }
+        do {
+            try await installer.install(runtimePlistConfig())
             setEnabledFlag(true)
             lastError = nil
             logger.info("Remote control enabled and LaunchAgent installed")
@@ -92,6 +115,43 @@ final class RemoteControlController {
             lastError = "Server started but plist install failed: \(error.localizedDescription)"
             logger.error("Plist install failed; rolling back: \(error.localizedDescription)")
             await integration.stop()
+        }
+    }
+
+    /// Builds a `PlistConfig` from the static `RemoteAgentMetadata` and
+    /// the resolver's current helper path. Both `enable()` and the
+    /// `resetPairings` install step (PR9) consume this; `enable()` gates
+    /// it behind `validateHelperBundled()`, while `resetPairings` does
+    /// not so the best-effort teardown remains unchanged.
+    func runtimePlistConfig() -> LaunchAgentInstaller.PlistConfig {
+        LaunchAgentInstaller.PlistConfig(
+            label: agentMetadata.label,
+            executablePath: helperResolver.helperExecutableURL().path,
+            runAtLoad: agentMetadata.runAtLoad,
+            machServices: agentMetadata.machServices
+        )
+    }
+
+    /// Fails closed when the resolver-derived helper binary is missing
+    /// or non-executable. Called by `enable()` only — `resetPairings`
+    /// must keep working in degraded states (PR9 §12.6.1 invariant).
+    private func validateHelperBundled() throws(RemoteHelperError) {
+        let path = helperResolver.helperExecutableURL().path
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: path) else {
+            throw .helperNotBundled(path: path)
+        }
+        guard fileManager.isExecutableFile(atPath: path) else {
+            throw .helperNotExecutable(path: path)
+        }
+    }
+
+    private func describe(helperError: RemoteHelperError) -> String {
+        switch helperError {
+        case let .helperNotBundled(path):
+            "Remote helper not bundled at \(path)."
+        case let .helperNotExecutable(path):
+            "Remote helper at \(path) is not executable."
         }
     }
 
@@ -140,23 +200,4 @@ final class RemoteControlController {
             logger.error("Failed to load audit log: \(error.localizedDescription)")
         }
     }
-}
-
-extension LaunchAgentInstaller.PlistConfig {
-    /// Default config for the `com.termura.remote-agent` LaunchAgent. The
-    /// executable path resolves to the helper bundled with Termura.app once
-    /// PR10c wires the build phase; for now it points at a placeholder that
-    /// is overridable via init for tests and dev installs.
-    ///
-    /// PR9 — `machServices` advertises the agent's bootstrap mach name to
-    /// launchd. Without this, `NSXPCConnection(machServiceName:)` from the
-    /// main app side returns "service not found" because launchd never
-    /// registered the name; both the auto-connector and the resetPairings
-    /// flow's β-probe depend on this entry to ever reach the agent.
-    static let defaultRemoteAgent = LaunchAgentInstaller.PlistConfig(
-        label: "com.termura.remote-agent",
-        executablePath: "/Applications/Termura.app/Contents/Helpers/termura-remote-agent",
-        runAtLoad: true,
-        machServices: ["com.termura.remote-agent"]
-    )
 }

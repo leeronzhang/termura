@@ -14,6 +14,7 @@ final class RemoteControlControllerResetTests: XCTestCase {
     private var defaultsSuiteName: String!
     private var executor: ResetRecordingExecutor!
     private var recorder: ResetOrderingRecorder!
+    private var helperResolver: StubHelperPathResolver!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -24,6 +25,10 @@ final class RemoteControlControllerResetTests: XCTestCase {
         executor = ResetRecordingExecutor(recorder: recorder)
         defaultsSuiteName = "termura-reset-tests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: defaultsSuiteName)
+        helperResolver = try StubHelperPathResolver.makeBundledHelper(
+            in: tempDir,
+            name: "termura-remote-agent"
+        )
     }
 
     override func tearDown() async throws {
@@ -52,6 +57,7 @@ final class RemoteControlControllerResetTests: XCTestCase {
             agentBridge: bridge,
             userDefaults: defaults,
             installer: installer,
+            helperResolver: helperResolver,
             agentDeathProbe: probe,
             fallbackCleaner: fallback
         )

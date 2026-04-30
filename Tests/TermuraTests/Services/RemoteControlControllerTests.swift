@@ -9,6 +9,7 @@ final class RemoteControlControllerTests: XCTestCase {
     private var executor: RecordingLaunchControl!
     private var defaults: UserDefaults!
     private var defaultsSuiteName: String!
+    private var helperResolver: StubHelperPathResolver!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -18,6 +19,10 @@ final class RemoteControlControllerTests: XCTestCase {
         executor = RecordingLaunchControl()
         defaultsSuiteName = "termura-controller-tests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: defaultsSuiteName)
+        helperResolver = try StubHelperPathResolver.makeBundledHelper(
+            in: tempDir,
+            name: "termura-remote-agent"
+        )
     }
 
     override func tearDown() async throws {
@@ -38,7 +43,8 @@ final class RemoteControlControllerTests: XCTestCase {
             integration: integration,
             agentBridge: bridge,
             userDefaults: defaults,
-            installer: installer
+            installer: installer,
+            helperResolver: helperResolver
         )
     }
 
@@ -119,7 +125,8 @@ final class RemoteControlControllerTests: XCTestCase {
             integration: stub,
             agentBridge: NullRemoteAgentBridgeLifecycle(),
             userDefaults: defaults,
-            installer: installer
+            installer: installer,
+            helperResolver: helperResolver
         )
 
         await controller.enable()
