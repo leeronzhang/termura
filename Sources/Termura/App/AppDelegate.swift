@@ -156,8 +156,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // + auto-connector and demand-launches the LaunchAgent. Skip
         // when an env flag is set so unit tests / UI tests can opt
         // out of CloudKit / Keychain side-effects during launch.
+        //
+        // PR10 Step 3 — also fire `reinstallIfNeeded()` so a relaunch
+        // after an app update / relocate silently re-aligns the on-disk
+        // plist with the current `Termura.app` bundle. Same env gate as
+        // the bridge start so tests opt out together; intentionally
+        // detached since we don't want this to block applicationDidFinishLaunching.
         if env["TERMURA_DISABLE_REMOTE_AGENT_BRIDGE"] == nil {
             Self.startRemoteAgentBridge(services.remoteAgentBridge)
+            Self.scheduleReinstallIfNeeded(controller: services.remoteControlController)
         }
 
         let launchElapsed = ContinuousClock.now - launchStart

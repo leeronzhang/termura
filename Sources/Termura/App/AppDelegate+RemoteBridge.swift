@@ -25,6 +25,19 @@ extension AppDelegate {
         Task { await bridge.stop() }
     }
 
+    /// PR10 Step 3 — schedules `reinstallIfNeeded()` from
+    /// `applicationDidFinishLaunching`. The controller's contract is
+    /// to no-op when `isEnabled == false`, so the call is safe to
+    /// fire unconditionally; we still gate on the same env flag as
+    /// the bridge start so test/UI-test runs opt out together. Best-
+    /// effort: a failure here surfaces in the controller's
+    /// `lastError` for the next time the user opens Settings, but it
+    /// must not block app launch.
+    @MainActor
+    static func scheduleReinstallIfNeeded(controller: RemoteControlController) {
+        Task { await controller.reinstallIfNeeded() }
+    }
+
     @MainActor
     static func gatherActiveSessions(coordinator: ProjectCoordinator?) -> [RemoteSessionInfo] {
         guard let scope = coordinator?.activeContext?.sessionScope else { return [] }

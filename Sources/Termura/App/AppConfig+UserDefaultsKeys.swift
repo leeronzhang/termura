@@ -22,6 +22,13 @@ extension AppConfig {
         /// explicit on/off choice; written by `disable()` / re-`enable()`.
         static let remoteControlEnabled = "remoteControlEnabled"
 
+        /// JSON-encoded `RemoteHelperFingerprint` recorded after a
+        /// successful `installer.install(...)`. PR10 Step 3 reads this
+        /// at app launch and compares it against the file currently
+        /// living at the resolver-derived path; a mismatch (binary
+        /// upgrade, app relocate) triggers a silent re-install.
+        static let remoteHelperLastInstalledFingerprint = "remoteHelperLastInstalledFingerprint"
+
         // MARK: - Per-project dynamic keys
 
         /// Persisted content-tab strip state for a given project root.

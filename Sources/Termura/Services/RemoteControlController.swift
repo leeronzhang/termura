@@ -32,6 +32,17 @@ import TermuraRemoteProtocol
 
 private let logger = Logger(subsystem: "com.termura.app", category: "RemoteControlController")
 
+/// Why an entry was written to `lastError`. PR10 Step 3 fix —
+/// `reinstallIfNeeded` only auto-clears messages tagged
+/// `.helperHealth`; everything else is owned by other controller
+/// surfaces (integration / pairing / revoke / reset /
+/// generateInvitation) and must not be silently mutated by the
+/// re-alignment pass.
+enum RemoteControlErrorOrigin: Sendable, Equatable {
+    case helperHealth
+    case other
+}
+
 @Observable
 @MainActor
 final class RemoteControlController {
@@ -43,6 +54,15 @@ final class RemoteControlController {
     var isWorking = false
     var latestInvitationJSON: String?
     var lastError: String?
+    /// PR10 Step 3 fix — companion to `lastError`. `helperHealth` means
+    /// "this message came from a helper-bundling / install / reinstall
+    /// path"; `reinstallIfNeeded` clears stale messages tagged this way
+    /// when it observes the helper recovered. `other` means "anything
+    /// else" (integration / pairing / revoke / reset / generateInvitation)
+    /// and is never auto-cleared by reinstallIfNeeded. Always paired
+    /// with `lastError` via `setHelperError` / `setOtherError` /
+    /// `clearLastError` so the two fields cannot drift.
+    private(set) var lastErrorOrigin: RemoteControlErrorOrigin?
     var pairedDevices: [PairedDeviceSummary] = []
     var auditEntries: [RemoteAuditEntry] = []
 
@@ -93,7 +113,7 @@ final class RemoteControlController {
         do {
             try await integration.start()
         } catch {
-            lastError = error.localizedDescription
+            setOtherError(error.localizedDescription)
             logger.error("Failed to start remote integration: \(error.localizedDescription)")
             return
         }
@@ -101,18 +121,19 @@ final class RemoteControlController {
             try validateHelperBundled()
         } catch {
             let message = describe(helperError: error)
-            lastError = message
+            setHelperError(message)
             logger.error("Helper validation failed; rolling back integration: \(message)")
             await integration.stop()
             return
         }
         do {
             try await installer.install(runtimePlistConfig())
+            recordFingerprintAfterInstall()
             setEnabledFlag(true)
-            lastError = nil
+            clearLastError()
             logger.info("Remote control enabled and LaunchAgent installed")
         } catch {
-            lastError = "Server started but plist install failed: \(error.localizedDescription)"
+            setHelperError("Server started but plist install failed: \(error.localizedDescription)")
             logger.error("Plist install failed; rolling back: \(error.localizedDescription)")
             await integration.stop()
         }
@@ -164,6 +185,29 @@ final class RemoteControlController {
         userDefaults.set(value, forKey: AppConfig.UserDefaultsKeys.remoteControlEnabled)
     }
 
+    /// Records a helper-bundling / install / reinstall failure.
+    /// `reinstallIfNeeded` is allowed to silently clear messages
+    /// tagged this way once the helper recovers.
+    func setHelperError(_ message: String) {
+        lastError = message
+        lastErrorOrigin = .helperHealth
+    }
+
+    /// Records any error that is NOT a helper-bundling concern
+    /// (integration / pairing / revoke / reset / invitation).
+    /// `reinstallIfNeeded` will not auto-clear these.
+    func setOtherError(_ message: String) {
+        lastError = message
+        lastErrorOrigin = .other
+    }
+
+    /// Clears both the message and the origin tag together so the two
+    /// observable fields can never drift apart.
+    func clearLastError() {
+        lastError = nil
+        lastErrorOrigin = nil
+    }
+
     func generateInvitation() async {
         guard isEnabled, !isWorking else { return }
         isWorking = true
@@ -172,13 +216,13 @@ final class RemoteControlController {
             let invitation = try await integration.issueInvitation()
             let data = try codec.encode(invitation)
             guard let json = String(data: data, encoding: .utf8) else {
-                lastError = "Failed to render invitation"
+                setOtherError("Failed to render invitation")
                 return
             }
             latestInvitationJSON = json
-            lastError = nil
+            clearLastError()
         } catch {
-            lastError = error.localizedDescription
+            setOtherError(error.localizedDescription)
             logger.error("Failed to issue invitation: \(error.localizedDescription)")
         }
     }

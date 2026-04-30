@@ -40,9 +40,9 @@ extension RemoteControlController {
         do {
             try await integration.revokePairedDevice(id: id)
             await refreshDevicesAndAudit()
-            lastError = nil
+            clearLastError()
         } catch {
-            lastError = "Revoke failed: \(error.localizedDescription)"
+            setOtherError("Revoke failed: \(error.localizedDescription)")
             logger.error("Revoke failed: \(error.localizedDescription)")
         }
     }
@@ -75,14 +75,14 @@ extension RemoteControlController {
         do {
             _ = try await integration.revokeAllPairedDevices()
             await refreshDevicesAndAudit()
-            lastError = nil
+            clearLastError()
         } catch let RemoteAdapterError.partialRevokeAllFailed(failed) {
             let summary = failed.map { String($0.uuidString.prefix(8)) }.joined(separator: ", ")
-            lastError = "\(failed.count) device(s) could not be revoked: \(summary)"
+            setOtherError("\(failed.count) device(s) could not be revoked: \(summary)")
             logger.error("revokeAll partial failure: \(failed.count) failed")
             await refreshDevicesAndAudit()
         } catch {
-            lastError = "Revoke all failed: \(error.localizedDescription)"
+            setOtherError("Revoke all failed: \(error.localizedDescription)")
             logger.error("Revoke all failed: \(error.localizedDescription)")
         }
     }
@@ -109,9 +109,9 @@ extension RemoteControlController {
         setEnabledFlag(false)
         latestInvitationJSON = nil
         if let uninstallError {
-            lastError = "LaunchAgent plist removal failed: \(uninstallError)"
+            setOtherError("LaunchAgent plist removal failed: \(uninstallError)")
         } else {
-            lastError = nil
+            clearLastError()
         }
         logger.info("Remote control disabled")
     }
@@ -161,8 +161,11 @@ extension RemoteControlController {
         }
         do {
             try await installer.install(runtimePlistConfig())
+            recordFingerprintAfterInstall()
         } catch {
-            lastError = "Reset failed before agent reset: plist install error: \(error.localizedDescription)"
+            setOtherError(
+                "Reset failed before agent reset: plist install error: \(error.localizedDescription)"
+            )
             logger.error("resetPairings step 3 install failed: \(error.localizedDescription)")
             await refreshDevicesAndAudit()
             return
@@ -201,7 +204,7 @@ extension RemoteControlController {
     /// Does NOT trigger β probe / fallback B — step 5b never ran, so
     /// the agent's keychain state is intact and not our concern.
     private func abortAfterStep5aFailure(error: Error) async {
-        lastError = "Reset failed at pairing wipe: \(error.localizedDescription)"
+        setOtherError("Reset failed at pairing wipe: \(error.localizedDescription)")
         logger.error("resetPairings step 5a failed: \(error.localizedDescription)")
         await agentBridge.stop()
         _ = await uninstallAgentArtifacts()
@@ -231,7 +234,11 @@ extension RemoteControlController {
         uninstallError: String?
     ) async {
         guard step5bFailed else {
-            lastError = uninstallError.map { "Reset completed but plist removal failed: \($0)" }
+            if let uninstallError {
+                setOtherError("Reset completed but plist removal failed: \(uninstallError)")
+            } else {
+                clearLastError()
+            }
             return
         }
         let probeResult = await agentDeathProbe.confirmUnreachable(
@@ -240,11 +247,15 @@ extension RemoteControlController {
         switch probeResult {
         case .confirmedDead:
             await fallbackCleaner.cleanCursorAndQuarantine()
-            lastError = "Agent reset via fallback: agent unreachable but agent state cleared via keychain."
+            setOtherError(
+                "Agent reset via fallback: agent unreachable but agent state cleared via keychain."
+            )
         case .possiblyAlive:
-            lastError = "Reset partially completed: agent still reachable; agent state retained, retry reset."
+            setOtherError(
+                "Reset partially completed: agent still reachable; agent state retained, retry reset."
+            )
         case .indeterminate:
-            lastError = "Reset partially completed: agent death unconfirmed; agent state retained."
+            setOtherError("Reset partially completed: agent death unconfirmed; agent state retained.")
         }
     }
 
