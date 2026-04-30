@@ -105,6 +105,45 @@ final class LaunchAgentInstallerTests: XCTestCase {
         try await installer.uninstall(label: "com.termura.remote-agent")
         XCTAssertFalse(installer.isInstalled(label: "com.termura.remote-agent"))
     }
+
+    // MARK: - installedExecutablePath
+
+    func test_installedExecutablePath_missingPlist_returnsNil() {
+        let installer = LaunchAgentInstaller(baseDirectory: tempDir, executor: RecordingLaunchControl())
+        XCTAssertNil(installer.installedExecutablePath(label: "com.termura.remote-agent"))
+    }
+
+    func test_installedExecutablePath_returnsFirstProgramArgument() async throws {
+        let installer = LaunchAgentInstaller(baseDirectory: tempDir, executor: RecordingLaunchControl())
+        let config = LaunchAgentInstaller.PlistConfig(
+            label: "com.termura.remote-agent",
+            executablePath: "/Applications/Termura.app/Contents/Helpers/termura-remote-agent"
+        )
+        try await installer.install(config)
+
+        let installed = installer.installedExecutablePath(label: config.label)
+        XCTAssertEqual(installed, "/Applications/Termura.app/Contents/Helpers/termura-remote-agent")
+    }
+
+    func test_installedExecutablePath_emptyProgramArguments_returnsNil() throws {
+        let label = "com.termura.remote-agent"
+        let plistURL = tempDir.appendingPathComponent("\(label).plist")
+        let dict: [String: Any] = ["Label": label, "ProgramArguments": [String]()]
+        let data = try PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0)
+        try data.write(to: plistURL)
+
+        let installer = LaunchAgentInstaller(baseDirectory: tempDir, executor: RecordingLaunchControl())
+        XCTAssertNil(installer.installedExecutablePath(label: label))
+    }
+
+    func test_installedExecutablePath_malformedPlist_returnsNil() throws {
+        let label = "com.termura.remote-agent"
+        let plistURL = tempDir.appendingPathComponent("\(label).plist")
+        try Data("not a real plist".utf8).write(to: plistURL)
+
+        let installer = LaunchAgentInstaller(baseDirectory: tempDir, executor: RecordingLaunchControl())
+        XCTAssertNil(installer.installedExecutablePath(label: label))
+    }
 }
 
 private actor RecordingLaunchControl: LaunchControlExecuting {

@@ -112,6 +112,36 @@ struct LaunchAgentInstaller: Sendable {
         FileManager.default.fileExists(atPath: url(for: label).path)
     }
 
+    /// Reads the on-disk plist for `label` and returns the first
+    /// `ProgramArguments` entry. Returns `nil` for any soft-fail
+    /// case — missing plist, unreadable plist, malformed XML, or a
+    /// plist whose `ProgramArguments` is missing/empty/not a string
+    /// array. PR10's `reinstallIfNeeded` uses this to detect that a
+    /// previously installed plist points at a stale helper path.
+    /// Soft-fail by design: a corrupt plist is treated as "no record"
+    /// so the upgrade path can rewrite it cleanly instead of
+    /// surfacing a launchctl-format error to the user.
+    func installedExecutablePath(label: String) -> String? {
+        let plistURL = url(for: label)
+        guard FileManager.default.fileExists(atPath: plistURL.path) else { return nil }
+        do {
+            let data = try Data(contentsOf: plistURL)
+            let raw = try PropertyListSerialization.propertyList(from: data, format: nil)
+            guard let dict = raw as? [String: Any],
+                  let args = dict["ProgramArguments"] as? [String],
+                  let first = args.first else {
+                return nil
+            }
+            return first
+        } catch {
+            // Non-critical: the on-disk plist is unreadable or malformed.
+            // Returning nil lets reinstallIfNeeded rewrite it via the normal
+            // install path; surfacing the IO error to UI here would be noise.
+            logger.debug("installedExecutablePath(\(label)) read failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     func url(for label: String) -> URL {
         baseDirectory.appendingPathComponent("\(label).plist")
     }
