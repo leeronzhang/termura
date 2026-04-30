@@ -56,6 +56,18 @@ public actor KeychainPairedDeviceStore: PairedDeviceStore {
         try persist(current)
     }
 
+    public func removeAll() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw PairedDeviceStoreError.persistenceFailure(code: Int32(status))
+        }
+    }
+
     public func backfillCloudSourceDeviceIdIfMissing(
         deriving derive: @Sendable (Data) -> UUID
     ) throws {

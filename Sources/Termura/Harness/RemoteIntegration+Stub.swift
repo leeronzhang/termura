@@ -20,6 +20,19 @@ protocol RemoteIntegration: Sendable {
     /// Marks the device as revoked. Subsequent envelopes from that device id
     /// are rejected by the router. Idempotent for already-revoked ids.
     func revokePairedDevice(id: UUID) async throws
+    /// PR9 — marks every active paired device as revoked in one call. Returns
+    /// the ids that were successfully revoked (already-revoked entries are
+    /// silently skipped and not part of the success list). On partial
+    /// persistence failure the underlying harness throws an error carrying
+    /// the failed ids; callers may re-`listPairedDevices()` to compute the
+    /// success set in that case.
+    func revokeAllPairedDevices() async throws -> [UUID]
+    /// PR9 — drops every paired-device record and pair-key entry from the
+    /// harness-side stores and resets any in-flight pairing handshake. Used
+    /// by the resetPairings flow in `RemoteControlController`. Identity,
+    /// audit log, and agent-side state (cursor / quarantine) are out of
+    /// scope here; the controller orchestrates those separately.
+    func resetPairingState() async throws
     /// Recent audit entries, newest first, capped at the store's window
     /// (currently 500 entries). Returns `[]` when no harness.
     func auditLog() async throws -> [RemoteAuditEntry]
@@ -56,6 +69,14 @@ enum RemoteAdapterError: Error, Sendable, Equatable {
     case sessionNotFound
     case noActiveProject
     case integrationDisabled
+    /// PR9 — `revokeAllPairedDevices()` ran to completion but at least
+    /// one device's persistence write failed. Successful revocations
+    /// are kept (no rollback); the failed ids are surfaced so the UI
+    /// can show "X of Y could not be revoked". Translated from the
+    /// kit-internal `PairingError.revokeAllFailed` at the harness
+    /// boundary so the controller stays free of `TermuraRemoteServer`
+    /// error surface.
+    case partialRevokeAllFailed(failed: [UUID])
 }
 
 struct NullRemoteIntegration: RemoteIntegration {
@@ -74,6 +95,18 @@ struct NullRemoteIntegration: RemoteIntegration {
     func listPairedDevices() async throws -> [PairedDeviceSummary] { [] }
 
     func revokePairedDevice(id _: UUID) async throws {
+        throw RemoteAdapterError.integrationDisabled
+    }
+
+    /// Free build: nothing to revoke (no pairings exist), so return [].
+    /// Symmetric with `listPairedDevices()` returning [].
+    func revokeAllPairedDevices() async throws -> [UUID] { [] }
+
+    /// Free build: there is no pairing state to clear, but a caller asking
+    /// "wipe pairings" without a harness present is almost certainly a
+    /// configuration error — surface that explicitly rather than silently
+    /// no-op'ing, matching the contract of `start()` / `issueInvitation()`.
+    func resetPairingState() async throws {
         throw RemoteAdapterError.integrationDisabled
     }
 
@@ -98,11 +131,19 @@ struct NullRemoteSessionsAdapter: RemoteSessionsAdapter {
 protocol RemoteAgentBridgeLifecycle: Sendable {
     func start() async
     func stop() async
+    /// PR9 — asks the agent process to wipe its own state stores
+    /// (cursor + quarantine). Routed via XPC `resetAgentState` RPC by the
+    /// harness assembly. Errors propagate so the controller's resetPairings
+    /// flow can route to its β-probe + γ-fallback path on RPC failure.
+    func resetAgentState() async throws
 }
 
 struct NullRemoteAgentBridgeLifecycle: RemoteAgentBridgeLifecycle {
     func start() async {}
     func stop() async {}
+    /// Free build has no agent process to reset; treat as no-op so the
+    /// resetPairings happy path stays clean when the harness isn't wired.
+    func resetAgentState() async throws {}
 }
 
 #if !HARNESS_ENABLED

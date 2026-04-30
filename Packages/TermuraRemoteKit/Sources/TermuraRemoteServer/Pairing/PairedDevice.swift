@@ -87,6 +87,10 @@ public protocol PairedDeviceStore: Sendable {
     func add(_ device: PairedDevice) async throws
     func update(_ device: PairedDevice) async throws
     func remove(id: UUID) async throws
+    /// PR9 — wipes every entry. Used by `PairingService.purgeAllPairings`
+    /// in the resetPairings flow. Idempotent: calling on an empty store
+    /// is a no-op (no thrown error).
+    func removeAll() async throws
     /// PR8 — fills in `cloudSourceDeviceId` on every legacy entry whose
     /// field is `nil`, deriving the value from the persisted `publicKey`.
     /// New entries already populate the field at pair time, so calling
@@ -130,6 +134,10 @@ public actor InMemoryPairedDeviceStore: PairedDeviceStore {
         guard devices.removeValue(forKey: id) != nil else {
             throw PairedDeviceStoreError.notFound(id: id)
         }
+    }
+
+    public func removeAll() {
+        devices.removeAll()
     }
 
     public func backfillCloudSourceDeviceIdIfMissing(

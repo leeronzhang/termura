@@ -8,6 +8,10 @@ public enum PairingError: Error, Sendable, Equatable {
     case tokenExpired
     case signatureInvalid
     case alreadyPaired(deviceId: UUID)
+    /// PR9 — `revokeAll` saw at least one device whose persistence write
+    /// failed. Surviving successes have already been written; the caller
+    /// can re-`listPairedDevices()` to compute the success set.
+    case revokeAllFailed(failed: [UUID])
 }
 
 public actor PairingService {
@@ -218,8 +222,54 @@ public actor PairingService {
         guard let index = devices.firstIndex(where: { $0.id == deviceId }) else {
             throw PairedDeviceStoreError.notFound(id: deviceId)
         }
+        // PR9 — re-revoking a device must not overwrite the original
+        // `revokedAt`. UI races (double-tap, queued action) and the
+        // upcoming `revokeAll` flow can both land here for an entry
+        // that's already inactive; preserving the first revocation
+        // timestamp keeps the audit trail meaningful.
+        if devices[index].revokedAt != nil { return }
         devices[index].revokedAt = clock()
         try await store.update(devices[index])
+    }
+
+    /// PR9 — marks every active device as revoked at `clock()`. Returns
+    /// the ids that were successfully revoked. Already-revoked entries
+    /// are silently skipped (they're not in the success list because
+    /// nothing changed). On per-device persistence failure the work
+    /// continues for the remaining ids and the failed ids are surfaced
+    /// via `PairingError.revokeAllFailed`.
+    public func revokeAll() async throws -> [UUID] {
+        let now = clock()
+        let devices = try await store.load()
+        var succeeded: [UUID] = []
+        var failed: [UUID] = []
+        for device in devices where device.isActive {
+            var copy = device
+            copy.revokedAt = now
+            do {
+                try await store.update(copy)
+                succeeded.append(device.id)
+            } catch {
+                failed.append(device.id)
+            }
+        }
+        if !failed.isEmpty {
+            throw PairingError.revokeAllFailed(failed: failed)
+        }
+        return succeeded
+    }
+
+    /// PR9 — drops every paired-device record from the store and resets
+    /// any in-flight pairing handshake state. Used by the resetPairings
+    /// flow in the harness; after `purgeAllPairings` returns, no past
+    /// pairing — active or revoked — survives. Identity, pair keys, and
+    /// audit log are out of scope here (cleared elsewhere).
+    public func purgeAllPairings() async throws {
+        try await store.removeAll()
+        pendingToken = nil
+        pendingPairingId = nil
+        pendingPairingNonce = nil
+        lastCompletedPairingIdValue = nil
     }
 
     public func listPairedDevices() async throws -> [PairedDevice] {
