@@ -4,13 +4,17 @@ import TermuraRemoteProtocol
 
 struct RemoteControlSettingsView: View {
     @Bindable var controller: RemoteControlController
-    @State private var pendingRevokeId: UUID?
+    @State var pendingRevokeId: UUID?
+    @State var showRevokeAllConfirm = false
+    @State var showResetSheet = false
+    @State var resetUnderstood = false
 
     var body: some View {
         Form {
             statusSection
             pairingSection
             devicesSection
+            dangerZoneSection
             auditSection
         }
         .formStyle(.grouped)
@@ -27,6 +31,24 @@ struct RemoteControlSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("Revoked devices can't send new commands. They'll need to pair again to reconnect.")
+        }
+        .alert(
+            "Revoke all paired devices?",
+            isPresented: $showRevokeAllConfirm
+        ) {
+            Button("Revoke all", role: .destructive) {
+                Task { await controller.revokeAll() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "Every paired iPhone will be marked as inactive. " +
+                    "Remote control stays enabled and pair keys are kept, " +
+                    "so re-inviting a device skips the full pairing flow."
+            )
+        }
+        .sheet(isPresented: $showResetSheet) {
+            resetConfirmationSheet
         }
     }
 

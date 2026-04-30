@@ -73,4 +73,31 @@ struct AgentBoundaryTests {
             #expect(!body.contains(token), "AppDelegate.swift leaked \(token)")
         }
     }
+
+    /// PR9 — extend boundary coverage to every public-repo file added
+    /// or substantially modified by the disable / revokeAll /
+    /// resetPairings work. Any future edit that imports a private
+    /// clang module or pastes a private impl type name will trip
+    /// this scan.
+    @Test(
+        "PR9 controller / probe / fallback / settings files contain no harness concrete tokens",
+        arguments: [
+            "Sources/Termura/Services/RemoteControlController.swift",
+            "Sources/Termura/Services/RemoteControlController+Actions.swift",
+            "Sources/Termura/Services/AgentDeathProbe.swift",
+            "Sources/Termura/Services/AgentKeychainFallbackCleaner.swift",
+            "Sources/Termura/Views/RemoteControlSettingsView.swift",
+            "Sources/Termura/Views/RemoteControlSettingsView+DangerZone.swift"
+        ]
+    )
+    func pr9PublicFilesHaveNoLeakage(relativePath: String) throws {
+        guard let url = Self.publicFile(named: relativePath) else {
+            Issue.record("could not locate \(relativePath)")
+            return
+        }
+        let body = try String(contentsOf: url, encoding: .utf8)
+        for token in Self.bannedTokens {
+            #expect(!body.contains(token), "\(relativePath) leaked \(token)")
+        }
+    }
 }

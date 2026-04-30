@@ -16,7 +16,7 @@ set -euo pipefail
 # Allowed callers carry the literal in commentary or config; they're listed
 # in WHITELIST_REGEX. Anything else trips the hook.
 
-LEAK_PATTERN='(termura-harness/|RemoteServerHarness|RemoteEnvelopeRouter)'
+LEAK_PATTERN='(termura-harness/|RemoteServerHarness|RemoteEnvelopeRouter|RemoteAgentBridgeAssembly|RemoteAgentXPCClient|AppMailboxXPCBridge|AgentInjectedCloudKitIngress|TrustedSourceGate|RemoteAgentAutoConnector|AgentVirtualReplyChannel)'
 WHITELIST_REGEX='^(\.gitignore|CLAUDE\.md|README\.md|project\.yml|project\.yml\.example|scripts/pre-commit|scripts/quality-gate\.sh|memory/|Sources/Termura/Harness/.*\+Stub\.swift|Sources/Termura/Harness/HarnessViewModel\+Stub\.swift|Sources/Termura/Harness/HarnessModels\.swift|Sources/Termura/Harness/RuleFileRepositoryProtocol\.swift|Tests/TermuraTests/Harness/.*\.swift|Packages/.*\.swift)$'
 
 STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR)"
