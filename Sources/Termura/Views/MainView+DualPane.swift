@@ -17,8 +17,12 @@ extension MainView {
             dualPaneMetadata(focusedID: focusedPaneSessionID)
         }
         .onAppear {
-            tabManager.focusedSlot = .left
-            commandRouter.focusedDualPaneID = leftPaneSessionID
+            // Restore the user's last focused pane for this split tab so leaving
+            // and re-entering does not snap focus back to the left side.
+            guard let tab = resolvedSelectedTab, tab.isSplit else { return }
+            let slot = tabManager.restoredFocusedSlot(for: tab)
+            tabManager.focusedSlot = slot
+            commandRouter.focusedDualPaneID = slot == .left ? leftPaneSessionID : rightPaneSessionID
         }
     }
 

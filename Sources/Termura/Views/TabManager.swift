@@ -11,7 +11,19 @@ final class TabManager {
     /// Explicitly managed terminal tab list (terminal + split entries).
     var terminalItems: [ContentTab] = []
     /// Which slot is focused within the current split tab.
-    var focusedSlot: PaneSlot = .left
+    /// didSet records the slot per split-tab id so leaving and re-entering a split
+    /// tab restores the user's last focused pane instead of snapping back to .left.
+    var focusedSlot: PaneSlot = .left {
+        didSet {
+            guard let tab = resolvedSelectedTab, tab.isSplit else { return }
+            lastFocusedSlotByTab[tab.id] = focusedSlot
+        }
+    }
+
+    /// Per-split-tab memory of the last focused pane slot. Internal because
+    /// `restoredFocusedSlot(for:)` and `forgetFocusedSlot(for:)` (TabManager+Splits)
+    /// read/write it; external callers should always go through those helpers.
+    var lastFocusedSlotByTab: [String: PaneSlot] = [:]
     /// Non-terminal tabs (files, notes, diffs).
     var openTabs: [ContentTab] = []
     /// Currently selected tab across all lists.
@@ -154,6 +166,7 @@ final class TabManager {
             let survivingID = left == sid ? right : left
             let survivingTitle = left == sid ? rightTitle : leftTitle
             let replacement = ContentTab.terminal(sessionID: survivingID, title: survivingTitle)
+            forgetFocusedSlot(for: item.id)
             terminalItems[idx] = replacement
             selectedContentTab = replacement
             sessionStore?.activateSession(id: survivingID)
@@ -184,6 +197,8 @@ final class TabManager {
             return
         }
         if let tab = terminalItems.first(where: { $0.containsSession(session.id) }) {
+            // selectedContentTab must be set first so focusedSlot's didSet records
+            // the slot under the right tab id (didSet reads resolvedSelectedTab).
             selectedContentTab = tab
             if case let .split(left, _, _, _) = tab {
                 focusedSlot = session.id == left ? .left : .right
@@ -215,7 +230,10 @@ final class TabManager {
             sessionStore?.activateSession(id: sid)
             commandRouter?.selectedSidebarTab = .sessions
         case let .split(left, right, _, _):
-            sessionStore?.activateSession(id: focusedSlot == .left ? left : right)
+            // Restore the previously focused slot when cycling back into this split tab.
+            let slot = restoredFocusedSlot(for: newTab)
+            focusedSlot = slot
+            sessionStore?.activateSession(id: slot == .left ? left : right)
             commandRouter?.isDualPaneActive = true
             commandRouter?.selectedSidebarTab = .sessions
         case .note, .noteSplit:

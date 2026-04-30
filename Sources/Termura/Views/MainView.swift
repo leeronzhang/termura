@@ -148,8 +148,9 @@ struct MainView: View {
         if isSplit {
             let isSameTab = oldTab?.id == tab.id
             if !wasInDualPane || !isSameTab {
-                tabManager.focusedSlot = .left
-                commandRouter.focusedDualPaneID = leftPaneSessionID
+                let slot = tabManager.restoredFocusedSlot(for: tab)
+                tabManager.focusedSlot = slot
+                commandRouter.focusedDualPaneID = slot == .left ? leftPaneSessionID : rightPaneSessionID
             }
         } else {
             commandRouter.focusedDualPaneID = nil

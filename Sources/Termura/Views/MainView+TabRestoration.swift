@@ -79,7 +79,11 @@ extension MainView {
         case let .terminal(sid, _):
             sessionStore.activateSession(id: sid)
         case let .split(left, right, _, _):
-            sessionStore.activateSession(id: tabManager.focusedSlot == .left ? left : right)
+            // Restore the user's last focused slot for this split before activating
+            // the corresponding session, so re-entry doesn't snap back to .left.
+            let slot = tabManager.restoredFocusedSlot(for: tab)
+            tabManager.focusedSlot = slot
+            sessionStore.activateSession(id: slot == .left ? left : right)
         default:
             break
         }

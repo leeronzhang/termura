@@ -32,7 +32,11 @@ extension MainView {
                             sessionStore.activateSession(id: sid)
                             commandRouter.selectedSidebarTab = .sessions
                         case let .split(left, right, _, _):
-                            let sid = tabManager.focusedSlot == .left ? left : right
+                            // Restore the user's last focused slot for this split tab so
+                            // tapping the tab brings back the pane they were last using.
+                            let slot = tabManager.restoredFocusedSlot(for: newTab)
+                            tabManager.focusedSlot = slot
+                            let sid = slot == .left ? left : right
                             sessionStore.activateSession(id: sid)
                             commandRouter.isDualPaneActive = true
                             commandRouter.selectedSidebarTab = .sessions

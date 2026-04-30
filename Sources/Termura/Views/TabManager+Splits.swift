@@ -3,6 +3,18 @@ import Foundation
 // MARK: - Split Management
 
 extension TabManager {
+    /// Returns the slot the user last focused inside `tab`, or `.left` if this
+    /// split tab has no remembered slot yet (newly created or never focused).
+    func restoredFocusedSlot(for tab: ContentTab) -> PaneSlot {
+        lastFocusedSlotByTab[tab.id] ?? .left
+    }
+
+    /// Drop the focus memory for a split tab that has been dissolved or replaced
+    /// (id-changing operations: dissolveSplitTab, swapPanes, applyDropSplit).
+    func forgetFocusedSlot(for tabID: String) {
+        lastFocusedSlotByTab.removeValue(forKey: tabID)
+    }
+
     func toggleSplitTab() {
         guard let current = resolvedSelectedTab else { return }
         if current.isSplit {
@@ -15,6 +27,7 @@ extension TabManager {
     func dissolveSplitTab() {
         guard let idx = terminalItems.firstIndex(where: { $0 == resolvedSelectedTab }),
               case let .split(left, right, leftTitle, rightTitle) = terminalItems[idx] else { return }
+        let oldID = terminalItems[idx].id
         let leftTab = ContentTab.terminal(sessionID: left, title: leftTitle)
         let rightTab = ContentTab.terminal(sessionID: right, title: rightTitle)
         terminalItems.remove(at: idx)
@@ -23,6 +36,7 @@ extension TabManager {
         selectedContentTab = leftTab
         commandRouter?.isDualPaneActive = false
         commandRouter?.focusedDualPaneID = nil
+        forgetFocusedSlot(for: oldID)
         sessionStore?.activateSession(id: left)
     }
 
@@ -30,12 +44,15 @@ extension TabManager {
         guard let current = resolvedSelectedTab,
               case let .split(left, right, leftTitle, rightTitle) = current,
               let idx = terminalItems.firstIndex(of: current) else { return }
+        let oldID = current.id
         let swapped = ContentTab.split(
             left: right, right: left, leftTitle: rightTitle, rightTitle: leftTitle
         )
         terminalItems[idx] = swapped
         selectedContentTab = swapped
+        // didSet on focusedSlot writes the new entry under the swapped tab's id.
         focusedSlot = focusedSlot == .left ? .right : .left
+        forgetFocusedSlot(for: oldID)
     }
 
     func handleFocusDualPane(_ slot: PaneSlot) {
@@ -109,6 +126,7 @@ extension TabManager {
 
     private func applyDropSplit(draggedID: SessionID, title: String, slot: PaneSlot, splitIdx: Int) {
         guard case let .split(left, right, leftTitle, rightTitle) = terminalItems[splitIdx] else { return }
+        let oldSplitID = terminalItems[splitIdx].id
         // If dragged session is in another split, dissolve that split first.
         dissolveSourceSplit(removing: draggedID, targetSplitIdx: splitIdx)
         let newSplit = ContentTab.split(
@@ -123,7 +141,9 @@ extension TabManager {
             return false
         }
         selectedContentTab = newSplit
+        // didSet writes the new slot under the new split id.
         focusedSlot = slot
+        if oldSplitID != newSplit.id { forgetFocusedSlot(for: oldSplitID) }
         commandRouter?.focusedDualPaneID = draggedID
         sessionStore?.ensureEngine(for: draggedID, shell: nil)
         sessionStore?.activateSession(id: draggedID)
