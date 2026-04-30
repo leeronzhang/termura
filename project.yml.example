@@ -1,9 +1,11 @@
 # Open-Core build template. Copy to `project.yml`, replace `DEVELOPMENT_TEAM`
 # with your Apple Developer team ID, then run `xcodegen generate`.
 #
-# `project.yml` itself is gitignored so each developer's signing identity stays
-# local. Internal/paid builds maintain a separate `project.yml` (also gitignored)
-# that adds the harness LaunchAgent build phase + private source paths.
+# `project.yml` itself is gitignored (and untracked since PR9.x) so each
+# developer's signing identity stays local. The public open-core build
+# never bundles the LaunchAgent helper — that is the harness build's job
+# (see termura-harness/project-mac.yml). This template is intentionally
+# harness-naive and produces a Free-buildable Termura.app on its own.
 
 name: Termura
 options:
