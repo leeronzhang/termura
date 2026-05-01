@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import TermuraRemoteProtocol
+import Testing
 
 @Suite("AgentMailboxItem wire shape")
 struct AgentMailboxItemTests {

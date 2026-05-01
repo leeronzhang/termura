@@ -42,7 +42,7 @@ actor CloudKitReplyChannel: ReplyChannel {
         codec: any RemoteCodec,
         clock: @escaping @Sendable () -> Date
     ) {
-        self.channelId = peerDeviceId
+        channelId = peerDeviceId
         self.transportDeviceId = transportDeviceId
         self.peerDeviceId = peerDeviceId
         self.gateway = gateway

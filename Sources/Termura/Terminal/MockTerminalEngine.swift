@@ -99,6 +99,8 @@ final class DebugTerminalEngine: TerminalEngine {
     func applyTheme(_ theme: ThemeColors) {}
     func applyFont(family: String, size: CGFloat) {}
 
+    func readVisibleScreen() -> TerminalScreenSnapshot? { nil }
+
     func terminate() async {
         state = .exiting
         terminateCallCount += 1

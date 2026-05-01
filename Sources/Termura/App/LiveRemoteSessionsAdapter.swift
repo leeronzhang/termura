@@ -12,23 +12,28 @@
 // harness router subscribes once per `start()`.
 
 import Foundation
+import TermuraRemoteProtocol
 
 struct LiveRemoteSessionsAdapter: RemoteSessionsAdapter {
     typealias ListProvider = @Sendable @MainActor () -> [RemoteSessionInfo]
     typealias CommandRunner = @Sendable @MainActor (String, UUID) async throws -> CommandRunResult
+    typealias ScreenCapturer = @Sendable @MainActor (UUID) -> ScreenFramePayload?
 
     let listProvider: ListProvider
     let commandRunner: CommandRunner
     private let changeStream: AsyncStream<Void>
+    let screenCapturer: ScreenCapturer
 
     init(
         listProvider: @escaping ListProvider,
         commandRunner: @escaping CommandRunner,
-        changeStream: AsyncStream<Void>
+        changeStream: AsyncStream<Void>,
+        screenCapturer: @escaping ScreenCapturer
     ) {
         self.listProvider = listProvider
         self.commandRunner = commandRunner
         self.changeStream = changeStream
+        self.screenCapturer = screenCapturer
     }
 
     func listSessions() async -> [RemoteSessionInfo] {
@@ -41,5 +46,9 @@ struct LiveRemoteSessionsAdapter: RemoteSessionsAdapter {
 
     func sessionListChanges() -> AsyncStream<Void> {
         changeStream
+    }
+
+    func captureScreen(sessionId: UUID) async -> ScreenFramePayload? {
+        await screenCapturer(sessionId)
     }
 }

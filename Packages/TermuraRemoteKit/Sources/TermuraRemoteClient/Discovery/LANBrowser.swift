@@ -38,7 +38,7 @@ public actor LANBrowser {
 
     public init(serviceType: String = "_termura-remote._tcp") {
         self.serviceType = serviceType
-        self.queue = DispatchQueue(label: "termura.remote.browser")
+        queue = DispatchQueue(label: "termura.remote.browser")
     }
 
     public func start(onChange: @escaping UpdateHandler) {

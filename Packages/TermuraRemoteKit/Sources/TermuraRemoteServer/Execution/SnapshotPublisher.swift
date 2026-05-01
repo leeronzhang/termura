@@ -23,9 +23,9 @@ public enum SnapshotPackResult: Sendable, Equatable {
 
     public var snapshot: RemoteSnapshot {
         switch self {
-        case let .inline(snap): return snap
-        case let .attached(snap): return snap
-        case let .attachmentUnavailable(snap, _): return snap
+        case let .inline(snap): snap
+        case let .attached(snap): snap
+        case let .attachmentUnavailable(snap, _): snap
         }
     }
 }
@@ -62,9 +62,9 @@ public actor SnapshotPublisher {
         var exitCode: Int32?
         for try await event in stream {
             switch event {
-            case .stdout(let chunk):
+            case let .stdout(chunk):
                 buffer.append(chunk)
-            case .finished(let code):
+            case let .finished(code):
                 exitCode = code
             }
         }

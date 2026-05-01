@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 
 public struct PairingToken: Sendable, Codable, Equatable {
     public let value: String

@@ -28,9 +28,9 @@ public actor WebSocketClientTransport: ClientTransport {
     private var isConnected = false
 
     public init(endpoint: Endpoint, codec: any RemoteCodec = JSONRemoteCodec()) {
-        self.target = .hostPort(host: endpoint.host, port: endpoint.port)
+        target = .hostPort(host: endpoint.host, port: endpoint.port)
         self.codec = codec
-        self.queue = DispatchQueue(label: "termura.remote.client.\(endpoint.host)")
+        queue = DispatchQueue(label: "termura.remote.client.\(endpoint.host)")
     }
 
     /// Build a transport from a `NWEndpoint` that came out of `LANBrowser` /
@@ -38,9 +38,9 @@ public actor WebSocketClientTransport: ClientTransport {
     /// the caller doesn't need to know hostname or port — including the case
     /// where the LAN listener is bound to an ephemeral port.
     public init(nwEndpoint: NWEndpoint, codec: any RemoteCodec = JSONRemoteCodec()) {
-        self.target = .rawEndpoint(nwEndpoint)
+        target = .rawEndpoint(nwEndpoint)
         self.codec = codec
-        self.queue = DispatchQueue(label: "termura.remote.client.bonjour")
+        queue = DispatchQueue(label: "termura.remote.client.bonjour")
     }
 
     public func connect() async throws {
@@ -50,20 +50,24 @@ public actor WebSocketClientTransport: ClientTransport {
         wsOptions.autoReplyPing = true
         parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
 
-        let nwConnection: NWConnection
-        switch target {
+        let nwConnection = switch target {
         case let .hostPort(host, port):
-            nwConnection = NWConnection(
+            // `?? .any` fallback rationale: NWEndpoint.Port has no .unknown
+            // case, and port==0 is unreachable through the Bonjour resolver
+            // path (always emits a non-zero UInt16). Letting the OS bind an
+            // ephemeral port surfaces a bad input as a downstream
+            // connection-refused rather than a silent crash.
+            NWConnection(
                 host: NWEndpoint.Host(host),
-                port: NWEndpoint.Port(rawValue: port) ?? .any,
+                port: NWEndpoint.Port(rawValue: port) ?? .any, // see above
                 using: parameters
             )
         case let .rawEndpoint(endpoint):
-            nwConnection = NWConnection(to: endpoint, using: parameters)
+            NWConnection(to: endpoint, using: parameters)
         }
         try await waitForReady(connection: nwConnection)
-        self.connection = nwConnection
-        self.isConnected = true
+        connection = nwConnection
+        isConnected = true
     }
 
     public func send(_ envelope: Envelope) async throws {
@@ -89,7 +93,7 @@ public actor WebSocketClientTransport: ClientTransport {
                 switch state {
                 case .ready:
                     continuation.resume()
-                case .failed(let error):
+                case let .failed(error):
                     continuation.resume(throwing: ClientTransportError.connectFailure(reason: error.localizedDescription))
                 case .cancelled:
                     continuation.resume(throwing: ClientTransportError.connectFailure(reason: "cancelled before ready"))

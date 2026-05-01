@@ -12,9 +12,11 @@ enum ShellIntegrationEvent: Sendable, Equatable {
     /// OSC 133;D[;exitCode] — execution finished, optional exit code
     case executionFinished(exitCode: Int?)
     /// OSC 133;X;key=value;key=value... — Termura private extension carrying
-    /// arbitrary metadata that should be associated with the next command's
-    /// chunk. Used by `PTYCommandBridge` to tag remote-issued commands with a
-    /// `remoteCmdId` so the snapshot can be routed back to the originating
-    /// remote client.
+    /// arbitrary metadata that gets attached to the next command's chunk.
+    /// `PTYCommandBridge` (remote control) used to inject these markers but
+    /// stopped because the `printf` source line was visible to the user via
+    /// shell echo on every command; today the field stays for any
+    /// user-installed shell-integration script that wants to publish its
+    /// own key=value pairs.
     case commandMetadata([String: String])
 }

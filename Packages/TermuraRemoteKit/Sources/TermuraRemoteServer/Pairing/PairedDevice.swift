@@ -71,14 +71,14 @@ public struct PairedDevice: Sendable, Codable, Equatable, Identifiable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.id = try container.decode(UUID.self, forKey: .id)
-        self.nickname = try container.decode(String.self, forKey: .nickname)
-        self.publicKey = try container.decode(Data.self, forKey: .publicKey)
-        self.pairedAt = try container.decode(Date.self, forKey: .pairedAt)
-        self.revokedAt = try container.decodeIfPresent(Date.self, forKey: .revokedAt)
-        self.negotiatedCodec = try container.decodeIfPresent(CodecKind.self, forKey: .negotiatedCodec) ?? .json
-        self.pairingId = try container.decodeIfPresent(UUID.self, forKey: .pairingId)
-        self.cloudSourceDeviceId = try container.decodeIfPresent(UUID.self, forKey: .cloudSourceDeviceId)
+        id = try container.decode(UUID.self, forKey: .id)
+        nickname = try container.decode(String.self, forKey: .nickname)
+        publicKey = try container.decode(Data.self, forKey: .publicKey)
+        pairedAt = try container.decode(Date.self, forKey: .pairedAt)
+        revokedAt = try container.decodeIfPresent(Date.self, forKey: .revokedAt)
+        negotiatedCodec = try container.decodeIfPresent(CodecKind.self, forKey: .negotiatedCodec) ?? .json
+        pairingId = try container.decodeIfPresent(UUID.self, forKey: .pairingId)
+        cloudSourceDeviceId = try container.decodeIfPresent(UUID.self, forKey: .cloudSourceDeviceId)
     }
 }
 

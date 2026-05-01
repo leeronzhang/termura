@@ -170,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if env["TERMURA_DISABLE_REMOTE_AGENT_BRIDGE"] == nil {
             Self.startRemoteAgentBridge(services.remoteAgentBridge)
             Self.scheduleReinstallIfNeeded(controller: services.remoteControlController)
+            Self.restoreRemoteIntegration(controller: services.remoteControlController)
         }
 
         // Start broadcasting session-list changes to paired iOS clients.

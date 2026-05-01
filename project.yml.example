@@ -67,6 +67,16 @@ targets:
     type: application
     platform: macOS
     preBuildScripts:
+      - name: Verify pbxproj is fresh (xcodegen check)
+        basedOnDependencyAnalysis: false
+        script: |
+          # Open-core repo split has three Xcode projects (public main +
+          # private Mac + private iOS) all globbed from overlapping
+          # source roots. Adding/removing a Swift file requires re-running
+          # xcodegen — `regen-all.sh --check` fails the build with the
+          # exact fix command instead of letting Xcode hit a "Cannot find
+          # symbol" 30 seconds later. Cheap (sub-second).
+          bash "$SRCROOT/scripts/regen-all.sh" --check
       - name: Build libghostty
         basedOnDependencyAnalysis: false
         inputFiles:

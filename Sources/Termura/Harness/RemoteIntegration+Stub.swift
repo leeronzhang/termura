@@ -50,11 +50,24 @@ protocol RemoteSessionsAdapter: Sendable {
     /// WHY: pull-once-on-pair leaves iOS stuck on a stale snapshot whenever
     /// the user opens or closes a session on Mac after the initial sync.
     func sessionListChanges() -> AsyncStream<Void>
+    /// Snapshot the current visible viewport of `sessionId` as a
+    /// `ScreenFramePayload`. Returns `nil` when the session no longer
+    /// exists or there is no active project. Drives the harness
+    /// `.screenFrame` push pulse so iOS can render REPL output that
+    /// otherwise wouldn't reach the cmdExec stdout fallback (Claude Code
+    /// and other interactive tools that don't emit OSC 133;D markers).
+    /// Default implementation returns `nil` so adapters without a live
+    /// source (Free build, tests) compile without changes.
+    func captureScreen(sessionId: UUID) async -> ScreenFramePayload?
 }
 
 extension RemoteSessionsAdapter {
     func sessionListChanges() -> AsyncStream<Void> {
         AsyncStream { $0.finish() }
+    }
+
+    func captureScreen(sessionId _: UUID) async -> ScreenFramePayload? {
+        nil
     }
 }
 

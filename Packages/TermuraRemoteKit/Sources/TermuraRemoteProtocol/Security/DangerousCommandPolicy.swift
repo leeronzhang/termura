@@ -26,7 +26,7 @@ public struct DangerousCommandPolicy: Sendable {
     private let compiledRules: [(rule: Rule, regex: NSRegularExpression)]
 
     public init() {
-        self.compiledRules = Self.bestEffortCompile(rules: Rule.defaultRules)
+        compiledRules = Self.bestEffortCompile(rules: Rule.defaultRules)
     }
 
     public init(rules: [Rule]) throws {

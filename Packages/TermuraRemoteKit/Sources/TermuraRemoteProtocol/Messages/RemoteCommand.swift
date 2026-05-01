@@ -35,14 +35,14 @@ public struct RemoteCommand: Sendable, Codable, Equatable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.commandId = try container.decode(UUID.self, forKey: .commandId)
-        self.sessionId = try container.decode(UUID.self, forKey: .sessionId)
-        self.line = try container.decode(String.self, forKey: .line)
-        self.issuedAt = try container.decode(Date.self, forKey: .issuedAt)
-        self.clientPreCheck = try container.decode(SafetyVerdict.self, forKey: .clientPreCheck)
+        commandId = try container.decode(UUID.self, forKey: .commandId)
+        sessionId = try container.decode(UUID.self, forKey: .sessionId)
+        line = try container.decode(String.self, forKey: .line)
+        issuedAt = try container.decode(Date.self, forKey: .issuedAt)
+        clientPreCheck = try container.decode(SafetyVerdict.self, forKey: .clientPreCheck)
         // Default to `false` so legacy (un-upgraded) clients don't accidentally
         // gain the bypass-prevention privilege.
-        self.biometricVerified = try container.decodeIfPresent(Bool.self, forKey: .biometricVerified) ?? false
+        biometricVerified = try container.decodeIfPresent(Bool.self, forKey: .biometricVerified) ?? false
     }
 }
 

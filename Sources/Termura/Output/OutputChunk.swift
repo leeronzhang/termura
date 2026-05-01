@@ -29,10 +29,12 @@ struct OutputChunk: Identifiable, Sendable {
     let modelContent: String
     /// Structured data for UI rendering — the UI side of dual-track.
     let uiContent: UIContentBlock
-    /// Free-form metadata captured from `OSC 133;X;key=value` sequences.
-    /// Used by `PTYCommandBridge` (remote control) to tag commands with a
-    /// `remoteCmdId` so snapshots can be routed back to the originating
-    /// remote client. Empty for local-only commands.
+    /// Free-form metadata captured from `OSC 133;X;key=value` sequences
+    /// that the active foreground program may emit. Empty by default; the
+    /// remote-control flow no longer injects markers (see PTYCommandBridge
+    /// docstring for rationale), so today this only fills when shell
+    /// integration scripts the user has installed publish their own
+    /// key=value pairs.
     let metadata: [String: String]
 
     init(

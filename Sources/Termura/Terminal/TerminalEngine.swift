@@ -85,4 +85,21 @@ protocol TerminalEngine: AnyObject, Sendable {
 
     /// Apply a font to the terminal renderer.
     func applyFont(family: String, size: CGFloat)
+
+    /// Snapshot of the currently rendered visible viewport (no scrollback).
+    /// Returns `nil` when the engine has no live surface yet (pre-attach
+    /// lifecycle or post-terminate). Drives the remote-control screen-frame
+    /// push so iOS clients can render REPLs (Claude Code, IRB, Python REPL)
+    /// that don't complete chunks via OSC 133;D shell integration.
+    func readVisibleScreen() -> TerminalScreenSnapshot?
+}
+
+/// Engine-agnostic snapshot returned by `TerminalEngine.readVisibleScreen()`.
+/// `lines.count` should equal `rows`; missing trailing rows imply blank lines.
+/// Plain text only — colors / attributes / cursor position are intentionally
+/// out of scope for the MVP screen-frame push.
+struct TerminalScreenSnapshot: Sendable, Equatable {
+    let rows: Int
+    let cols: Int
+    let lines: [String]
 }

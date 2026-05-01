@@ -24,15 +24,15 @@ public actor RemoteClient {
     /// server then rejected them as `Bad command payload` and the client
     /// hung waiting for an ack/snapshot that never came.
     private var activeCodec: any RemoteCodec
-    private(set) public var state: State = .disconnected
+    public private(set) var state: State = .disconnected
     private var receiveTask: Task<Void, Never>?
     private var inboxContinuation: AsyncStream<Envelope>.Continuation?
 
     public init(transport: any ClientTransport, codec: any RemoteCodec = JSONRemoteCodec()) {
         self.transport = transport
-        self.handshakeCodec = codec
-        self.messagepackCodec = MessagePackRemoteCodec()
-        self.activeCodec = codec
+        handshakeCodec = codec
+        messagepackCodec = MessagePackRemoteCodec()
+        activeCodec = codec
     }
 
     /// Flip the inner-payload codec to the value the server selected during
@@ -87,6 +87,19 @@ public actor RemoteClient {
 
     public func requestSessionList() async throws {
         let envelope = Envelope(kind: .sessionListRequest, payload: Data())
+        try await send(envelope)
+    }
+
+    /// Sends a `.rejoin` envelope to resume an authenticated session on a
+    /// fresh transport channel without consuming a new invitation. The
+    /// caller (typically `RemoteStore.reconnect`) is expected to observe
+    /// `inbox()` for the matching `.rejoinAck`, decode it, and call
+    /// `setActiveCodec(_:)` with the negotiated codec — mirroring the
+    /// existing `pairInit` / `pairComplete` round-trip pattern. The
+    /// envelope is always JSON-encoded because the channel is still in
+    /// the handshake phase server-side.
+    public func rejoin(_ request: RejoinRequest) async throws {
+        let envelope = try Envelope.encode(request, kind: .rejoin, codec: handshakeCodec)
         try await send(envelope)
     }
 

@@ -4,20 +4,23 @@ import OSLog
 private let logger = Logger(subsystem: "com.termura.app", category: "PTYCommandBridge")
 
 /// Bridges remote-issued commands (from the active `RemoteIntegration`
-/// implementation) onto the live terminal engine and waits for the
-/// matching `OutputChunk` to be produced before returning the captured
-/// stdout.
+/// implementation) onto the live terminal engine and waits for the next
+/// completed `OutputChunk` on the same session before returning.
 ///
-/// Correlation strategy (PR2c plan §4):
-/// 1. Inject an `OSC 133;X;remoteCmdId=<UUID>` sentinel before the command line
-/// 2. The shell echoes the sequence; `GhosttyCallbacks.scanOSC133ShellEvents`
-///    parses the X marker and raises `.commandMetadata`
-/// 3. `ChunkDetector` attaches the metadata to the next chunk it produces
-/// 4. We register a `CommandRouter.onChunkCompleted` handler filtering by
-///    `metadata["remoteCmdId"]` and resolve when the matching chunk arrives
-/// 5. If the sentinel is dropped (shell strips OSC, fallback shells, etc.) the
-///    timeout fires and we return a low-confidence best-effort result tagged
-///    with `.sentinelMissing`.
+/// Capture strategy:
+/// 1. Send the user command verbatim through the engine (no marker
+///    injection — the OSC 133;X sentinel we used to inject was visible
+///    to the user via shell echo on every command, see git history).
+/// 2. `ChunkDetector` completes a chunk when the shell emits OSC 133;D
+///    (shell-integration "command finished"). The next-completing chunk
+///    on this session is treated as the response.
+/// 3. If no chunk completes within `timeout` (REPLs like Claude Code,
+///    raw shells without integration) we return an empty best-effort
+///    result; iOS now relies on Phase-C live `screenFrame` push for the
+///    actual visible content in those cases.
+///
+/// Concurrency: relies on the remote control flow being serialized at
+/// `@MainActor` (one in-flight `runRemoteCommand` per session at a time).
 ///
 /// Lifecycle:
 /// - OWNER: each `run(...)` call owns its own chunkHandler token and timeout task
@@ -32,9 +35,6 @@ enum PTYCommandBridge {
     /// remote client blocked indefinitely on misbehaving shells.
     static let defaultTimeout: Duration = .seconds(30)
 
-    /// Public marker key embedded in the OSC 133;X sentinel.
-    static let remoteCmdIdKey = "remoteCmdId"
-
     enum Failure: Error, Equatable {
         case sessionNotFound
         case noActiveProject
@@ -44,15 +44,17 @@ enum PTYCommandBridge {
     struct Result {
         let stdout: String
         let exitCode: Int32?
-        /// True when we matched the sentinel; false when the timeout fallback
-        /// fired and the stdout is best-effort.
-        let isSentinelMatched: Bool
+        /// True when a chunk completed within the timeout window; false on
+        /// timeout (REPL or no-shell-integration session). Callers that
+        /// surface to a remote peer use this to decide whether to ship the
+        /// captured stdout or a "no output captured" notice.
+        let chunkMatched: Bool
     }
 
     static func run(
         line: String,
         sessionId: SessionID,
-        commandId: UUID,
+        commandId _: UUID,
         scope: SessionScope,
         commandRouter: CommandRouter,
         timeout: Duration = defaultTimeout
@@ -61,13 +63,21 @@ enum PTYCommandBridge {
             throw Failure.sessionNotFound
         }
 
-        let stream = subscribe(to: commandRouter, commandId: commandId, sessionId: sessionId)
+        let stream = subscribe(to: commandRouter, sessionId: sessionId)
 
-        // Inject sentinel before the user-visible command. The marker is invisible
-        // because OSC sequences don't render in normal terminals; the shell sees
-        // it as a trivial `printf` no-op preceding the real command.
-        let sentinel = sentinelCommand(commandId: commandId)
-        await engine.send(sentinel + " ; " + line)
+        // Send the user command verbatim. We used to inject an OSC 133;X
+        // sentinel (`printf '\e]...'`) before the line so ChunkDetector
+        // could attribute the resulting chunk back to this `commandId`,
+        // but in practice every shell echoes the literal `printf …`
+        // prefix to the PTY (bracketed paste exposes pasted bytes to the
+        // shell), polluting the Mac terminal with a long marker line on
+        // every remote command. iOS now consumes the live `screenFrame`
+        // push (Phase C) to render the actual terminal content, which
+        // makes per-command attribution unnecessary for the visible UX.
+        // The next-completing chunk on the same session within `timeout`
+        // is treated as the response — adequate for the serialized
+        // single-user remote control flow we ship today.
+        await engine.send(line)
         await engine.pressReturn()
 
         do {
@@ -76,29 +86,18 @@ enum PTYCommandBridge {
                 timeout: timeout
             )
         } catch is CancellationError {
-            logger.info("Remote command \(commandId.uuidString) cancelled while awaiting output")
+            logger.info("Remote command cancelled while awaiting output")
             throw CancellationError()
         }
     }
 
-    /// Constructs the OSC 133;X sentinel as a shell-safe `printf`. Compatible
-    /// with bash/zsh/fish/POSIX sh — every mainstream shell supports `printf`
-    /// and the `\e` / `\a` escapes used here.
-    private static func sentinelCommand(commandId: UUID) -> String {
-        // ESC ] 1 3 3 ; X ; remoteCmdId=<uuid> BEL
-        // Use printf so the bytes hit the PTY before the real command runs.
-        "printf '\\e]133;X;\(remoteCmdIdKey)=\(commandId.uuidString)\\a'"
-    }
-
     private static func subscribe(
         to router: CommandRouter,
-        commandId: UUID,
         sessionId: SessionID
     ) -> AsyncStream<OutputChunk> {
         AsyncStream { continuation in
             let token = router.onChunkCompleted { chunk in
                 guard chunk.sessionID == sessionId else { return }
-                guard chunk.metadata[remoteCmdIdKey] == commandId.uuidString else { return }
                 continuation.yield(chunk)
                 continuation.finish()
             }
@@ -127,28 +126,28 @@ enum PTYCommandBridge {
             }
             defer { group.cancelAll() }
             guard let outcome = try await group.next() else {
-                return Result(stdout: "", exitCode: nil, isSentinelMatched: false)
+                return Result(stdout: "", exitCode: nil, chunkMatched: false)
             }
             switch outcome {
             case let .matched(chunk):
                 return Result(
                     stdout: chunk.outputLines.joined(separator: "\n"),
                     exitCode: chunk.exitCode.map(Int32.init),
-                    isSentinelMatched: true
+                    chunkMatched: true
                 )
             case .timedOut:
-                logger.warning("PTY sentinel timeout — returning fallback result")
+                logger.warning("PTY chunk timeout — returning empty best-effort result")
                 return Result(
                     stdout: "",
                     exitCode: nil,
-                    isSentinelMatched: false
+                    chunkMatched: false
                 )
             case .streamEnded:
                 logger.warning("PTY chunk stream ended without a match")
                 return Result(
                     stdout: "",
                     exitCode: nil,
-                    isSentinelMatched: false
+                    chunkMatched: false
                 )
             }
         }

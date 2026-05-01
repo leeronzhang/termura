@@ -14,7 +14,7 @@ actor LANConnection: ReplyChannel {
         self.channelId = channelId
         self.codec = codec
         self.connection = connection
-        self.queue = DispatchQueue(label: "termura.remote.lan.\(channelId.uuidString.prefix(8))")
+        queue = DispatchQueue(label: "termura.remote.lan.\(channelId.uuidString.prefix(8))")
     }
 
     func start(handler: any EnvelopeHandler) {
@@ -58,7 +58,7 @@ actor LANConnection: ReplyChannel {
         let nwConnection = connection
         return try await withCheckedThrowingContinuation { continuation in
             nwConnection.receiveMessage { content, _, _, error in
-                if let error = error {
+                if let error {
                     continuation.resume(throwing: TransportError.decodeFailure(reason: error.localizedDescription))
                     return
                 }
@@ -86,7 +86,7 @@ actor LANConnection: ReplyChannel {
                 contentContext: context,
                 isComplete: true,
                 completion: .contentProcessed { error in
-                    if let error = error {
+                    if let error {
                         continuation.resume(throwing: TransportError.sendFailure(reason: error.localizedDescription))
                     } else {
                         continuation.resume()

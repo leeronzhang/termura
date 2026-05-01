@@ -29,7 +29,7 @@ public actor LiveCloudKitSubscriptionGateway: CloudKitSubscriptionGateway {
 
     public init(containerIdentifier: String = CloudKitSchema.containerIdentifier) {
         let container = CKContainer(identifier: containerIdentifier)
-        self.database = container.privateCloudDatabase
+        database = container.privateCloudDatabase
     }
 
     public func register(targetDeviceId: UUID) async throws {

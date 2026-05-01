@@ -7,6 +7,11 @@ public enum PairingError: Error, Sendable, Equatable {
     case tokenMismatch
     case tokenExpired
     case signatureInvalid
+    /// Retained for source compatibility — `PairingService.completePairing`
+    /// no longer throws this case. A duplicate-pubkey re-pair is treated as
+    /// idempotent: the existing `PairedDevice` is returned unchanged so the
+    /// iOS peer can rebuild its local mirror after an app reinstall.
+    @available(*, deprecated, message: "PairingService no longer throws this; pair is idempotent on matching publicKey")
     case alreadyPaired(deviceId: UUID)
     /// PR9 — `revokeAll` saw at least one device whose persistence write
     /// failed. Surviving successes have already been written; the caller
@@ -15,30 +20,30 @@ public enum PairingError: Error, Sendable, Equatable {
 }
 
 public actor PairingService {
-    private let identity: DeviceIdentity
-    private let tokenIssuer: PairingTokenIssuer
-    private let store: any PairedDeviceStore
+    let identity: DeviceIdentity
+    let tokenIssuer: PairingTokenIssuer
+    let store: any PairedDeviceStore
     /// PR7 — symmetric pair-key persistence. Mac derives the key from
     /// the iOS challenge response and saves it under the same
     /// `pairingId` the iOS side uses, so a future encryption layer can
     /// look it up without an extra round-trip.
-    private let pairKeyStore: any PairKeyStore
+    let pairKeyStore: any PairKeyStore
     /// PR7 — random salt sources for the per-pair `pairingNonce`.
     /// Injectable so tests can pin the value.
-    private let nonceProvider: @Sendable () -> Data
-    private let pairingIdProvider: @Sendable () -> UUID
-    private let serviceName: String
-    private let clock: @Sendable () -> Date
-    private let supportedCodecs: [CodecKind]
+    let nonceProvider: @Sendable () -> Data
+    let pairingIdProvider: @Sendable () -> UUID
+    let serviceName: String
+    let clock: @Sendable () -> Date
+    let supportedCodecs: [CodecKind]
 
-    private var pendingToken: PairingToken?
-    private var pendingPairingId: UUID?
-    private var pendingPairingNonce: Data?
+    var pendingToken: PairingToken?
+    var pendingPairingId: UUID?
+    var pendingPairingNonce: Data?
     /// Snapshot of the most recently completed pairing's id. The router
     /// reads this between `completePairing` and `PairingCompleteAck` so
     /// the iOS peer can persist the matching `PairKey` under the right
     /// id without an extra round-trip.
-    private var lastCompletedPairingIdValue: UUID?
+    var lastCompletedPairingIdValue: UUID?
 
     public init(
         identity: DeviceIdentity,
@@ -90,14 +95,8 @@ public actor PairingService {
         return Data(bytes)
     }
 
-    public func negotiateCodec(remoteSupported: [CodecKind]) -> CodecKind {
-        CodecKind.negotiate(local: supportedCodecs, remote: remoteSupported)
-    }
-
     public func cancelPairing() {
-        pendingToken = nil
-        pendingPairingId = nil
-        pendingPairingNonce = nil
+        clearPendingState()
         lastCompletedPairingIdValue = nil
     }
 
@@ -108,69 +107,22 @@ public actor PairingService {
         signature: Data,
         kemPublicKey: Data = Data()
     ) async throws -> PairedDevice {
-        guard let pending = pendingToken else {
-            throw PairingError.noPendingInvitation
-        }
-        guard pending.value == token else {
-            throw PairingError.tokenMismatch
-        }
-        guard pending.isValid(asOf: clock()) else {
-            pendingToken = nil
-            pendingPairingId = nil
-            pendingPairingNonce = nil
-            throw PairingError.tokenExpired
-        }
-        let challenge = Self.challenge(token: token, devicePublicKey: devicePublicKey)
-        let valid = try DeviceSignature.verify(
-            signature: signature,
-            message: challenge,
-            publicKey: devicePublicKey
-        )
-        guard valid else {
-            throw PairingError.signatureInvalid
-        }
+        try validatePending(token: token)
+        try verifyChallengeSignature(token: token, publicKey: devicePublicKey, signature: signature)
         if let existing = try await activeDevice(matchingPublicKey: devicePublicKey) {
-            throw PairingError.alreadyPaired(deviceId: existing.id)
+            // Idempotent re-pair on matching publicKey. See `notes/M4` —
+            // typically iOS after an app reinstall / "forget Mac" tap;
+            // returning `existing` lets iOS rebuild its mirror without
+            // forcing the user to revoke from Mac Settings first.
+            clearPendingState()
+            lastCompletedPairingIdValue = existing.pairingId
+            return existing
         }
-        // PR8 — populate the two PR8 identity-domain fields at pair time:
-        //   * `cloudSourceDeviceId` is the public-key-derived UUID the
-        //     iPhone uses on every CloudKit envelope it sends. Writing it
-        //     here gives `TrustedSourceGate` an O(1) reverse-map for
-        //     trusted-source classification on the agent side; the field
-        //     is then immutable for the lifetime of the pairing because
-        //     `publicKey` itself is immutable.
-        //   * `pairingId` mirrors the id used in the corresponding
-        //     `PairKey` entry, so the router can address the right
-        //     symmetric key without an extra lookup. `negotiatedCodec`
-        //     stays at the conservative `.json` default until
-        //     `recordNegotiation` writes back the agreed codec on the
-        //     same pairing path.
-        let device = PairedDevice(
-            nickname: nickname,
-            publicKey: devicePublicKey,
-            pairedAt: clock(),
-            pairingId: pendingPairingId,
-            cloudSourceDeviceId: DeviceIdentity.deriveDeviceId(from: devicePublicKey)
-        )
+        let device = makeFreshPairedDevice(nickname: nickname, devicePublicKey: devicePublicKey)
         try await store.add(device)
-        // PR7 — derive + persist the pair key. Skipped silently when the
-        // iOS peer is on a legacy build that didn't send `kemPublicKey`,
-        // so existing pair flows keep working until both sides upgrade.
+        try await deriveAndSavePairKeyIfNeeded(kemPublicKey: kemPublicKey)
         let completedPairingId = pendingPairingId
-        if !kemPublicKey.isEmpty,
-           let pairingId = pendingPairingId,
-           let nonce = pendingPairingNonce {
-            let pairKey = try PairKeyDerivation.derive(
-                localIdentity: identity,
-                peerKEMPublic: kemPublicKey,
-                pairingNonce: nonce,
-                pairingId: pairingId
-            )
-            try await pairKeyStore.save(pairKey)
-        }
-        pendingToken = nil
-        pendingPairingId = nil
-        pendingPairingNonce = nil
+        clearPendingState()
         lastCompletedPairingIdValue = completedPairingId
         return device
     }
@@ -183,109 +135,91 @@ public actor PairingService {
         lastCompletedPairingIdValue
     }
 
-    /// Test / harness diagnostic surface — reads the persisted PairKey
-    /// so callers can verify both sides arrived at the same secret. Not
-    /// invoked from any production transport in PR7.
-    public func storedPairKey(forPairing id: UUID) async throws -> PairKey? {
-        try await pairKeyStore.key(forPairing: id)
-    }
-
-    /// PR8 — persists the codec the two peers agreed on during the pair
-    /// handshake plus the `pairingId` that addresses the symmetric
-    /// `PairKey`. Called by the router immediately after `pairComplete`
-    /// is queued; both fields are then available to a fresh main-app
-    /// process (e.g. one woken by the agent over XPC) without re-running
-    /// the handshake.
-    ///
-    /// `pairedDeviceId` is the paired-device store's primary key —
-    /// the UUID owned by the `PairedDevice.id` domain, **not** the
-    /// public-key-derived `cloudSourceDeviceId`. The two domains are
-    /// kept distinct so the router's `channels[channelId]` map (keyed
-    /// on `cloudSourceDeviceId`) can never accidentally collide with
-    /// the store's `update(_:)` API (keyed on `id`). See PR8 §3.4.
-    public func recordNegotiation(
-        pairedDeviceId: UUID,
-        negotiatedCodec: CodecKind,
-        pairingId: UUID
-    ) async throws {
-        var devices = try await store.load()
-        guard let index = devices.firstIndex(where: { $0.id == pairedDeviceId }) else {
-            throw PairedDeviceStoreError.notFound(id: pairedDeviceId)
-        }
-        devices[index].negotiatedCodec = negotiatedCodec
-        devices[index].pairingId = pairingId
-        try await store.update(devices[index])
-    }
-
-    public func revoke(deviceId: UUID) async throws {
-        var devices = try await store.load()
-        guard let index = devices.firstIndex(where: { $0.id == deviceId }) else {
-            throw PairedDeviceStoreError.notFound(id: deviceId)
-        }
-        // PR9 — re-revoking a device must not overwrite the original
-        // `revokedAt`. UI races (double-tap, queued action) and the
-        // upcoming `revokeAll` flow can both land here for an entry
-        // that's already inactive; preserving the first revocation
-        // timestamp keeps the audit trail meaningful.
-        if devices[index].revokedAt != nil { return }
-        devices[index].revokedAt = clock()
-        try await store.update(devices[index])
-    }
-
-    /// PR9 — marks every active device as revoked at `clock()`. Returns
-    /// the ids that were successfully revoked. Already-revoked entries
-    /// are silently skipped (they're not in the success list because
-    /// nothing changed). On per-device persistence failure the work
-    /// continues for the remaining ids and the failed ids are surfaced
-    /// via `PairingError.revokeAllFailed`.
-    public func revokeAll() async throws -> [UUID] {
-        let now = clock()
-        let devices = try await store.load()
-        var succeeded: [UUID] = []
-        var failed: [UUID] = []
-        for device in devices where device.isActive {
-            var copy = device
-            copy.revokedAt = now
-            do {
-                try await store.update(copy)
-                succeeded.append(device.id)
-            } catch {
-                failed.append(device.id)
-            }
-        }
-        if !failed.isEmpty {
-            throw PairingError.revokeAllFailed(failed: failed)
-        }
-        return succeeded
-    }
-
-    /// PR9 — drops every paired-device record from the store and resets
-    /// any in-flight pairing handshake state. Used by the resetPairings
-    /// flow in the harness; after `purgeAllPairings` returns, no past
-    /// pairing — active or revoked — survives. Identity, pair keys, and
-    /// audit log are out of scope here (cleared elsewhere).
-    public func purgeAllPairings() async throws {
-        try await store.removeAll()
-        pendingToken = nil
-        pendingPairingId = nil
-        pendingPairingNonce = nil
-        lastCompletedPairingIdValue = nil
-    }
-
-    public func listPairedDevices() async throws -> [PairedDevice] {
-        try await store.load()
-    }
-
-    public func isPaired(publicKey: Data) async throws -> Bool {
-        try await activeDevice(matchingPublicKey: publicKey) != nil
-    }
-
     public static func challenge(token: String, devicePublicKey: Data) -> Data {
         Data(token.utf8) + devicePublicKey
     }
 
-    private func activeDevice(matchingPublicKey publicKey: Data) async throws -> PairedDevice? {
+    func activeDevice(matchingPublicKey publicKey: Data) async throws -> PairedDevice? {
         let devices = try await store.load()
         return devices.first { $0.isActive && $0.publicKey == publicKey }
+    }
+
+    /// Single point of mutation for the in-flight pair handshake state. Used
+    /// by every terminal path of `completePairing` plus `cancelPairing` /
+    /// `purgeAllPairings`, so a future field added to the pending set only
+    /// needs to be reset here once.
+    func clearPendingState() {
+        pendingToken = nil
+        pendingPairingId = nil
+        pendingPairingNonce = nil
+    }
+
+    /// First half of `completePairing`'s precondition check. Verifies
+    /// there is a pending invitation, the token matches it, and the
+    /// invitation hasn't expired. Throws the same typed errors the
+    /// inline code used to throw so callers see no observable change.
+    private func validatePending(token: String) throws {
+        guard let pending = pendingToken else {
+            throw PairingError.noPendingInvitation
+        }
+        guard pending.value == token else {
+            throw PairingError.tokenMismatch
+        }
+        guard pending.isValid(asOf: clock()) else {
+            clearPendingState()
+            throw PairingError.tokenExpired
+        }
+    }
+
+    /// Second half of `completePairing`'s precondition check. Recomputes
+    /// the canonical challenge bytes and verifies the iOS signature
+    /// matches the device public key.
+    private func verifyChallengeSignature(
+        token: String,
+        publicKey: Data,
+        signature: Data
+    ) throws {
+        let challenge = Self.challenge(token: token, devicePublicKey: publicKey)
+        let valid = try DeviceSignature.verify(
+            signature: signature,
+            message: challenge,
+            publicKey: publicKey
+        )
+        guard valid else {
+            throw PairingError.signatureInvalid
+        }
+    }
+
+    /// Builds the fresh `PairedDevice` for the no-existing-match branch.
+    /// PR8 populates `cloudSourceDeviceId` and `pairingId` here so the
+    /// trusted-source gate has an O(1) reverse map and the router can
+    /// address the right symmetric key without an extra lookup.
+    private func makeFreshPairedDevice(nickname: String, devicePublicKey: Data) -> PairedDevice {
+        PairedDevice(
+            nickname: nickname,
+            publicKey: devicePublicKey,
+            pairedAt: clock(),
+            pairingId: pendingPairingId,
+            cloudSourceDeviceId: DeviceIdentity.deriveDeviceId(from: devicePublicKey)
+        )
+    }
+
+    /// PR7 — derives + persists the symmetric pair key when the iOS
+    /// peer sent KEM material. Skipped silently for legacy iOS builds
+    /// without `kemPublicKey`, so the existing pair flow keeps working
+    /// until both sides upgrade.
+    private func deriveAndSavePairKeyIfNeeded(kemPublicKey: Data) async throws {
+        guard
+            !kemPublicKey.isEmpty,
+            let pairingId = pendingPairingId,
+            let nonce = pendingPairingNonce
+        else { return }
+        let pairKey = try PairKeyDerivation.derive(
+            localIdentity: identity,
+            peerKEMPublic: kemPublicKey,
+            pairingNonce: nonce,
+            pairingId: pairingId
+        )
+        try await pairKeyStore.save(pairKey)
     }
 }

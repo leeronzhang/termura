@@ -4,6 +4,7 @@ set -euo pipefail
 
 MODE="repo"
 STRICT_TOOLS=0
+INCLUDE_PRIVATE=0
 
 for arg in "$@"; do
     case "$arg" in
@@ -13,9 +14,12 @@ for arg in "$@"; do
         --ci)
             STRICT_TOOLS=1
             ;;
+        --include-private)
+            INCLUDE_PRIVATE=1
+            ;;
         *)
             echo "Unknown argument: $arg" >&2
-            echo "Usage: $0 [--staged] [--ci]" >&2
+            echo "Usage: $0 [--staged] [--ci] [--include-private]" >&2
             exit 2
             ;;
     esac
@@ -23,6 +27,58 @@ done
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
+
+# When the private termura-harness sibling exists alongside this repo and the
+# caller explicitly asked for it (or invoked us via the harness wrapper), we
+# scan both repos under the same gate. Private path resolution is relative to
+# the public repo's cwd so a single config tree drives both. Public-only checks
+# (xcstrings catalog, project.yml ↔ pbxproj sync, layer deps tied to Termura
+# Session/Output/Input) are not duplicated for private — those concepts don't
+# exist there.
+HARNESS_ROOT=""
+if [[ $INCLUDE_PRIVATE -eq 1 ]]; then
+    if [[ ! -d "$REPO_ROOT/../termura-harness" ]]; then
+        echo "FAIL: --include-private requested but ../termura-harness sibling missing" >&2
+        exit 1
+    fi
+    HARNESS_ROOT="$(cd "$REPO_ROOT/../termura-harness" && pwd)"
+fi
+
+# Source roots passed to multi-root helpers. Public roots first so violation
+# output stays grouped sensibly when the same helper runs across both repos.
+PUBLIC_TERMURA_ROOT="Sources/Termura"
+PUBLIC_PACKAGE_ROOTS=()
+if [[ -d Packages ]]; then
+    while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] || continue
+        PUBLIC_PACKAGE_ROOTS+=("$pkg")
+    done < <(find Packages -mindepth 2 -maxdepth 2 -type d -name "Sources" 2>/dev/null | sort)
+fi
+
+PRIVATE_TERMURA_LIKE_ROOTS=()
+PRIVATE_VIEW_ROOTS=()
+PRIVATE_BARE_DATE_ROOTS=()
+PRIVATE_SOURCE_ROOTS=()
+if [[ -n "$HARNESS_ROOT" ]]; then
+    if [[ -d "$HARNESS_ROOT/Sources" ]]; then
+        PRIVATE_SOURCE_ROOTS+=("$HARNESS_ROOT/Sources")
+        PRIVATE_TERMURA_LIKE_ROOTS+=("$HARNESS_ROOT/Sources")
+        PRIVATE_BARE_DATE_ROOTS+=("$HARNESS_ROOT/Sources")
+    fi
+    if [[ -d "$HARNESS_ROOT/iOS/TermuraRemote" ]]; then
+        PRIVATE_SOURCE_ROOTS+=("$HARNESS_ROOT/iOS/TermuraRemote")
+        PRIVATE_TERMURA_LIKE_ROOTS+=("$HARNESS_ROOT/iOS/TermuraRemote")
+        PRIVATE_BARE_DATE_ROOTS+=("$HARNESS_ROOT/iOS/TermuraRemote")
+        if [[ -d "$HARNESS_ROOT/iOS/TermuraRemote/Features" ]]; then
+            PRIVATE_VIEW_ROOTS+=("$HARNESS_ROOT/iOS/TermuraRemote/Features")
+        fi
+    fi
+    if [[ -d "$HARNESS_ROOT/LaunchAgent/Sources" ]]; then
+        PRIVATE_SOURCE_ROOTS+=("$HARNESS_ROOT/LaunchAgent/Sources")
+        PRIVATE_TERMURA_LIKE_ROOTS+=("$HARNESS_ROOT/LaunchAgent/Sources")
+        PRIVATE_BARE_DATE_ROOTS+=("$HARNESS_ROOT/LaunchAgent/Sources")
+    fi
+fi
 
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -33,6 +89,11 @@ ERRORS=0
 WARNINGS=0
 
 echo "Termura Quality Gate"
+if [[ -n "$HARNESS_ROOT" ]]; then
+    echo "  scope: public + private (termura-harness)"
+else
+    echo "  scope: public only"
+fi
 echo "======================================"
 
 have_tool() {
@@ -92,12 +153,33 @@ run_required_tool() {
     return 1
 }
 
-staged_or_repo_swift_files() {
+# Resolve which Swift files this run targets. Layout matches the multi-root
+# scope: when private is included we add the harness sources to the staged /
+# repo file list so SwiftLint and SwiftFormat see both halves.
+collect_swift_files_for_root() {
+    local root="$1"
+    local root_pattern_relative="${root#"$REPO_ROOT/"}"
     if [[ "$MODE" == "staged" ]]; then
-        git diff --cached --name-only --diff-filter=ACMR \
-            | grep -E '^Sources/.*\.swift$' || true
+        # Staged-file paths from `git diff --cached` are relative to whichever
+        # repo holds the staged commit. From the public repo we ask for files
+        # under the absolute root; from private repos the harness wrapper
+        # invokes us with a separate gate so this branch only ever hits public
+        # staged paths anyway.
+        if [[ "$root" == "$REPO_ROOT/$PUBLIC_TERMURA_ROOT" || "$root" == "$REPO_ROOT/Sources" ]]; then
+            git diff --cached --name-only --diff-filter=ACMR \
+                | grep -E '^Sources/.*\.swift$' || true
+            return
+        fi
+        if [[ "$root" == "$REPO_ROOT/Packages"* ]]; then
+            git diff --cached --name-only --diff-filter=ACMR \
+                | grep -E "^${root_pattern_relative}/.*\.swift$" || true
+            return
+        fi
+        # Private roots in staged mode: scan all swift files under the root,
+        # since the hook is triggered by the private repo's own staged set.
+        find "$root" -name "*.swift" -type f
     else
-        find Sources -name "*.swift" -type f | sort
+        find "$root" -name "*.swift" -type f
     fi
 }
 
@@ -121,21 +203,46 @@ ci_changed_swift_files() {
     fi
 }
 
-collect_swift_files() {
-    if [[ "$MODE" == "staged" ]]; then
-        staged_or_repo_swift_files
-    elif [[ $STRICT_TOOLS -eq 1 ]]; then
-        ci_changed_swift_files
-    else
-        staged_or_repo_swift_files
-    fi
-}
-
 SWIFT_FILES=()
-while IFS= read -r swift_file; do
-    [[ -n "$swift_file" ]] || continue
-    SWIFT_FILES+=("$swift_file")
-done < <(collect_swift_files)
+PUBLIC_SOURCE_ROOTS_ABS=("$REPO_ROOT/Sources")
+if [[ ${#PUBLIC_PACKAGE_ROOTS[@]} -gt 0 ]]; then
+    for pkg in "${PUBLIC_PACKAGE_ROOTS[@]}"; do
+        PUBLIC_SOURCE_ROOTS_ABS+=("$REPO_ROOT/$pkg")
+    done
+fi
+
+if [[ "$MODE" == "staged" ]]; then
+    while IFS= read -r f; do
+        [[ -n "$f" ]] || continue
+        SWIFT_FILES+=("$f")
+    done < <(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.swift$' || true)
+elif [[ $STRICT_TOOLS -eq 1 ]]; then
+    while IFS= read -r f; do
+        [[ -n "$f" ]] || continue
+        SWIFT_FILES+=("$f")
+    done < <(ci_changed_swift_files)
+else
+    for root in "${PUBLIC_SOURCE_ROOTS_ABS[@]}"; do
+        [[ -d "$root" ]] || continue
+        while IFS= read -r f; do
+            [[ -n "$f" ]] || continue
+            SWIFT_FILES+=("$f")
+        done < <(find "$root" -name "*.swift" -type f | sort)
+    done
+fi
+
+# Add private files to the lint set when --include-private is on. In staged
+# mode the public hook only sees public staged paths so we leave private out;
+# the private repo's own hook drives that pass via its wrapper.
+if [[ -n "$HARNESS_ROOT" && "$MODE" != "staged" ]]; then
+    for root in "${PRIVATE_SOURCE_ROOTS[@]}"; do
+        [[ -d "$root" ]] || continue
+        while IFS= read -r f; do
+            [[ -n "$f" ]] || continue
+            SWIFT_FILES+=("$f")
+        done < <(find "$root" -name "*.swift" -type f | sort)
+    done
+fi
 
 staged_or_repo_source_files() {
     if [[ "$MODE" == "staged" ]]; then
@@ -143,6 +250,12 @@ staged_or_repo_source_files() {
             | grep -E '\.(swift|sh|m|h)$' || true
     else
         find Sources scripts -type f \( -name "*.swift" -o -name "*.sh" -o -name "*.m" -o -name "*.h" \) | sort
+        if [[ -n "$HARNESS_ROOT" ]]; then
+            for root in "${PRIVATE_SOURCE_ROOTS[@]}"; do
+                [[ -d "$root" ]] || continue
+                find "$root" -type f \( -name "*.swift" -o -name "*.m" -o -name "*.h" \) | sort
+            done
+        fi
     fi
 }
 
@@ -151,7 +264,8 @@ if run_required_tool "swiftlint" "brew install swiftlint"; then
     SWIFTLINT_CACHE_PATH="${TMPDIR:-/tmp}/termura-swiftlint.cache"
     if [[ ${#SWIFT_FILES[@]} -eq 0 ]]; then
         echo -e "${GREEN}OK: No Swift source changes to lint${NC}"
-    elif ! swiftlint lint --strict --quiet --cache-path "$SWIFTLINT_CACHE_PATH" "${SWIFT_FILES[@]}"; then
+    elif ! swiftlint lint --strict --quiet --cache-path "$SWIFTLINT_CACHE_PATH" \
+        --config "$REPO_ROOT/.swiftlint.yml" "${SWIFT_FILES[@]}"; then
         echo -e "${RED}FAIL: SwiftLint errors detected.${NC}"
         record_failure
     else
@@ -163,7 +277,7 @@ echo "-> SwiftFormat check..."
 if run_required_tool "swiftformat" "brew install swiftformat"; then
     if [[ ${#SWIFT_FILES[@]} -eq 0 ]]; then
         echo -e "${GREEN}OK: No Swift source changes to format-check${NC}"
-    elif ! swiftformat --lint --quiet "${SWIFT_FILES[@]}"; then
+    elif ! swiftformat --lint --quiet --config "$REPO_ROOT/.swiftformat" "${SWIFT_FILES[@]}"; then
         echo -e "${RED}FAIL: SwiftFormat violations detected.${NC}"
         record_failure
     else
@@ -173,25 +287,78 @@ fi
 
 echo "Fast Gate"
 echo "--------------------------------------"
-run_gate_check "Suppression check" bash scripts/check-suppressions.sh
-run_gate_check "Redundant import check" bash scripts/check-redundant-imports.sh Sources/Termura
+run_gate_check "Suppression check" bash scripts/check-suppressions.sh "$REPO_ROOT/Sources/Termura"
+if [[ -n "$HARNESS_ROOT" ]]; then
+    for root in "${PRIVATE_TERMURA_LIKE_ROOTS[@]}"; do
+        run_gate_check "Suppression check (${root#"$HARNESS_ROOT/"})" \
+            bash scripts/check-suppressions.sh "$root"
+    done
+fi
+
+run_gate_check "Redundant import check (Sources/Termura)" \
+    bash scripts/check-redundant-imports.sh Sources/Termura
+if [[ -n "$HARNESS_ROOT" ]]; then
+    for root in "${PRIVATE_TERMURA_LIKE_ROOTS[@]}"; do
+        run_gate_check "Redundant import check (${root#"$HARNESS_ROOT/"})" \
+            bash scripts/check-redundant-imports.sh "$root"
+    done
+fi
+
 run_gate_check "Hardcoded AppKit string check" bash scripts/check-hardcoded-strings.sh Sources/Termura
+# AppKit strings only appear in macOS surfaces; private-repo equivalents on
+# the Mac side live under Sources/ and follow the same rule. iOS UI uses
+# SwiftUI primitives that don't trigger this scanner so the same regex is safe.
+if [[ -n "$HARNESS_ROOT" && -d "$HARNESS_ROOT/Sources" ]]; then
+    run_gate_check "Hardcoded AppKit string check (harness Sources)" \
+        bash scripts/check-hardcoded-strings.sh "$HARNESS_ROOT/Sources"
+fi
+
 run_gate_check "xcstrings coverage check" bash scripts/check-xcstrings-coverage.sh
-run_gate_check "TextEditor accessibility check" bash scripts/check-texteditor-accessibility.sh Sources/Termura/Views
+
+run_gate_check "TextEditor accessibility check" \
+    bash scripts/check-texteditor-accessibility.sh Sources/Termura/Views
+
 run_gate_check "Bare Date() check" bash scripts/check-bare-date.sh
+if [[ -n "$HARNESS_ROOT" ]]; then
+    for root in "${PRIVATE_BARE_DATE_ROOTS[@]}"; do
+        run_gate_check "Bare Date() check (${root#"$HARNESS_ROOT/"})" \
+            bash scripts/check-bare-date.sh "$root"
+    done
+fi
+
 run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
 run_gate_check "Version sync check" bash scripts/check-version-sync.sh
 
 echo "-> Forbidden Swift pattern checks..."
-if ! FORBIDDEN_OUTPUT="$(python3 - "$MODE" <<'PYEOF'
+# Pre-build the list of paths the inline Python should scan. We pass them via
+# argv so the heredoc stays self-contained; the script falls back to the
+# legacy single-root behaviour when nothing is passed.
+FORBIDDEN_ROOTS=()
+if [[ "$MODE" != "staged" ]]; then
+    FORBIDDEN_ROOTS+=("$REPO_ROOT/Sources")
+    if [[ -n "$HARNESS_ROOT" && ${#PRIVATE_SOURCE_ROOTS[@]} -gt 0 ]]; then
+        for root in "${PRIVATE_SOURCE_ROOTS[@]}"; do
+            FORBIDDEN_ROOTS+=("$root")
+        done
+    fi
+fi
+FORBIDDEN_ARGS=("$MODE")
+if [[ ${#FORBIDDEN_ROOTS[@]} -gt 0 ]]; then
+    FORBIDDEN_ARGS+=("${FORBIDDEN_ROOTS[@]}")
+fi
+if ! FORBIDDEN_OUTPUT="$(python3 - "${FORBIDDEN_ARGS[@]}" <<'PYEOF'
 import pathlib
 import re
 import subprocess
 import sys
 
 mode = sys.argv[1]
-root = pathlib.Path.cwd()
+roots = [pathlib.Path(p) for p in sys.argv[2:]]
+cwd = pathlib.Path.cwd()
 
+# `\btry\?` matches `try?` regardless of the next character. The previous
+# regex `\btry\?\b` required a word boundary after `?`, which fails for the
+# common `try? expr` form (space is non-word, so no boundary). Bug fixed.
 checks = [
     ("force unwrap / try! / as!", [
         re.compile(r"\btry!"),
@@ -199,7 +366,7 @@ checks = [
         re.compile(r"=\s*!\s*$"),
     ]),
     ("fatalError in production code", [re.compile(r"\bfatalError\s*\(")]),
-    ("try? error swallowing", [re.compile(r"\btry\?\b")]),
+    ("try? error swallowing", [re.compile(r"\btry\?")]),
     ("legacy DispatchQueue API", [
         re.compile(r"DispatchQueue\.main\.async\b"),
         re.compile(r"DispatchQueue\.main\.asyncAfter\b"),
@@ -218,16 +385,26 @@ def list_files() -> list[pathlib.Path]:
         files = []
         for rel in proc.stdout.splitlines():
             if rel.startswith("Sources/") and rel.endswith(".swift"):
-                path = root / rel
+                path = cwd / rel
                 if path.exists():
                     files.append(path)
         return files
-    return sorted((root / "Sources").rglob("*.swift"))
+    if not roots:
+        return sorted((cwd / "Sources").rglob("*.swift"))
+    files: list[pathlib.Path] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        files.extend(sorted(root.rglob("*.swift")))
+    return files
 
 violations: list[str] = []
 
 for path in list_files():
-    rel = path.relative_to(root)
+    try:
+        rel = path.relative_to(cwd)
+    except ValueError:
+        rel = path
     with path.open(encoding="utf-8") as fh:
         for lineno, line in enumerate(fh, start=1):
             stripped = line.strip()
@@ -262,15 +439,43 @@ echo ""
 echo "Design Gate"
 echo "--------------------------------------"
 if [[ "$MODE" == "staged" ]]; then
-    run_gate_check "Legacy Mock placement audit" bash scripts/mock-guard-audit.sh --staged
+    run_gate_check "Legacy Mock placement audit" bash scripts/mock-guard-audit.sh --staged Sources/Termura
     run_gate_check "File-size budget check" bash scripts/check-file-size.sh --staged Sources/Termura
     run_gate_check "View/ViewModel global access advisory" bash scripts/check-view-global-access.sh --staged
     run_gate_check "Background task ownership advisory" bash scripts/check-task-ownership.sh --staged Sources/Termura
 else
-    run_gate_check "Legacy Mock placement audit" bash scripts/mock-guard-audit.sh
-    run_gate_check "File-size budget check" bash scripts/check-file-size.sh Sources/Termura
-    run_gate_check "View/ViewModel global access advisory" bash scripts/check-view-global-access.sh
-    run_gate_check "Background task ownership advisory" bash scripts/check-task-ownership.sh Sources/Termura
+    run_gate_check "Legacy Mock placement audit (Sources/Termura)" \
+        bash scripts/mock-guard-audit.sh Sources/Termura
+    if [[ -n "$HARNESS_ROOT" ]]; then
+        for root in "${PRIVATE_TERMURA_LIKE_ROOTS[@]}"; do
+            run_gate_check "Legacy Mock placement audit (${root#"$HARNESS_ROOT/"})" \
+                bash scripts/mock-guard-audit.sh "$root"
+        done
+    fi
+    run_gate_check "File-size budget check (Sources/Termura)" \
+        bash scripts/check-file-size.sh Sources/Termura
+    if [[ -n "$HARNESS_ROOT" ]]; then
+        for root in "${PRIVATE_TERMURA_LIKE_ROOTS[@]}"; do
+            run_gate_check "File-size budget check (${root#"$HARNESS_ROOT/"})" \
+                bash scripts/check-file-size.sh "$root"
+        done
+    fi
+    run_gate_check "View/ViewModel global access advisory" \
+        bash scripts/check-view-global-access.sh
+    if [[ -n "$HARNESS_ROOT" ]]; then
+        for root in "${PRIVATE_VIEW_ROOTS[@]}"; do
+            run_gate_check "View/ViewModel global access advisory (${root#"$HARNESS_ROOT/"})" \
+                bash scripts/check-view-global-access.sh "$root"
+        done
+    fi
+    run_gate_check "Background task ownership advisory (Sources/Termura)" \
+        bash scripts/check-task-ownership.sh Sources/Termura
+    if [[ -n "$HARNESS_ROOT" ]]; then
+        for root in "${PRIVATE_TERMURA_LIKE_ROOTS[@]}"; do
+            run_gate_check "Background task ownership advisory (${root#"$HARNESS_ROOT/"})" \
+                bash scripts/check-task-ownership.sh "$root"
+        done
+    fi
 fi
 
 echo "-> Harness private file leak check..."

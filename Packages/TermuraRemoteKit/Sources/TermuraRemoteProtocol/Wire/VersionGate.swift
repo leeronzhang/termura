@@ -18,15 +18,15 @@ public struct VersionGate: Sendable {
     public func check(_ envelope: Envelope) -> RemoteError? {
         switch negotiator.evaluate(remote: envelope.version) {
         case .compatible:
-            return nil
+            nil
         case let .remoteTooOld(minimumRequired):
-            return RemoteError(
+            RemoteError(
                 code: .protocolVersionTooOld,
                 message: "Remote protocol \(envelope.version) is older than minimum \(minimumRequired)",
                 relatedId: envelope.id
             )
         case let .remoteTooNew(maximumSupported):
-            return RemoteError(
+            RemoteError(
                 code: .protocolVersionTooNew,
                 message: "Remote protocol \(envelope.version) is newer than maximum supported \(maximumSupported)",
                 relatedId: envelope.id

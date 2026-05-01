@@ -13,7 +13,7 @@ import MessagePack
 public struct MessagePackRemoteCodec: RemoteCodec {
     public init() {}
 
-    public func encode<T: Encodable>(_ value: T) throws -> Data {
+    public func encode(_ value: some Encodable) throws -> Data {
         try MessagePackEncoder().encode(value)
     }
 

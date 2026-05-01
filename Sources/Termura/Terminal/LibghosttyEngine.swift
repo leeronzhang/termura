@@ -165,6 +165,14 @@ final class LibghosttyEngine: TerminalEngine {
         return lines.last { !$0.allSatisfy(\.isWhitespace) }.map(String.init)
     }
 
+    func readVisibleScreen() -> TerminalScreenSnapshot? {
+        guard let surface = ghosttyView.surface else { return nil }
+        let size = ghostty_surface_size(surface)
+        let lines = ghosttyView.readVisibleText()
+            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        return TerminalScreenSnapshot(rows: Int(size.rows), cols: Int(size.columns), lines: lines)
+    }
+
     func linesNearCursor(above count: Int) -> [String] {
         let all = ghosttyView.readVisibleText().split(separator: "\n", omittingEmptySubsequences: false)
         guard !all.isEmpty else { return [] }

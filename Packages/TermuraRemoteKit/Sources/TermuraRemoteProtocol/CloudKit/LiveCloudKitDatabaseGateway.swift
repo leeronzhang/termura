@@ -27,7 +27,7 @@ public actor LiveCloudKitDatabaseGateway: CloudKitDatabaseGateway {
         codec: any RemoteCodec = JSONRemoteCodec()
     ) {
         let container = CKContainer(identifier: containerIdentifier)
-        self.database = container.privateCloudDatabase
+        database = container.privateCloudDatabase
         self.codec = codec
     }
 
@@ -199,10 +199,10 @@ public actor LiveCloudKitDatabaseGateway: CloudKitDatabaseGateway {
         let cipherData = ckRecord[CloudKitSchema.Field.cipher] as? Data
         let envelopeData = ckRecord[CloudKitSchema.Field.envelope] as? Data
         switch (cipherData, envelopeData) {
-        case (.some(let bytes), .none):
+        case let (.some(bytes), .none):
             let blob = try codec.decode(CipherBlob.self, from: bytes)
             return .cipher(blob)
-        case (.none, .some(let bytes)):
+        case let (.none, .some(bytes)):
             let envelope = try codec.decode(Envelope.self, from: bytes)
             return .plaintext(envelope)
         case (.some, .some):

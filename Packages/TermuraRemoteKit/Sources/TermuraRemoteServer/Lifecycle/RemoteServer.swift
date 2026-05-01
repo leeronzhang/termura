@@ -11,7 +11,7 @@ public actor RemoteServer {
 
     private let transports: [any RemoteTransport]
     private let handler: any EnvelopeHandler
-    private(set) public var state: State = .stopped
+    public private(set) var state: State = .stopped
 
     public init(transports: [any RemoteTransport], handler: any EnvelopeHandler) {
         self.transports = transports
@@ -45,7 +45,7 @@ public actor RemoteServer {
     }
 
     public func transportNames() -> [String] {
-        transports.map { $0.name }
+        transports.map(\.name)
     }
 
     private func rollbackStart() async {

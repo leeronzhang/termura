@@ -16,8 +16,8 @@ public enum ConnectionPhase: Sendable, Equatable {
 
     public var codec: CodecKind {
         switch self {
-        case .handshake: return .json
-        case let .active(kind): return kind
+        case .handshake: .json
+        case let .active(kind): kind
         }
     }
 
@@ -29,13 +29,19 @@ public enum ConnectionPhase: Sendable, Equatable {
 
 /// Allowed envelope kinds during the handshake phase. Any other kind on a
 /// `.handshake` connection is a `RemoteError.handshakeViolation`.
+///
+/// `.rejoin` / `.rejoinAck` are allowed so an already-paired client can
+/// resume a session on a fresh transport channel without re-running the
+/// invitation-bound `pairInit` flow. The server validates the rejoin's
+/// signature against the persisted paired-device record before flipping
+/// the channel to `.active`.
 public extension Envelope.Kind {
     var isAllowedDuringHandshake: Bool {
         switch self {
-        case .pairInit, .pairComplete, .ping, .pong, .error:
-            return true
+        case .pairInit, .pairComplete, .rejoin, .rejoinAck, .ping, .pong, .error:
+            true
         default:
-            return false
+            false
         }
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 public protocol RemoteCodec: Sendable {
-    func encode<T: Encodable>(_ value: T) throws -> Data
+    func encode(_ value: some Encodable) throws -> Data
     func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T
 }
 
@@ -16,7 +16,7 @@ public struct JSONRemoteCodec: RemoteCodec {
             var container = encoder.singleValueContainer()
             try container.encode(ISO8601Codec.string(from: date))
         }
-        self.encoder = enc
+        encoder = enc
 
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .custom { decoder in
@@ -30,10 +30,10 @@ public struct JSONRemoteCodec: RemoteCodec {
             }
             return date
         }
-        self.decoder = dec
+        decoder = dec
     }
 
-    public func encode<T: Encodable>(_ value: T) throws -> Data {
+    public func encode(_ value: some Encodable) throws -> Data {
         try encoder.encode(value)
     }
 

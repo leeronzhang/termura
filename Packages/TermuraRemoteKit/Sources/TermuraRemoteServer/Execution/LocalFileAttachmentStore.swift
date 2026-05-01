@@ -63,8 +63,8 @@ public actor LocalFileAttachmentStore: AttachmentStore {
     }
 
     public init(rootURL: URL) {
-        self.configuration = Configuration(rootURL: rootURL)
-        self.clock = { Date() }
+        configuration = Configuration(rootURL: rootURL)
+        clock = { Date() }
     }
 
     /// Creates the root directory and indexes any existing `<sha>.bin` files

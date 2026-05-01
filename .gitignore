@@ -45,6 +45,7 @@ scripts/*
 !scripts/diagnose-codesign.sh
 !scripts/pre-commit
 !scripts/quality-gate.sh
+!scripts/regen-all.sh
 !scripts/sync-version-from-xcode.sh
 project.yml
 .swiftlint.yml

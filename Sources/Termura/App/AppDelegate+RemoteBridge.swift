@@ -1,4 +1,5 @@
 import Foundation
+import TermuraRemoteProtocol
 
 // Closures captured by `LiveRemoteSessionsAdapter` resolve the active project
 // state through these helpers. They live in their own extension to keep
@@ -38,6 +39,20 @@ extension AppDelegate {
         Task { await controller.reinstallIfNeeded() }
     }
 
+    /// Fires `restoreIfEnabled()` from `applicationDidFinishLaunching` so
+    /// the harness server / router / broadcast subscription come back
+    /// online when the user previously turned remote control on. The
+    /// controller's contract is to no-op when `isEnabled == false`, so
+    /// the call is safe to fire unconditionally; the env-flag gate at
+    /// the call site keeps test/UI-test runs opted out alongside the
+    /// bridge start. Best-effort: a failure here surfaces in the
+    /// controller's `lastError` for the next time the user opens
+    /// Settings, but it must not block app launch.
+    @MainActor
+    static func restoreRemoteIntegration(controller: RemoteControlController) {
+        Task { await controller.restoreIfEnabled() }
+    }
+
     /// Builds the live adapter that bridges the active project's `SessionStore`
     /// to the harness router. The `changeStream` is the push-on-change seam
     /// fed by `SessionListBroadcaster` (which holds the paired Continuation);
@@ -56,7 +71,10 @@ extension AppDelegate {
             commandRunner: { [weak coordinator] line, sessionId in
                 try await Self.runRemoteCommand(coordinator: coordinator, line: line, sessionId: sessionId)
             },
-            changeStream: changeStream
+            changeStream: changeStream,
+            screenCapturer: { [weak coordinator] sessionId in
+                Self.captureRemoteScreen(coordinator: coordinator, sessionId: sessionId)
+            }
         )
     }
 
@@ -71,6 +89,29 @@ extension AppDelegate {
                 lastActivityAt: record.lastActiveAt
             )
         }
+    }
+
+    /// Snapshot the visible viewport of `sessionId` for the remote-screen
+    /// push pulse. Returns `nil` for unknown sessions, no active project,
+    /// or engines without a live surface — callers (the harness router's
+    /// per-subscription pulse) treat `nil` as "skip this tick" so the
+    /// stream resumes once the engine attaches.
+    @MainActor
+    static func captureRemoteScreen(
+        coordinator: ProjectCoordinator?,
+        sessionId: UUID
+    ) -> ScreenFramePayload? {
+        guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
+        let id = SessionID(rawValue: sessionId)
+        guard let engine = scope.engines.engine(for: id),
+              let snapshot = engine.readVisibleScreen()
+        else { return nil }
+        return ScreenFramePayload(
+            sessionId: sessionId,
+            rows: snapshot.rows,
+            cols: snapshot.cols,
+            lines: snapshot.lines
+        )
     }
 
     @MainActor
@@ -91,14 +132,16 @@ extension AppDelegate {
                 scope: context.sessionScope,
                 commandRouter: context.commandRouter
             )
-            if outcome.isSentinelMatched {
+            if outcome.chunkMatched {
                 return CommandRunResult(stdout: outcome.stdout, exitCode: outcome.exitCode)
             }
-            // Sentinel was not echoed back within the timeout (shells stripping
-            // OSC, non-interactive shells, vim/repl modes). Fall back to a
-            // user-facing notice so the remote client still sees progress.
-            let fallback = "Command dispatched, but PTY output capture timed out. " +
-                "Check the Mac terminal for live output."
+            // No chunk completed inside the window — typical for REPLs
+            // (Claude Code, IRB) and bare shells without OSC 133;D
+            // integration. iOS sees the actual terminal content via the
+            // live `screenFrame` push (Phase C); this fallback string is
+            // a hint surfaced in the cmdAck stdout for clients without
+            // live-screen rendering.
+            let fallback = "Command dispatched. See the Mac terminal screen for live output."
             return CommandRunResult(stdout: fallback, exitCode: outcome.exitCode)
         } catch PTYCommandBridge.Failure.sessionNotFound {
             throw RemoteAdapterError.sessionNotFound

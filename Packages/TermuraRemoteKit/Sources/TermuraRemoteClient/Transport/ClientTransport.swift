@@ -25,15 +25,15 @@ public enum ClientTransportError: Error, Sendable, Equatable, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .notConnected:
-            return "Transport is not connected."
+            "Transport is not connected."
         case let .connectFailure(reason):
-            return "Connect failed: \(reason)"
+            "Connect failed: \(reason)"
         case let .sendFailure(reason):
-            return "Send failed: \(reason)"
+            "Send failed: \(reason)"
         case let .receiveFailure(reason):
-            return "Receive failed: \(reason)"
+            "Receive failed: \(reason)"
         case let .decodeFailure(reason):
-            return "Decode failed: \(reason)"
+            "Decode failed: \(reason)"
         }
     }
 }

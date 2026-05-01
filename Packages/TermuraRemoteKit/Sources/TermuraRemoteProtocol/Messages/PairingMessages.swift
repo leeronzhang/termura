@@ -51,15 +51,15 @@ public struct PairingInvitation: Sendable, Codable, Equatable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
-        self.token = try container.decode(String.self, forKey: .token)
-        self.macPublicKey = try container.decode(Data.self, forKey: .macPublicKey)
-        self.serviceName = try container.decode(String.self, forKey: .serviceName)
-        self.expiresAt = try container.decode(Date.self, forKey: .expiresAt)
-        self.supportedCodecs = try container.decodeIfPresent([CodecKind].self, forKey: .supportedCodecs) ?? [.json]
-        self.kemPublicKey = try container.decodeIfPresent(Data.self, forKey: .kemPublicKey) ?? Data()
-        self.pairingNonce = try container.decodeIfPresent(Data.self, forKey: .pairingNonce) ?? Data()
-        self.pairingId = try container.decodeIfPresent(UUID.self, forKey: .pairingId) ?? UUID()
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        token = try container.decode(String.self, forKey: .token)
+        macPublicKey = try container.decode(Data.self, forKey: .macPublicKey)
+        serviceName = try container.decode(String.self, forKey: .serviceName)
+        expiresAt = try container.decode(Date.self, forKey: .expiresAt)
+        supportedCodecs = try container.decodeIfPresent([CodecKind].self, forKey: .supportedCodecs) ?? [.json]
+        kemPublicKey = try container.decodeIfPresent(Data.self, forKey: .kemPublicKey) ?? Data()
+        pairingNonce = try container.decodeIfPresent(Data.self, forKey: .pairingNonce) ?? Data()
+        pairingId = try container.decodeIfPresent(UUID.self, forKey: .pairingId) ?? UUID()
     }
 }
 
@@ -99,12 +99,12 @@ public struct PairingChallengeResponse: Sendable, Codable, Equatable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.token = try container.decode(String.self, forKey: .token)
-        self.devicePublicKey = try container.decode(Data.self, forKey: .devicePublicKey)
-        self.nickname = try container.decode(String.self, forKey: .nickname)
-        self.signature = try container.decode(Data.self, forKey: .signature)
-        self.supportedCodecs = try container.decodeIfPresent([CodecKind].self, forKey: .supportedCodecs) ?? [.json]
-        self.kemPublicKey = try container.decodeIfPresent(Data.self, forKey: .kemPublicKey) ?? Data()
+        token = try container.decode(String.self, forKey: .token)
+        devicePublicKey = try container.decode(Data.self, forKey: .devicePublicKey)
+        nickname = try container.decode(String.self, forKey: .nickname)
+        signature = try container.decode(Data.self, forKey: .signature)
+        supportedCodecs = try container.decodeIfPresent([CodecKind].self, forKey: .supportedCodecs) ?? [.json]
+        kemPublicKey = try container.decodeIfPresent(Data.self, forKey: .kemPublicKey) ?? Data()
     }
 }
 
@@ -138,9 +138,9 @@ public struct PairingCompleteAck: Sendable, Codable, Equatable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.deviceId = try container.decode(UUID.self, forKey: .deviceId)
-        self.pairedAt = try container.decode(Date.self, forKey: .pairedAt)
-        self.negotiatedCodec = try container.decodeIfPresent(CodecKind.self, forKey: .negotiatedCodec) ?? .json
-        self.pairingId = try container.decodeIfPresent(UUID.self, forKey: .pairingId) ?? UUID()
+        deviceId = try container.decode(UUID.self, forKey: .deviceId)
+        pairedAt = try container.decode(Date.self, forKey: .pairedAt)
+        negotiatedCodec = try container.decodeIfPresent(CodecKind.self, forKey: .negotiatedCodec) ?? .json
+        pairingId = try container.decodeIfPresent(UUID.self, forKey: .pairingId) ?? UUID()
     }
 }
