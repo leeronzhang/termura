@@ -69,6 +69,20 @@ let package = Package(
             name: "TermuraRemoteClientTests",
             dependencies: ["TermuraRemoteClient"],
             path: "Tests/TermuraRemoteClientTests"
+        ),
+        // Cross-side integration tests — the only target that imports BOTH
+        // Client and Server, so a real `RemoteClient` and a real
+        // `PairingService` can be wired through `LoopbackTransportPair`
+        // without any business-logic mocks. Catches mock drift the
+        // single-side test targets keep missing.
+        .testTarget(
+            name: "TermuraRemoteIntegrationTests",
+            dependencies: [
+                "TermuraRemoteProtocol",
+                "TermuraRemoteServer",
+                "TermuraRemoteClient"
+            ],
+            path: "Tests/TermuraRemoteIntegrationTests"
         )
     ]
 )

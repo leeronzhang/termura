@@ -8,10 +8,32 @@ public protocol ClientTransport: Sendable {
     func disconnect() async
 }
 
-public enum ClientTransportError: Error, Sendable, Equatable {
+public enum ClientTransportError: Error, Sendable, Equatable, LocalizedError {
     case notConnected
     case connectFailure(reason: String)
     case sendFailure(reason: String)
     case receiveFailure(reason: String)
     case decodeFailure(reason: String)
+
+    /// Surface the associated `reason` to UI / log lines. Without this, Swift
+    /// bridges enum errors through NSError with a nil description, so call
+    /// sites doing `error.localizedDescription` see "The operation couldn't
+    /// be completed. (TermuraRemoteClient.ClientTransportError error N.)"
+    /// — the underlying NWError reason ("PolicyDenied", "Connection refused",
+    /// "No route to host", etc.) is dropped, leaving the user with no
+    /// actionable hint about why pair failed at the transport layer.
+    public var errorDescription: String? {
+        switch self {
+        case .notConnected:
+            return "Transport is not connected."
+        case let .connectFailure(reason):
+            return "Connect failed: \(reason)"
+        case let .sendFailure(reason):
+            return "Send failed: \(reason)"
+        case let .receiveFailure(reason):
+            return "Receive failed: \(reason)"
+        case let .decodeFailure(reason):
+            return "Decode failed: \(reason)"
+        }
+    }
 }

@@ -66,6 +66,25 @@ public actor LiveCloudKitDatabaseGateway: CloudKitDatabaseGateway {
             }
             return parsed
         } catch {
+            // Cold-start bootstrap: a freshly-provisioned CloudKit
+            // container has no `RemoteEnvelope` record type until the
+            // first `save()` auto-creates it (Development env) or it is
+            // deployed via the Dashboard (Production env). Both Mac
+            // (`CloudKitTransport.start`) and iOS
+            // (`CloudKitClientTransport.connect`) seed `lastSeen` with
+            // a `since: .distantPast` fetch *before* anyone has saved
+            // anything — chicken-and-egg. CKError surfaces this as
+            // `Did not find record type: <name>` (CKInternalErrorDomain
+            // code 2003, exposed at the public layer as
+            // `CKError.unknownItem`). Treating it as an empty result is
+            // semantically correct ("type doesn't exist" ≡ "no records
+            // for this type yet") and lets the very first handshake
+            // `save()` auto-create the type, breaking the cold-start
+            // deadlock. Tests pin both the detection helper and this
+            // fetch behaviour.
+            if Self.isMissingRecordType(error) {
+                return []
+            }
             throw Self.mapFetchError(error)
         }
     }
@@ -89,6 +108,27 @@ public actor LiveCloudKitDatabaseGateway: CloudKitDatabaseGateway {
             return typed
         }
         return .backingFailure(reason: error.localizedDescription)
+    }
+
+    /// Detects "record type does not exist yet" — surfaced by CloudKit as
+    /// `CKError.unknownItem` at the public layer, or as
+    /// `CKInternalErrorDomain` code 2003 underneath, with a message of
+    /// the form `"Did not find record type: <Name>"`. We check all three
+    /// signals (typed CKError, NSError domain+code, and a literal
+    /// substring match) so the detection survives Apple's occasional
+    /// reshuffling of which layer surfaces this state. Used by `fetch`
+    /// to short-circuit cold-start fetches into an empty result; **not**
+    /// used for `save`/`delete` (those should propagate so a misconfigured
+    /// container isn't silently masked once writes start).
+    static func isMissingRecordType(_ error: any Error) -> Bool {
+        if let ckError = error as? CKError, ckError.code == .unknownItem {
+            return true
+        }
+        let nsError = error as NSError
+        if nsError.domain == "CKInternalErrorDomain", nsError.code == 2003 {
+            return true
+        }
+        return nsError.localizedDescription.contains("Did not find record type")
     }
 
     public func delete(id: String) async throws {

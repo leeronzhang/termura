@@ -73,6 +73,15 @@ public actor CloudKitClientTransport: ClientTransport {
             let initial = try await gateway.fetch(targetDeviceId: localDeviceId, since: .distantPast)
             lastSeen = initial.map(\.createdAt).max() ?? clock()
         } catch {
+            // Mirror the diagnostic surface `pollOnce` already provides
+            // (`logger.error("Poll failed: …")`). Without this, a failed
+            // initial fetch only surfaces through the thrown error;
+            // `Console.app` / `log stream` saw nothing, so users had no
+            // way to recover the underlying CKError reason after the
+            // toast scrolled away.
+            logger.error(
+                "CloudKit connect fetch failed: \(error.localizedDescription, privacy: .public)"
+            )
             throw ClientTransportError.connectFailure(reason: error.localizedDescription)
         }
         isConnected = true

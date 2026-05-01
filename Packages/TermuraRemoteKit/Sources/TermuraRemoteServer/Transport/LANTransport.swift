@@ -19,7 +19,7 @@ public actor LANTransport: RemoteTransport {
         self.name = name
         self.serviceType = serviceType
         self.codec = codec
-        self.listenerQueue = DispatchQueue(label: "termura.remote.lan.listener")
+        listenerQueue = DispatchQueue(label: "termura.remote.lan.listener")
     }
 
     public func start(handler: any EnvelopeHandler) async throws {

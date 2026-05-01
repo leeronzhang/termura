@@ -17,7 +17,7 @@ public protocol CloudKitDatabaseGateway: Sendable {
     func delete(id: String) async throws
 }
 
-public enum CloudKitGatewayError: Error, Sendable, Equatable {
+public enum CloudKitGatewayError: Error, Sendable, Equatable, LocalizedError {
     case recordNotFound(id: String)
     /// Catch-all for unexpected backing-store / network failures
     /// (CloudKit `CKError` instances, malformed CKRecord fields the
@@ -45,6 +45,28 @@ public enum CloudKitGatewayError: Error, Sendable, Equatable {
     /// passthrough) has a stable case to expose without an enum
     /// version bump. **Not asserted by any current test.**
     case decryptionFailed(reason: String)
+
+    /// Surface the associated `reason` to UI / log lines. Without
+    /// `LocalizedError`, Swift bridges the enum through NSError with a
+    /// nil description, so callers doing `error.localizedDescription`
+    /// see "The operation couldn't be completed.
+    /// (TermuraRemoteProtocol.CloudKitGatewayError error N.)" — the
+    /// underlying CKError reason ("Permission Failure",
+    /// "Account temporarily unavailable", "Did not find record type",
+    /// etc.) is dropped and the user gets no actionable hint about why
+    /// the CloudKit-mode pair / connect failed.
+    public var errorDescription: String? {
+        switch self {
+        case let .recordNotFound(id):
+            "CloudKit record not found: \(id)"
+        case let .backingFailure(reason):
+            "CloudKit backing failure: \(reason)"
+        case let .unsupportedSchema(version):
+            "CloudKit unsupported schemaVersion=\(version)"
+        case let .decryptionFailed(reason):
+            "CloudKit decryption failed: \(reason)"
+        }
+    }
 }
 
 public actor InMemoryCloudKitDatabaseGateway: CloudKitDatabaseGateway {

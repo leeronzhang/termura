@@ -10,14 +10,44 @@ public actor RemoteClient {
     }
 
     private let transport: any ClientTransport
-    private let codec: any RemoteCodec
+    /// Always-JSON codec used for handshake-phase envelopes (`pair_init`,
+    /// `pair_complete`, `error`, `ping`/`pong`). Held alongside
+    /// `messagepackCodec` so `setActiveCodec` can flip without re-allocating.
+    private let handshakeCodec: any RemoteCodec
+    private let messagepackCodec: any RemoteCodec
+    /// Codec used to encode `cmd_*` inner payloads after the
+    /// `PairingCompleteAck` arrives. Stays at `handshakeCodec` until
+    /// `setActiveCodec(_:)` is called, which mirrors the per-channel phase
+    /// transition the server-side router does. Pre-PR8 this was a `let`
+    /// initialised once and never updated, so a `messagepack`-negotiated
+    /// connection silently kept JSON-encoding `cmd_exec` payloads — the
+    /// server then rejected them as `Bad command payload` and the client
+    /// hung waiting for an ack/snapshot that never came.
+    private var activeCodec: any RemoteCodec
     private(set) public var state: State = .disconnected
     private var receiveTask: Task<Void, Never>?
     private var inboxContinuation: AsyncStream<Envelope>.Continuation?
 
     public init(transport: any ClientTransport, codec: any RemoteCodec = JSONRemoteCodec()) {
         self.transport = transport
-        self.codec = codec
+        self.handshakeCodec = codec
+        self.messagepackCodec = MessagePackRemoteCodec()
+        self.activeCodec = codec
+    }
+
+    /// Flip the inner-payload codec to the value the server selected during
+    /// pair handshake. Call exactly once per connection, between the
+    /// `PairingCompleteAck` decode and the moment the UI lets the user issue
+    /// commands — both sides must be on the agreed codec before the first
+    /// `cmd_exec` envelope crosses the wire. Idempotent on equal kinds so a
+    /// duplicated ack delivery doesn't churn the codec instance.
+    public func setActiveCodec(_ kind: CodecKind) {
+        switch kind {
+        case .json:
+            activeCodec = handshakeCodec
+        case .messagepack:
+            activeCodec = messagepackCodec
+        }
     }
 
     public func connect() async throws {
@@ -51,7 +81,7 @@ public actor RemoteClient {
     }
 
     public func sendCommand(_ command: RemoteCommand) async throws {
-        let envelope = try Envelope.encode(command, kind: .cmdExec, codec: codec)
+        let envelope = try Envelope.encode(command, kind: .cmdExec, codec: activeCodec)
         try await send(envelope)
     }
 
@@ -68,8 +98,8 @@ public actor RemoteClient {
     public func inbox() -> AsyncStream<Envelope> {
         AsyncStream { continuation in
             inboxContinuation = continuation
-            receiveTask = Task { [transport, codec] in
-                await Self.receiveLoop(transport: transport, codec: codec, continuation: continuation)
+            receiveTask = Task { [transport] in
+                await Self.receiveLoop(transport: transport, continuation: continuation)
             }
             continuation.onTermination = { _ in
                 Task { [weak self] in await self?.markInboxClosed() }
@@ -83,7 +113,6 @@ public actor RemoteClient {
 
     private static func receiveLoop(
         transport: any ClientTransport,
-        codec _: any RemoteCodec,
         continuation: AsyncStream<Envelope>.Continuation
     ) async {
         while !Task.isCancelled {
