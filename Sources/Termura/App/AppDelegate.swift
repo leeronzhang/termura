@@ -32,6 +32,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Identities of effect views currently under KVO observation (avoids redundant reinstall).
     var titlebarEffectObservedViews: Set<ObjectIdentifier> = []
 
+    // MARK: - Remote session push observer
+
+    /// OWNER: this AppDelegate. CANCEL/TEARDOWN: `applicationWillTerminate`
+    /// invokes `sessionListBroadcaster?.stop()`, which cancels the
+    /// observation task and removes its NotificationCenter token.
+    var sessionListBroadcaster: SessionListBroadcaster?
+
     // MARK: - Init
 
     override init() {
@@ -45,7 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Coordinator is needed before AppServices because the remote adapter closures
         // capture it weakly to resolve the active project's session store on demand.
         let coordinator = ProjectCoordinator()
-        let remoteAdapter = Self.makeRemoteAdapter(coordinator: coordinator)
+        // Push seam: SessionListBroadcaster yields to this; harness router subscribes via adapter.
+        let (sessionChangeStream, sessionChangeContinuation) = AsyncStream<Void>.makeStream()
+        let remoteAdapter = Self.makeRemoteAdapter(
+            coordinator: coordinator,
+            changeStream: sessionChangeStream
+        )
         let remoteIntegration = RemoteIntegrationFactory.make(adapter: remoteAdapter)
         let remoteAgentBridge = RemoteIntegrationFactory.makeAgentBridge(integration: remoteIntegration)
         services = AppServices(
@@ -71,6 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             remoteAgentBridge: remoteAgentBridge
         )
         projectCoordinator = coordinator
+        sessionListBroadcaster = SessionListBroadcaster(
+            coordinator: coordinator,
+            changeContinuation: sessionChangeContinuation
+        )
 
         super.init()
     }
@@ -92,17 +108,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
         return ShellHookInstaller()
-    }
-
-    private static func makeRemoteAdapter(coordinator: ProjectCoordinator) -> LiveRemoteSessionsAdapter {
-        LiveRemoteSessionsAdapter(
-            listProvider: { [weak coordinator] in
-                Self.gatherActiveSessions(coordinator: coordinator)
-            },
-            commandRunner: { [weak coordinator] line, sessionId in
-                try await Self.runRemoteCommand(coordinator: coordinator, line: line, sessionId: sessionId)
-            }
-        )
     }
 
     // MARK: - NSApplicationDelegate
@@ -167,6 +172,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.scheduleReinstallIfNeeded(controller: services.remoteControlController)
         }
 
+        // Start broadcasting session-list changes to paired iOS clients.
+        // Coordinator must already have started (above) so the broadcaster's
+        // first read of `activeContext` lands after `launcher.restoreLast…`
+        // dispatches its open task. The broadcaster itself dedupes the first
+        // emission so the empty-launcher window doesn't generate a spurious
+        // wake-up.
+        sessionListBroadcaster?.start()
+
         let launchElapsed = ContinuousClock.now - launchStart
         let collector = services.metricsCollector
         Task { await collector.recordDuration(.launchDuration, seconds: launchElapsed.totalSeconds) }
@@ -195,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        sessionListBroadcaster?.stop()
         Self.stopRemoteAgentBridge(services.remoteAgentBridge)
         projectCoordinator.tearDown()
         // Metrics flush is handled in applicationShouldTerminate's handleTermination task group.

@@ -42,6 +42,20 @@ protocol RemoteIntegration: Sendable {
 protocol RemoteSessionsAdapter: Sendable {
     func listSessions() async -> [RemoteSessionInfo]
     func executeCommand(line: String, sessionId: UUID) async throws -> CommandRunResult
+    /// Async stream of session-list change pings. Subscribers (e.g. the
+    /// harness router) re-fetch via `listSessions()` on every emission and
+    /// fan out a fresh `sessionList` envelope to all paired clients. Default
+    /// implementation returns an immediately-finished stream so adapters
+    /// without a live source (Free build, tests) don't have to opt in.
+    /// WHY: pull-once-on-pair leaves iOS stuck on a stale snapshot whenever
+    /// the user opens or closes a session on Mac after the initial sync.
+    func sessionListChanges() -> AsyncStream<Void>
+}
+
+extension RemoteSessionsAdapter {
+    func sessionListChanges() -> AsyncStream<Void> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 struct CommandRunResult: Sendable, Equatable {

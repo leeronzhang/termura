@@ -38,6 +38,28 @@ extension AppDelegate {
         Task { await controller.reinstallIfNeeded() }
     }
 
+    /// Builds the live adapter that bridges the active project's `SessionStore`
+    /// to the harness router. The `changeStream` is the push-on-change seam
+    /// fed by `SessionListBroadcaster` (which holds the paired Continuation);
+    /// the harness consumes it via `RemoteSessionsAdapter.sessionListChanges()`.
+    /// Static + closure-captured `coordinator` weak ref keeps the adapter
+    /// Sendable.
+    @MainActor
+    static func makeRemoteAdapter(
+        coordinator: ProjectCoordinator,
+        changeStream: AsyncStream<Void>
+    ) -> LiveRemoteSessionsAdapter {
+        LiveRemoteSessionsAdapter(
+            listProvider: { [weak coordinator] in
+                Self.gatherActiveSessions(coordinator: coordinator)
+            },
+            commandRunner: { [weak coordinator] line, sessionId in
+                try await Self.runRemoteCommand(coordinator: coordinator, line: line, sessionId: sessionId)
+            },
+            changeStream: changeStream
+        )
+    }
+
     @MainActor
     static func gatherActiveSessions(coordinator: ProjectCoordinator?) -> [RemoteSessionInfo] {
         guard let scope = coordinator?.activeContext?.sessionScope else { return [] }
