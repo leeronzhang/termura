@@ -29,6 +29,7 @@ struct SettingsView: View {
                 .tabItem { Label("Remote", systemImage: "iphone.gen3") }
         }
         .frame(minWidth: 520, minHeight: 360)
+        .background(SettingsWindowConfigurator())
     }
 }
 
