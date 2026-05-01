@@ -9,6 +9,8 @@ DerivedData/
 # Swift Package Manager
 .build/
 *.resolved
+.swiftpm/
+**/.swiftpm/
 
 # Generated Xcode project
 *.xcodeproj/
@@ -37,8 +39,10 @@ Makefile
 # scripts/* (not scripts/) so the negations below can re-include specific files —
 # git ignores `!foo` when the parent directory itself is excluded by `scripts/`.
 scripts/*
+!scripts/check-signing-setup.sh
 !scripts/check-version-sync.sh
 !scripts/check-xcstrings-coverage.sh
+!scripts/diagnose-codesign.sh
 !scripts/pre-commit
 !scripts/quality-gate.sh
 !scripts/sync-version-from-xcode.sh
@@ -64,3 +68,13 @@ landing/
 # macOS
 .DS_Store
 .termura/
+
+# Quality-gate / build transient logs (regenerated; never committed)
+build_output.txt
+lint_results.txt
+
+# Local Xcode/SwiftPM working caches that some tooling drops in repo root
+.cache/
+.derived/
+.home/
+Library/

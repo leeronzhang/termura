@@ -128,6 +128,13 @@
 ### Build
 
 ```bash
+# Create your machine-local signing config from the template
+cp project.yml.example project.yml
+
+# Replace DEVELOPMENT_TEAM with the team that owns your Apple Development cert,
+# then verify the match before generating the project
+bash scripts/check-signing-setup.sh
+
 # Generate Xcode project
 xcodegen generate
 
@@ -287,6 +294,13 @@ Contributions are welcome! Please read the project guidelines before submitting 
 ### 构建
 
 ```bash
+# 从模板生成机器本地签名配置
+cp project.yml.example project.yml
+
+# 把 DEVELOPMENT_TEAM 改成你本机 Apple Development 证书所属的团队，
+# 生成项目之前先做一次校验
+bash scripts/check-signing-setup.sh
+
 # 生成 Xcode 项目
 xcodegen generate
 

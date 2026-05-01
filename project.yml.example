@@ -1,6 +1,14 @@
 # Open-Core build template. Copy to `project.yml`, replace `DEVELOPMENT_TEAM`
 # with your Apple Developer team ID, then run `xcodegen generate`.
 #
+# Debug builds use `Resources/TermuraDebug.entitlements`, which deliberately
+# omits CloudKit/push capabilities so a fresh machine can sign and run locally
+# without owning the production container/profile setup.
+#
+# Release / Free builds keep the full remote-control entitlements. If you need
+# to archive or test those capabilities under your own team, replace the bundle
+# identifiers and CloudKit container values with resources your team owns.
+#
 # `project.yml` itself is gitignored (and untracked since PR9.x) so each
 # developer's signing identity stays local. The public open-core build
 # never bundles the LaunchAgent helper — that is the harness build's job
@@ -91,11 +99,16 @@ targets:
       - path: Resources/WebRenderer
         type: folder
         buildPhase: resources
+      - path: vendor/ghostty-resources/terminfo
+        type: folder
+        buildPhase: resources
+      - path: vendor/ghostty-resources/ghostty
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.termura.app
         INFOPLIST_FILE: Resources/Info.plist
-        ENTITLEMENTS_FILE_PATH: Resources/Termura.entitlements
         SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ARCHS: "arm64 x86_64"
@@ -104,12 +117,18 @@ targets:
         OTHER_LDFLAGS: "$(inherited) -framework Carbon -framework Metal -framework MetalKit"
       configs:
         Debug:
+          "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_ENTITLEMENTS: Resources/TermuraDebug.entitlements
+          DEVELOPMENT_TEAM: ""
           OTHER_SWIFT_FLAGS: "$(inherited)"
         Release:
+          CODE_SIGN_ENTITLEMENTS: Resources/Termura.entitlements
           OTHER_SWIFT_FLAGS: "$(inherited)"
           SKIP_INSTALL: NO
           INSTALL_PATH: /Applications
         Free:
+          CODE_SIGN_ENTITLEMENTS: Resources/Termura.entitlements
           OTHER_SWIFT_FLAGS: "$(inherited)"
           SKIP_INSTALL: NO
           INSTALL_PATH: /Applications
