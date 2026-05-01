@@ -60,6 +60,9 @@
     "%@%%" : {
 
     },
+    "•" : {
+
+    },
     "+%@" : {
 
     },
@@ -457,6 +460,9 @@
         }
       }
     },
+    "Danger zone" : {
+
+    },
     "Delete" : {
       "comment" : "Permanently remove an item (session, note, etc.)",
       "extractionState" : "manual",
@@ -651,7 +657,8 @@
             "value" : "Export Session…"
           }
         }
-      }
+      },
+      "generatesSymbol" : false
     },
     "Export…" : {
       "comment" : "Context menu item: open the export sheet for this session",
@@ -663,7 +670,8 @@
             "value" : "Export…"
           }
         }
-      }
+      },
+      "generatesSymbol" : false
     },
     "Failed to open project" : {
       "comment" : "NSAlert title when a project directory cannot be opened",
@@ -786,7 +794,8 @@
             "value" : "Harness Rules…"
           }
         }
-      }
+      },
+      "generatesSymbol" : false
     },
     "Harness turns hard-won prompt engineering into permanent, versioned rules — so every agent session starts smarter." : {
       "comment" : "Harness upsell: marketing subtitle below the PRO badge",
@@ -823,6 +832,9 @@
           }
         }
       }
+    },
+    "I understand this requires re-pairing every device." : {
+
     },
     "Image" : {
       "comment" : "Attachment picker menu item: attach an image file",
@@ -966,7 +978,8 @@
             "value" : "Merge Branch Summary…"
           }
         }
-      }
+      },
+      "generatesSymbol" : false
     },
     "Merge to Parent" : {
       "comment" : "Confirm button: merge current branch summary back into the parent session",
@@ -1191,7 +1204,8 @@
             "value" : "Open Project…"
           }
         }
-      }
+      },
+      "generatesSymbol" : false
     },
     "Paired %@" : {
 
@@ -1396,6 +1410,15 @@
           }
         }
       }
+    },
+    "Reset all pairings" : {
+
+    },
+    "Reset all pairings?" : {
+
+    },
+    "Revoke all devices" : {
+
     },
     "revoked" : {
 
@@ -1851,6 +1874,9 @@
         }
       }
     },
+    "This will permanently:" : {
+
+    },
     "Timeline" : {
       "comment" : "Sidebar tab label for the session timeline panel",
       "extractionState" : "manual",
@@ -2040,6 +2066,9 @@
           }
         }
       }
+    },
+    "Wipes paired devices, pair keys, and agent state. Remote control will be disabled." : {
+
     },
     "Zoom In" : {
       "comment" : "Menu item: increase the terminal font size",
