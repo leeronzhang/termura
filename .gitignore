@@ -23,7 +23,7 @@ Termura.xcworkspace/
 Tests/
 
 # Harness directory: exclude private implementations, keep public stubs and protocols.
-# Real implementations live in the private termura-harness Swift Package.
+# Real implementations live in the private harness Swift Package (sibling repo).
 Sources/Termura/Harness/*
 !Sources/Termura/Harness/HarnessModels.swift
 !Sources/Termura/Harness/RuleFileRepositoryProtocol.swift
@@ -62,6 +62,10 @@ docs/
 # Claude Code
 CLAUDE.md
 .claude/
+# Claude Code's per-project auto-memory (cross-conversation state).
+# Local-only; never tracked. The previous force-tracked entry was
+# removed in the open-core whitelist cleanup.
+memory/
 
 # Landing page (separate repo)
 landing/
