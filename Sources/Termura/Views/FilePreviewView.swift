@@ -2,6 +2,7 @@ import AppKit
 import OSLog
 import QuickLookUI
 import SwiftUI
+import VisionKit
 
 private let logger = Logger(subsystem: "com.termura.app", category: "FilePreviewView")
 
@@ -133,13 +134,18 @@ struct FilePreviewView: View {
     }
 }
 
-// MARK: - Image Preview (scrollable, 1:1 default)
+// MARK: - Image Preview (scrollable, 1:1 default, Live Text-enabled)
 
 /// Renders an image at native pixel size (1:1), centered in the view.
-/// Supports zoom via the header controls.
+/// Supports zoom via the header controls. A VisionKit
+/// `ImageAnalysisOverlayView` sits on top so users can select recognised
+/// text (Live Text / OCR) and ⌘C copies it to the pasteboard, matching
+/// the system Photos / Preview behaviour.
 struct ImagePreviewView: NSViewRepresentable {
     let fileURL: URL
     let zoom: CGFloat
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -154,14 +160,19 @@ struct ImagePreviewView: NSViewRepresentable {
         imageView.imageScaling = .scaleNone
         imageView.imageAlignment = .alignCenter
 
+        let overlay = ImageAnalysisOverlayView()
+        overlay.preferredInteractionTypes = .textSelection
+        overlay.autoresizingMask = [.width, .height]
+        imageView.addSubview(overlay)
+        context.coordinator.overlay = overlay
+
         if let image = NSImage(contentsOf: fileURL) {
             imageView.image = image
             let size = image.size
-            imageView.frame = NSRect(
-                x: 0, y: 0,
-                width: size.width * zoom,
-                height: size.height * zoom
-            )
+            let frame = NSRect(x: 0, y: 0, width: size.width * zoom, height: size.height * zoom)
+            imageView.frame = frame
+            overlay.frame = imageView.bounds
+            context.coordinator.analyze(image: image)
         }
 
         scrollView.documentView = imageView
@@ -169,22 +180,50 @@ struct ImagePreviewView: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let imageView = scrollView.documentView as? NSImageView,
-              let image = imageView.image ?? NSImage(contentsOf: fileURL) else { return }
-
-        if imageView.image == nil {
+        guard let imageView = scrollView.documentView as? NSImageView else { return }
+        if imageView.image == nil, let image = NSImage(contentsOf: fileURL) {
             imageView.image = image
+            context.coordinator.analyze(image: image)
         }
-
+        guard let image = imageView.image else { return }
         let size = image.size
-        let newFrame = NSRect(
-            x: 0, y: 0,
-            width: size.width * zoom,
-            height: size.height * zoom
-        )
+        let newFrame = NSRect(x: 0, y: 0, width: size.width * zoom, height: size.height * zoom)
         if imageView.frame.size != newFrame.size {
             imageView.frame = newFrame
+            context.coordinator.overlay?.frame = imageView.bounds
             scrollView.needsLayout = true
+        }
+    }
+
+    @MainActor
+    final class Coordinator {
+        weak var overlay: ImageAnalysisOverlayView?
+        private let analyzer = ImageAnalyzer()
+        private var lastAnalyzed: NSImage?
+
+        func analyze(image: NSImage) {
+            guard let overlay, lastAnalyzed !== image else { return }
+            lastAnalyzed = image
+            // WHY: VisionKit OCR is best-effort — if analysis fails the user
+            //   still sees the image, just without selectable text.
+            // OWNER: This coordinator owns the analysis Task; re-runs only
+            //   when `updateNSView` swaps the image (different fileURL).
+            // TEARDOWN: Each Task ends after one analysis; SwiftUI tears down
+            //   the coordinator with the view.
+            Task { @MainActor in
+                do {
+                    let configuration = ImageAnalyzer.Configuration([.text])
+                    let analysis = try await analyzer.analyze(
+                        image,
+                        orientation: .up,
+                        configuration: configuration
+                    )
+                    overlay.analysis = analysis
+                } catch {
+                    // Non-critical: image renders fine without Live Text.
+                    logger.debug("Live Text analysis failed: \(error.localizedDescription)")
+                }
+            }
         }
     }
 }
@@ -216,16 +255,42 @@ final class CenteringClipView: NSClipView {
 struct QuickLookPreviewRepresentable: NSViewRepresentable {
     let fileURL: URL
 
-    func makeNSView(context: Context) -> QLPreviewView {
-        let view = QLPreviewView(frame: .zero, style: .normal)
-        view?.autostarts = true
-        view?.previewItem = fileURL as QLPreviewItem
-        return view ?? QLPreviewView()
+    func makeNSView(context: Context) -> QuickLookHostView {
+        let host = QuickLookHostView()
+        let preview = QLPreviewView(frame: .zero, style: .normal) ?? QLPreviewView()
+        preview.autostarts = true
+        preview.previewItem = fileURL as QLPreviewItem
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(preview)
+        host.preview = preview
+        NSLayoutConstraint.activate([
+            preview.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            preview.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            preview.topAnchor.constraint(equalTo: host.topAnchor),
+            preview.bottomAnchor.constraint(equalTo: host.bottomAnchor)
+        ])
+        return host
     }
 
-    func updateNSView(_ nsView: QLPreviewView, context: Context) {
-        if nsView.previewItem as? URL != fileURL {
-            nsView.previewItem = fileURL as QLPreviewItem
+    func updateNSView(_ nsView: QuickLookHostView, context: Context) {
+        guard let preview = nsView.preview else { return }
+        if preview.previewItem as? URL != fileURL {
+            preview.previewItem = fileURL as QLPreviewItem
         }
+    }
+}
+
+/// Hosts a `QLPreviewView` and promotes it to the window's first responder
+/// once the view is mounted, so ⌘C reaches the preview's NSResponder
+/// chain. Without this, SwiftUI's `NSViewRepresentable` wrapper leaves
+/// the preview without keyboard focus and Cmd+C silently no-ops on
+/// selected PDF / document text.
+final class QuickLookHostView: NSView {
+    weak var preview: QLPreviewView?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let preview, let window else { return }
+        window.makeFirstResponder(preview)
     }
 }
