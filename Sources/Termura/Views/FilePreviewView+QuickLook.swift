@@ -40,9 +40,27 @@ struct QuickLookPreviewRepresentable: NSViewRepresentable {
 final class QuickLookHostView: NSView {
     weak var preview: QLPreviewView?
 
+    override var acceptsFirstResponder: Bool { true }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let preview, let window else { return }
         window.makeFirstResponder(preview)
+    }
+
+    /// Termura's main window is AppKit-managed and uses a `Settings` SwiftUI
+    /// Scene, so SwiftUI doesn't inject `EditCommands` and there's no global
+    /// `Edit > Copy` menu item with the ⌘C key equivalent. Without that
+    /// equivalent, `QLPreviewView` / `PDFView` never see ⌘C even when they
+    /// are first responder. Catch the shortcut here and forward to whatever
+    /// inside the preview implements `copy:` via `NSApp.sendAction(_:to:from:)`,
+    /// which walks the responder chain just like a menu item would.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command),
+           event.charactersIgnoringModifiers == "c",
+           NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
