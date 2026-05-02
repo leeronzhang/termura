@@ -89,13 +89,24 @@ public actor WebSocketClientTransport: ClientTransport {
 
     private func waitForReady(connection: NWConnection) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            // `stateUpdateHandler` keeps firing across the connection's
+            // entire lifetime (.ready → ... → .cancelled when disconnect()
+            // tears it down). The continuation can only be resumed once,
+            // so on every terminal state we null the handler before
+            // resuming — assignments on the connection's serial queue are
+            // atomic w.r.t. handler invocation, so this guarantees no
+            // double-resume even if `.ready` and `.cancelled` arrive
+            // back-to-back.
             connection.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
+                    connection.stateUpdateHandler = nil
                     continuation.resume()
                 case let .failed(error):
+                    connection.stateUpdateHandler = nil
                     continuation.resume(throwing: ClientTransportError.connectFailure(reason: error.localizedDescription))
                 case .cancelled:
+                    connection.stateUpdateHandler = nil
                     continuation.resume(throwing: ClientTransportError.connectFailure(reason: "cancelled before ready"))
                 default:
                     break
