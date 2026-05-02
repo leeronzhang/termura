@@ -1,1 +1,1 @@
-RemoteIntegrationFactory
+HarnessIntegrationFactory

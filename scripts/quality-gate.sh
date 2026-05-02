@@ -499,7 +499,7 @@ if [[ -n "$HARNESS_ROOT" ]]; then
 fi
 
 echo "-> Harness private file leak check..."
-HARNESS_WHITELIST='HarnessModels.swift|RuleFileRepositoryProtocol.swift|HarnessViewModel\+Stub.swift|ExperienceCodifier\+Stub.swift|RemoteIntegration\+Stub.swift'
+HARNESS_WHITELIST='HarnessModels.swift|RuleFileRepositoryProtocol.swift|HarnessViewModel\+Stub.swift|ExperienceCodifier\+Stub.swift|RemoteIntegration\+Stub.swift|HarnessBootstrap.swift'
 if [[ "$MODE" == "staged" ]]; then
     HARNESS_CANDIDATES="$(git diff --cached --name-only --diff-filter=ACMR | grep '^Sources/Termura/Harness/' || true)"
 else

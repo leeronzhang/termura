@@ -57,7 +57,7 @@ CURRENT_GITIGNORE_UNBLOCKS="$(grep -nE '^!Sources/Termura/Harness' "$REPO_ROOT/.
 compare ".gitignore Harness unblocks" "$CURRENT_GITIGNORE_UNBLOCKS" "$BASELINE_DIR/gitignore-stub-allowlist.txt"
 
 # 3. Private type names referenced in Harness/ stubs
-PATTERN='RemoteIntegrationFactory|RemoteServerHarness|RemoteEnvelopeRouter|RemoteAgentBridgeAssembly|RemoteAgentXPCClient|AppMailboxXPCBridge|AgentInjectedCloudKitIngress|TrustedSourceGate|RemoteAgentAutoConnector|AgentVirtualReplyChannel'
+PATTERN='HarnessIntegrationFactory|RemoteIntegrationFactory|RemoteServerHarness|RemoteEnvelopeRouter|RemoteAgentBridgeAssembly|RemoteAgentXPCClient|AppMailboxXPCBridge|AgentInjectedCloudKitIngress|TrustedSourceGate|RemoteAgentAutoConnector|AgentVirtualReplyChannel'
 if [[ -d "$REPO_ROOT/Sources/Termura/Harness" ]]; then
     CURRENT_STUB_SYMBOLS="$(grep -hoE "$PATTERN" "$REPO_ROOT"/Sources/Termura/Harness/*.swift 2>/dev/null | sort -u || true)"
 else

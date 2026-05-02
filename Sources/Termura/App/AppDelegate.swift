@@ -42,7 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Init
 
     override init() {
-        // Register bundled fonts FIRST, before any UI or FontSettings init.
+        // Wave 1 hook — install harness factory closures (no-op in Free
+        // build) before any service constructor reads them. Single
+        // entry point; idempotent.
+        HarnessBootstrap.runIfNeeded()
+
+        // Register bundled fonts before any UI or FontSettings init.
         Self.registerBundledFonts()
 
         let collector = MetricsCollector()
@@ -53,10 +58,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let coordinator = ProjectCoordinator()
         // Push seam: SessionListBroadcaster yields to this; harness router subscribes via adapter.
         let (sessionChangeStream, sessionChangeContinuation) = AsyncStream<Void>.makeStream()
-        // Broadcaster constructed before the engine factory so the factory can hold a weak
-        // ping-on-exit ref back to it. snapshotProvider routes through `gatherActiveSessions`
-        // so engine-state changes (process exit) drive iOS list refreshes outside the
-        // `withObservationTracking` graph.
         let broadcaster = SessionListBroadcaster(
             coordinator: coordinator,
             changeContinuation: sessionChangeContinuation,
@@ -76,8 +77,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let remoteIntegration = RemoteIntegrationLauncher.make(adapter: remoteAdapter)
         let remoteAgentBridge = RemoteIntegrationLauncher.makeAgentBridge(integration: remoteIntegration)
-        services = AppServices(
+        services = Self.assembleServices(seed: ServicesSeed(
             engineFactory: engineFactory,
+            collector: collector,
+            shellInstaller: shellInstaller,
+            remoteAdapter: remoteAdapter,
+            remoteIntegration: remoteIntegration,
+            remoteAgentBridge: remoteAgentBridge
+        ))
+        projectCoordinator = coordinator
+        sessionListBroadcaster = broadcaster
+
+        super.init()
+    }
+
+    /// Inputs for `assembleServices`. Bundled into a struct so the
+    /// helper stays under the 5-parameter SwiftLint cap, and the
+    /// initializer call site stays under the 50-line body cap.
+    @MainActor
+    private struct ServicesSeed {
+        let engineFactory: any TerminalEngineFactory
+        let collector: MetricsCollector
+        let shellInstaller: any ShellHookInstallerProtocol
+        let remoteAdapter: LiveRemoteSessionsAdapter
+        let remoteIntegration: any RemoteIntegration
+        let remoteAgentBridge: any RemoteAgentBridgeLifecycle
+    }
+
+    /// Bundles the 16 service constructors that AppDelegate.init wires
+    /// up. Lifted out of `init()` to keep the initializer within budget.
+    @MainActor
+    private static func assembleServices(seed: ServicesSeed) -> AppServices {
+        AppServices(
+            engineFactory: seed.engineFactory,
             themeManager: ThemeManager(),
             fontSettings: FontSettings(),
             tokenCountingService: TokenCountingService(),
@@ -85,23 +117,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBarService: MenuBarService(),
             themeImportService: ThemeImportService(),
             recentProjects: RecentProjectsService(),
-            metricsCollector: collector,
-            metricsPersistenceService: MetricsPersistenceService(metrics: collector),
-            shellHookInstaller: shellInstaller,
+            metricsCollector: seed.collector,
+            metricsPersistenceService: MetricsPersistenceService(metrics: seed.collector),
+            shellHookInstaller: seed.shellInstaller,
             webViewPool: WebViewPool(),
-            remoteSessionsAdapter: remoteAdapter,
-            remoteIntegration: remoteIntegration,
+            remoteSessionsAdapter: seed.remoteAdapter,
+            remoteIntegration: seed.remoteIntegration,
             remoteControlController: RemoteControlController(
-                integration: remoteIntegration,
-                agentBridge: remoteAgentBridge,
+                integration: seed.remoteIntegration,
+                agentBridge: seed.remoteAgentBridge,
                 userDefaults: UserDefaults.standard
             ),
-            remoteAgentBridge: remoteAgentBridge
+            remoteAgentBridge: seed.remoteAgentBridge
         )
-        projectCoordinator = coordinator
-        sessionListBroadcaster = broadcaster
-
-        super.init()
     }
 
     private static func makeEngineFactory(

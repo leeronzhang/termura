@@ -208,27 +208,25 @@ struct NullRemoteAgentBridgeLifecycle: RemoteAgentBridgeLifecycle {
     func resetAgentState() async throws {}
 }
 
-/// Public façade callers go through. In the harness build it delegates to
-/// the private repo's concrete factory (whose name is intentionally kept
-/// off the public surface — see CLAUDE.md §12.3 leak list); in the Free
-/// build it returns the Null lifecycle types defined above. Keeping the
-/// dispatch here means non-stub public files (e.g. `AppDelegate.swift`)
-/// never have to reference a private impl symbol.
+/// Public façade callers go through. After Wave 1 it dispatches via
+/// closures registered in `HarnessBootstrap` rather than `#if`-routed
+/// to a private-impl type name. The harness build wires real factories
+/// inside its `install()`; the Free build leaves the closures `nil` so
+/// the Null fallbacks below take over. Non-stub public files (e.g.
+/// `AppDelegate.swift`) never reference a private-impl symbol.
 @MainActor
 enum RemoteIntegrationLauncher {
     static func make(adapter: any RemoteSessionsAdapter) -> any RemoteIntegration {
-        #if HARNESS_ENABLED
-        RemoteIntegrationFactory.make(adapter: adapter)
-        #else
-        NullRemoteIntegration()
-        #endif
+        if let factory = HarnessBootstrap.currentIntegrationFactory() {
+            return factory(adapter)
+        }
+        return NullRemoteIntegration()
     }
 
     static func makeAgentBridge(integration: any RemoteIntegration) -> any RemoteAgentBridgeLifecycle {
-        #if HARNESS_ENABLED
-        RemoteIntegrationFactory.makeAgentBridge(integration: integration)
-        #else
-        NullRemoteAgentBridgeLifecycle()
-        #endif
+        if let factory = HarnessBootstrap.currentAgentBridgeFactory() {
+            return factory(integration)
+        }
+        return NullRemoteAgentBridgeLifecycle()
     }
 }

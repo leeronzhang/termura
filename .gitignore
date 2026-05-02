@@ -30,6 +30,7 @@ Sources/Termura/Harness/*
 !Sources/Termura/Harness/HarnessViewModel+Stub.swift
 !Sources/Termura/Harness/ExperienceCodifier+Stub.swift
 !Sources/Termura/Harness/RemoteIntegration+Stub.swift
+!Sources/Termura/Harness/HarnessBootstrap.swift
 
 # CI/CD and internal build tooling
 .github/
