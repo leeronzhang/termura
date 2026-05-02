@@ -13,11 +13,13 @@ struct CodeEditorView: View {
     let filePath: String
     let projectRoot: String
     @Environment(\.fontSettings) var fontSettings
+    @Environment(\.commandRouter) private var commandRouter
 
     @State private var content = ""
     @State private var isLoading = false
     @State private var isModified = false
     @State private var errorMessage: String?
+    @State private var isHoveringPath = false
 
     private var absolutePath: String {
         if filePath.hasPrefix("/") { return filePath }
@@ -96,7 +98,9 @@ struct CodeEditorView: View {
                             : .secondary.opacity(AppUI.Opacity.dimmed)
                     )
                     .lineLimit(1)
+                    .textSelection(.enabled)
             }
+            copyPathButton
             if isModified {
                 Circle()
                     .fill(Color.orange)
@@ -112,6 +116,45 @@ struct CodeEditorView: View {
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHoveringPath = hovering
+            }
+        }
+    }
+
+    /// One-click "copy filename + absolute path" affordance shown on hover.
+    /// Sits next to the breadcrumb so the user can either select a path
+    /// segment manually (⌘C copies the selection) or click here to grab
+    /// both pieces in a single, predictable format.
+    private var copyPathButton: some View {
+        Button(action: copyNameAndPath) {
+            HStack(spacing: AppUI.Spacing.xs) {
+                Image(systemName: "doc.on.doc")
+                Text("Copy name & path")
+            }
+            .font(AppUI.Font.label)
+            .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .opacity(isHoveringPath ? 1 : 0)
+        .allowsHitTesting(isHoveringPath)
+        .help("Copy filename and absolute path to clipboard")
+    }
+
+    private func copyNameAndPath() {
+        let path = absolutePath
+        let fileName = (path as NSString).lastPathComponent
+        let payload = "\(fileName)\n\(path)"
+        // §3.2 exception: NSPasteboard is a platform bridge invoked from
+        // the view layer (matches existing usages in EditorTextView /
+        // RemoteControlSettingsView). Future PasteboardService extraction
+        // tracked separately.
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        let didWrite = pasteboard.setString(payload, forType: .string)
+        commandRouter.showToast(didWrite ? "Copied filename and path" : "Copy failed")
     }
 
     /// Checks whether `filePath` resolves within `rootPath` after symlink resolution.
