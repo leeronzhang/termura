@@ -10,6 +10,13 @@ private let logger = Logger(subsystem: "com.termura.app", category: "LibghosttyE
 ///
 /// Metal-accelerated rendering via `GhosttyTerminalView`.
 /// Raw PTY output flows through the Zig callback → outputStream → AgentStateDetector.
+///
+/// Surface as a single struct hits the §6.1 file-length budget when every
+/// concern lives inline; the engine is therefore split across:
+/// - `+PtyStream.swift`: protocol impls for the W2 byte-fan-out / checkpoint surface.
+/// - `+SurfaceConfig.swift`: applyTheme / applyFont / updateSurfaceConfig.
+/// - `+ScreenAccess.swift`: cursorLineContent / readVisibleScreen / linesNearCursor / scroll.
+/// - `+Styled.swift`: structured viewport extraction (pre-existing).
 @MainActor
 final class LibghosttyEngine: TerminalEngine {
     // MARK: - TerminalEngine conformance
@@ -36,17 +43,18 @@ final class LibghosttyEngine: TerminalEngine {
     /// Internal (not private) so `LibghosttyEngine+Styled.swift` can read the
     /// surface for render-state extraction without exposing a public wrapper.
     let ghosttyView: GhosttyTerminalView
-    private let outputContinuation: AsyncStream<TerminalOutputEvent>.Continuation
-    private let shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
+    let outputContinuation: AsyncStream<TerminalOutputEvent>.Continuation
+    let shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
     /// Lazily-initialised holder for the per-session GhosttyRenderState +
     /// row/cell iterators used by `readVisibleStyledScreen()`. `nil` until
     /// the first remote screen-frame pull, so non-remote sessions don't pay
     /// the C-side allocation. See `LibghosttyEngine+Styled.swift`.
     var styledExtractor: StyledScreenExtractor?
-    /// Tracks the last-applied values so surface config updates always carry the full state.
-    private var currentFontFamily: String = FontSettings.defaultFamily
-    private var currentFontSize: CGFloat = FontSettings.defaultTerminalSize
-    private var currentTheme: ThemeColors = .dark
+    /// Tracks the last-applied values so surface config updates always
+    /// carry the full state. Consumed by `+SurfaceConfig.swift`.
+    var currentFontFamily: String = FontSettings.defaultFamily
+    var currentFontSize: CGFloat = FontSettings.defaultTerminalSize
+    var currentTheme: ThemeColors = .dark
 
     /// Optional observer fired once when the underlying child process
     /// exits and the engine moves to `.disposed`. Used by the composition
@@ -54,7 +62,7 @@ final class LibghosttyEngine: TerminalEngine {
     /// so a remote client never sees a session whose engine has died.
     /// Optional under §3.3 because non-remote builds (and previews / unit
     /// tests) don't need to plumb a sink — diagnostics-class dependency.
-    private let onLifecycleChanged: (@MainActor @Sendable () -> Void)?
+    let onLifecycleChanged: (@MainActor @Sendable () -> Void)?
 
     // MARK: - Init
 
@@ -65,9 +73,9 @@ final class LibghosttyEngine: TerminalEngine {
     ) {
         self.sessionID = sessionID
         self.onLifecycleChanged = onLifecycleChanged
-        // WHY: Terminal output must be bridged from ghostty callbacks into async consumers with bounded buffering.
+        // WHY: Terminal output bridges ghostty callbacks into async consumers with bounded buffering.
         // OWNER: LibghosttyEngine owns outputContinuation and shellContinuation for the engine lifetime.
-        // TEARDOWN: deinit/close paths finish the continuations when the engine is released.
+        // TEARDOWN: terminate() finishes both continuations.
         // TEST: Cover output/shell event delivery and shutdown finishing both streams.
         let (outStream, outCont) = AsyncStream.makeStream(
             of: TerminalOutputEvent.self,
@@ -76,10 +84,6 @@ final class LibghosttyEngine: TerminalEngine {
         outputStream = outStream
         outputContinuation = outCont
 
-        // WHY: Shell integration events follow the same lifecycle as terminal output and need their own stream.
-        // OWNER: LibghosttyEngine owns shellContinuation for the engine lifetime.
-        // TEARDOWN: deinit/close paths finish the shell stream when the engine is released.
-        // TEST: Cover shell integration event delivery and shutdown finishing the stream.
         let (shellStream, shellCont) = AsyncStream.makeStream(
             of: ShellIntegrationEvent.self,
             bufferingPolicy: .bufferingNewest(AppConfig.Terminal.streamBufferCapacity)
@@ -91,10 +95,9 @@ final class LibghosttyEngine: TerminalEngine {
             preconditionFailure("GhosttyAppContext has no app at engine init")
         }
         // Construct the byte tap before the view so the view's IO
-        // callback sees a live tap on the very first frame. The actor
-        // is empty (zero subscribers) until the harness router calls
-        // `subscribeBytes()`; until then `feedNonisolated` is a no-op
-        // hop with no fan-out cost beyond a Task allocation.
+        // callback sees a live tap on the very first frame. The tap is
+        // empty (zero subscribers) until the harness router calls
+        // `subscribeBytes()`; until then `feedNonisolated` is a no-op.
         let tap = PtyByteTap()
         ptyByteTap = tap
         let view = GhosttyTerminalView(
@@ -109,33 +112,39 @@ final class LibghosttyEngine: TerminalEngine {
         terminalNSView = view
         state = .attached
 
-        // Wire view callbacks → output stream
-        view.onTitleChanged = { [outCont] title in
-            outCont.yield(.titleChanged(title))
+        wireViewCallbacks(view: view)
+
+        state = .running
+        logger.debug("LibghosttyEngine created for session \(sessionID.rawValue)")
+    }
+
+    /// Connect `GhosttyTerminalView`'s lifecycle callbacks to the engine's
+    /// streams. Pulled out of `init` so the constructor stays under the
+    /// 50-line function-body budget (§6.1).
+    private func wireViewCallbacks(view: GhosttyTerminalView) {
+        view.onTitleChanged = { [outputContinuation] title in
+            outputContinuation.yield(.titleChanged(title))
         }
-        view.onWorkingDirectoryChanged = { [outCont] pwd in
-            outCont.yield(.workingDirectoryChanged(pwd))
+        view.onWorkingDirectoryChanged = { [outputContinuation] pwd in
+            outputContinuation.yield(.workingDirectoryChanged(pwd))
         }
-        view.onProcessExited = { [weak self, outCont] _ in
+        view.onProcessExited = { [weak self, outputContinuation] _ in
             guard let self else { return }
             let code = ghosttyView.lastExitCode ?? 0
-            outCont.yield(.processExited(code))
-            outCont.finish()
+            outputContinuation.yield(.processExited(code))
+            outputContinuation.finish()
             state = .disposed
             // Notify the composition root so the broadcaster re-emits a
             // session list with this dead session filtered out — without
-            // it iOS keeps the session in its list and lands on the 30s
+            // it iOS keeps the session in its list and lands on the 30 s
             // timeout fallback the next time the user taps it.
             onLifecycleChanged?()
         }
         // ghostty OSC 133;D → shell integration event
-        view.onCommandFinished = { [shellCont] exitCode in
+        view.onCommandFinished = { [shellContinuation] exitCode in
             let code: Int? = exitCode == -1 ? nil : Int(exitCode)
-            shellCont.yield(.executionFinished(exitCode: code))
+            shellContinuation.yield(.executionFinished(exitCode: code))
         }
-
-        state = .running
-        logger.debug("LibghosttyEngine created for session \(sessionID.rawValue)")
     }
 
     // MARK: - TerminalEngine methods
@@ -180,6 +189,7 @@ final class LibghosttyEngine: TerminalEngine {
 
     func resize(columns: UInt16, rows: UInt16) async {
         // ghostty manages its own columns/rows from the view frame size.
+        _ = (columns, rows)
     }
 
     func terminate() async {
@@ -200,98 +210,10 @@ final class LibghosttyEngine: TerminalEngine {
         // Force ghostty surface destruction; this triggers the child process exit
         // and eventually calls onProcessExited which sets state to .disposed.
         ghosttyView.destroySurface()
-
-        // If the callback haven't fired yet, we wait up to a timeout or just proceed.
-        // For now, destroySurface is largely synchronous in its C-level call.
     }
 
     deinit {
         let sid = sessionID.rawValue
         logger.debug("LibghosttyEngine deinit for session \(sid)")
-    }
-
-    func cursorLineContent() -> String? {
-        let lines = ghosttyView.readVisibleText().split(separator: "\n", omittingEmptySubsequences: false)
-        return lines.last { !$0.allSatisfy(\.isWhitespace) }.map(String.init)
-    }
-
-    func readVisibleScreen() -> TerminalScreenSnapshot? {
-        guard let surface = ghosttyView.surface else { return nil }
-        let size = ghostty_surface_size(surface)
-        let lines = ghosttyView.readVisibleText()
-            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        return TerminalScreenSnapshot(rows: Int(size.rows), cols: Int(size.columns), lines: lines)
-    }
-
-    func linesNearCursor(above count: Int) -> [String] {
-        let all = ghosttyView.readVisibleText().split(separator: "\n", omittingEmptySubsequences: false)
-        guard !all.isEmpty else { return [] }
-        let start = max(0, all.count - count - 1)
-        return all[start...].map(String.init)
-    }
-
-    func currentScrollLine() -> Int {
-        // TODO: expose ghostty scroll position via C API
-        0
-    }
-
-    func scrollToLine(_ line: Int) async {
-        // TODO: expose ghostty scroll via C API
-    }
-
-    var supportsScrollbackNavigation: Bool { false }
-
-    func applyTheme(_ theme: ThemeColors) {
-        currentTheme = theme
-        updateSurfaceConfig()
-    }
-
-    func applyFont(family: String, size: CGFloat) {
-        currentFontFamily = family
-        currentFontSize = size
-        updateSurfaceConfig()
-    }
-
-    // MARK: - Ghostty config update
-
-    /// Builds a full Termura config overlay (font + theme + shell-integration) and pushes
-    /// it to the surface. ghostty_surface_update_config replaces the entire config, so
-    /// every call must carry all overrides to avoid resetting unrelated settings to defaults.
-    private func updateSurfaceConfig() {
-        guard let surface = ghosttyView.surface else { return }
-        guard let cfg = ghostty_config_new() else {
-            logger.error("updateSurfaceConfig: ghostty_config_new failed")
-            return
-        }
-        defer { ghostty_config_free(cfg) }
-
-        let configString = """
-        font-family = \(currentFontFamily)
-        font-size = \(Int(currentFontSize))
-        background = \(currentTheme.background.hexRGB)
-        foreground = \(currentTheme.foreground.hexRGB)
-        shell-integration = none
-        """
-        let tmpURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("termura-ghostty-\(UUID().uuidString).conf")
-        do {
-            try configString.write(to: tmpURL, atomically: true, encoding: .utf8)
-            defer {
-                do { try FileManager.default.removeItem(at: tmpURL) } catch {
-                    logger.error("updateSurfaceConfig: failed to clean up tmp: \(error.localizedDescription)")
-                }
-            }
-            tmpURL.path.withCString { path in
-                ghostty_config_load_file(cfg, path)
-            }
-        } catch {
-            logger.error("updateSurfaceConfig: failed to write tmp config: \(error.localizedDescription)")
-            return
-        }
-        ghostty_config_finalize(cfg)
-        ghostty_surface_update_config(surface, cfg)
-        let fontFamily = currentFontFamily
-        let fontSize = currentFontSize
-        logger.debug("Surface config updated: font=\(fontFamily) \(Int(fontSize))pt")
     }
 }
