@@ -1,6 +1,9 @@
 import Foundation
+import OSLog
 import Security
 import TermuraRemoteProtocol
+
+private let logger = Logger(subsystem: "com.termura.remote", category: "PairingService")
 
 public enum PairingError: Error, Sendable, Equatable {
     case noPendingInvitation
@@ -110,21 +113,85 @@ public actor PairingService {
         try validatePending(token: token)
         try verifyChallengeSignature(token: token, publicKey: devicePublicKey, signature: signature)
         if let existing = try await activeDevice(matchingPublicKey: devicePublicKey) {
-            // Idempotent re-pair on matching publicKey. See `notes/M4` —
-            // typically iOS after an app reinstall / "forget Mac" tap;
-            // returning `existing` lets iOS rebuild its mirror without
-            // forcing the user to revoke from Mac Settings first.
-            clearPendingState()
-            lastCompletedPairingIdValue = existing.pairingId
-            return existing
+            return try await idempotentRePair(existing: existing)
         }
-        let device = makeFreshPairedDevice(nickname: nickname, devicePublicKey: devicePublicKey)
-        try await store.add(device)
+        // Wave 3 — atomic ordering: derive + save the pair key BEFORE
+        // adding the device record. A stale extra `PairKey` keyed
+        // under a `pendingPairingId` that never got a device is
+        // harmless (no device references it; `purgeAllPairings`
+        // sweeps both stores). An orphan device record without a
+        // matching key is fatal: the iOS peer can't decrypt any
+        // CloudKit envelope addressed to it. So we let the key save
+        // throw first; if the device-store add then fails we roll
+        // back the key entry (best effort) so the user can retry.
         try await deriveAndSavePairKeyIfNeeded(kemPublicKey: kemPublicKey)
+        let device = makeFreshPairedDevice(nickname: nickname, devicePublicKey: devicePublicKey)
+        do {
+            try await store.add(device)
+        } catch {
+            await rollbackPairKeyAfterDeviceAddFailure(reason: error.localizedDescription)
+            throw error
+        }
+        // Wave 3 — surface the legacy-iOS-without-KEM case as a
+        // single warning so the operator knows CloudKit encryption
+        // won't engage for this pairing without having to grep logs
+        // for the absence of "PairKey persisted". The pair flow
+        // itself still succeeds in plaintext-bootstrap mode.
+        if kemPublicKey.isEmpty {
+            logger.warning("""
+            Paired device \(device.id, privacy: .public) without KEM material; \
+            CloudKit envelope encryption disabled for this pairing
+            """)
+        }
         let completedPairingId = pendingPairingId
         clearPendingState()
         lastCompletedPairingIdValue = completedPairingId
         return device
+    }
+
+    /// Idempotent re-pair branch — typically iOS after an app
+    /// reinstall / "forget Mac" tap, where the iOS-local `PairedMac`
+    /// registry is empty but Mac's keychain still holds the record.
+    /// Returning `existing` lets iOS rebuild its mirror without
+    /// forcing the user to revoke from Mac Settings first.
+    ///
+    /// Wave 3 — also back-fills `cloudSourceDeviceId` on a legacy
+    /// entry that pre-dates PR8 so the trusted-source gate's O(1)
+    /// reverse-map hits on the next CloudKit ingest. Without this
+    /// the gate falls through to the slow public-key derivation path
+    /// every poll until the user re-pairs from scratch.
+    private func idempotentRePair(existing: PairedDevice) async throws -> PairedDevice {
+        clearPendingState()
+        lastCompletedPairingIdValue = existing.pairingId
+        if existing.cloudSourceDeviceId == nil {
+            do {
+                try await store.backfillCloudSourceDeviceIdIfMissing(
+                    deriving: DeviceIdentity.deriveDeviceId(from:)
+                )
+            } catch {
+                logger.warning("""
+                cloudSourceDeviceId backfill failed during idempotent re-pair: \
+                \(error.localizedDescription, privacy: .public)
+                """)
+            }
+        }
+        return existing
+    }
+
+    /// Surfaces the pair-key orphan that results when `store.add`
+    /// fails after the pair-key save succeeded. The protocol doesn't
+    /// expose `remove(forPairing:)` yet — overwriting with
+    /// `removeAll()` would be far too coarse on production data — so
+    /// the recovery path is "the user retries, and a retry overwrites
+    /// this entry with a freshly-derived key under the same id" or
+    /// "`purgeAllPairings` cleans it up on a future reset". Logging
+    /// makes the orphan grep-able instead of invisible.
+    private func rollbackPairKeyAfterDeviceAddFailure(reason: String) async {
+        guard pendingPairingId != nil else { return }
+        logger.warning("""
+        store.add failed (\(reason, privacy: .public)); \
+        pair key for pendingPairingId orphaned until next pair attempt or purge
+        """)
     }
 
     /// The pairingId that was active for the most recently completed
