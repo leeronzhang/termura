@@ -62,6 +62,14 @@ enum RemoteCommandRunner {
         guard let engine = scope.engines.engine(for: sessionId) else {
             throw Failure.sessionNotFound
         }
+        // Treat exited / terminating engines the same as a missing engine.
+        // Without this, `engine.send` / `engine.pressReturn` silently no-op
+        // (their `guard let surface else { return }`), the await loop hits
+        // the 30s timeout, and iOS sees a misleading "Command dispatched"
+        // fallback for a session that already died on the Mac.
+        guard engine.isRunning else {
+            throw Failure.sessionNotFound
+        }
 
         let stream = subscribe(to: commandRouter, sessionId: sessionId)
 

@@ -1,7 +1,8 @@
 // Public protocol surface for the iOS remote-control feature. Always compiled.
 // Real implementation lives in `termura-harness/Sources/Remote/` and is gated by
-// HARNESS_ENABLED. When that flag is absent (Free build), `RemoteIntegrationFactory`
-// returns `NullRemoteIntegration`, so call sites compile and run without changes.
+// HARNESS_ENABLED. Public callers go through `RemoteIntegrationLauncher` (defined
+// below); when HARNESS_ENABLED is absent (Free build), the launcher returns
+// `NullRemoteIntegration`, so call sites compile and run without changes.
 
 import Foundation
 import TermuraRemoteProtocol
@@ -152,7 +153,7 @@ struct NullRemoteSessionsAdapter: RemoteSessionsAdapter {
 
 // PR8 Phase 2 — minimal hook surface for the agent ↔ app bridge.
 // The Free build sees only this protocol; the harness build supplies a
-// concrete implementation through `RemoteIntegrationFactory.makeAgentBridge`.
+// concrete implementation through `RemoteIntegrationLauncher.makeAgentBridge`.
 // `AppDelegate+RemoteBridge.swift` is the single call site and never
 // references any harness concrete type.
 protocol RemoteAgentBridgeLifecycle: Sendable {
@@ -173,14 +174,27 @@ struct NullRemoteAgentBridgeLifecycle: RemoteAgentBridgeLifecycle {
     func resetAgentState() async throws {}
 }
 
-#if !HARNESS_ENABLED
-enum RemoteIntegrationFactory {
-    static func make(adapter _: any RemoteSessionsAdapter) -> any RemoteIntegration {
+/// Public façade callers go through. In the harness build it delegates to
+/// the private repo's concrete factory (whose name is intentionally kept
+/// off the public surface — see CLAUDE.md §12.3 leak list); in the Free
+/// build it returns the Null lifecycle types defined above. Keeping the
+/// dispatch here means non-stub public files (e.g. `AppDelegate.swift`)
+/// never have to reference a private impl symbol.
+@MainActor
+enum RemoteIntegrationLauncher {
+    static func make(adapter: any RemoteSessionsAdapter) -> any RemoteIntegration {
+        #if HARNESS_ENABLED
+        RemoteIntegrationFactory.make(adapter: adapter)
+        #else
         NullRemoteIntegration()
+        #endif
     }
 
-    static func makeAgentBridge(integration _: any RemoteIntegration) -> any RemoteAgentBridgeLifecycle {
+    static func makeAgentBridge(integration: any RemoteIntegration) -> any RemoteAgentBridgeLifecycle {
+        #if HARNESS_ENABLED
+        RemoteIntegrationFactory.makeAgentBridge(integration: integration)
+        #else
         NullRemoteAgentBridgeLifecycle()
+        #endif
     }
 }
-#endif

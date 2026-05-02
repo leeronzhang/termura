@@ -47,19 +47,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let collector = MetricsCollector()
         let environment = ProcessInfo.processInfo.environment
-        let engineFactory = Self.makeEngineFactory(environment: environment)
         let shellInstaller = Self.makeShellInstaller(environment: environment)
         // Coordinator is needed before AppServices because the remote adapter closures
         // capture it weakly to resolve the active project's session store on demand.
         let coordinator = ProjectCoordinator()
         // Push seam: SessionListBroadcaster yields to this; harness router subscribes via adapter.
         let (sessionChangeStream, sessionChangeContinuation) = AsyncStream<Void>.makeStream()
+        // Broadcaster constructed before the engine factory so the factory can hold a weak
+        // ping-on-exit ref back to it. snapshotProvider routes through `gatherActiveSessions`
+        // so engine-state changes (process exit) drive iOS list refreshes outside the
+        // `withObservationTracking` graph.
+        let broadcaster = SessionListBroadcaster(
+            coordinator: coordinator,
+            changeContinuation: sessionChangeContinuation,
+            snapshotProvider: { [weak coordinator] in
+                Self.gatherActiveSessions(coordinator: coordinator).map(\.id)
+            }
+        )
+        let engineFactory = Self.makeEngineFactory(
+            environment: environment,
+            onEngineLifecycleChanged: { [weak broadcaster] in
+                broadcaster?.pingNow()
+            }
+        )
         let remoteAdapter = Self.makeRemoteAdapter(
             coordinator: coordinator,
             changeStream: sessionChangeStream
         )
-        let remoteIntegration = RemoteIntegrationFactory.make(adapter: remoteAdapter)
-        let remoteAgentBridge = RemoteIntegrationFactory.makeAgentBridge(integration: remoteIntegration)
+        let remoteIntegration = RemoteIntegrationLauncher.make(adapter: remoteAdapter)
+        let remoteAgentBridge = RemoteIntegrationLauncher.makeAgentBridge(integration: remoteIntegration)
         services = AppServices(
             engineFactory: engineFactory,
             themeManager: ThemeManager(),
@@ -83,21 +99,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             remoteAgentBridge: remoteAgentBridge
         )
         projectCoordinator = coordinator
-        sessionListBroadcaster = SessionListBroadcaster(
-            coordinator: coordinator,
-            changeContinuation: sessionChangeContinuation
-        )
+        sessionListBroadcaster = broadcaster
 
         super.init()
     }
 
-    private static func makeEngineFactory(environment: [String: String]) -> any TerminalEngineFactory {
+    private static func makeEngineFactory(
+        environment: [String: String],
+        onEngineLifecycleChanged: @escaping @MainActor @Sendable () -> Void
+    ) -> any TerminalEngineFactory {
         #if DEBUG
         if environment["UI_TESTING_MOCK_TERMINAL_ENGINE"] != nil {
             return DebugTerminalEngineFactory()
         }
         #endif
-        return LiveTerminalEngineFactory()
+        return LiveTerminalEngineFactory(onEngineLifecycleChanged: onEngineLifecycleChanged)
     }
 
     private static func makeShellInstaller(environment: [String: String]) -> any ShellHookInstallerProtocol {

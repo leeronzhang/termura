@@ -25,16 +25,41 @@ private let logger = Logger(subsystem: "com.termura.app", category: "SessionList
 final class SessionListBroadcaster {
     private weak var coordinator: ProjectCoordinator?
     private let changeContinuation: AsyncStream<Void>.Continuation
+    private let snapshotProvider: @MainActor () -> [UUID]
     private var observationTask: Task<Void, Never>?
     private var windowFocusObserver: (any NSObjectProtocol)?
     private var lastSnapshot: [UUID] = []
 
+    /// `snapshotProvider` returns the current "alive session ids" — the
+    /// projection iOS sees. Defaults to a raw read of `store.sessions`
+    /// for callers that don't need engine-state filtering (tests).
+    /// AppDelegate injects a closure that defers to
+    /// `gatherActiveSessions(coordinator:)` so engine lifecycle changes
+    /// (process exits) become observable here.
     init(
         coordinator: ProjectCoordinator,
-        changeContinuation: AsyncStream<Void>.Continuation
+        changeContinuation: AsyncStream<Void>.Continuation,
+        snapshotProvider: (@MainActor () -> [UUID])? = nil
     ) {
         self.coordinator = coordinator
         self.changeContinuation = changeContinuation
+        if let snapshotProvider {
+            self.snapshotProvider = snapshotProvider
+        } else {
+            self.snapshotProvider = { [weak coordinator] in
+                coordinator?.activeContext?.sessionScope.store.sessions.map(\.id.rawValue) ?? []
+            }
+        }
+    }
+
+    /// Re-evaluate the alive-session-id snapshot and broadcast if it
+    /// differs from the last emission. Called from outside the
+    /// `withObservationTracking` loop when state that isn't on the
+    /// observation graph mutates — currently `LibghosttyEngine.state`
+    /// flipping to `.disposed` after a child process exits. Idempotent:
+    /// equal snapshots are dropped without yielding.
+    func pingNow() {
+        fireIfChanged()
     }
 
     /// Begin observing. Idempotent — a second call replaces the existing task
@@ -95,7 +120,7 @@ final class SessionListBroadcaster {
     }
 
     private func fireIfChanged() {
-        let snapshot = currentStore()?.sessions.map(\.id.rawValue) ?? []
+        let snapshot = snapshotProvider()
         guard snapshot != lastSnapshot else { return }
         lastSnapshot = snapshot
         changeContinuation.yield()

@@ -81,8 +81,12 @@ extension AppDelegate {
     @MainActor
     static func gatherActiveSessions(coordinator: ProjectCoordinator?) -> [RemoteSessionInfo] {
         guard let scope = coordinator?.activeContext?.sessionScope else { return [] }
-        return scope.store.sessions.map { record in
-            RemoteSessionInfo(
+        return scope.store.sessions.compactMap { record in
+            // Drop sessions without a live engine so iOS never lands on
+            // `RemoteCommandRunner`'s 30s timeout for a dead PTY (see
+            // `LibghosttyEngine.send` short-circuit on `surface == nil`).
+            guard let engine = scope.engines.engine(for: record.id), engine.isRunning else { return nil }
+            return RemoteSessionInfo(
                 id: record.id.rawValue,
                 title: record.title,
                 workingDirectory: record.workingDirectory,
@@ -104,6 +108,13 @@ extension AppDelegate {
         guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
         let id = SessionID(rawValue: sessionId)
         guard let engine = scope.engines.engine(for: id) else { return nil }
+        // Skip capture for exited / terminating engines. The styled and
+        // plain-text paths both gate on `ghosttyView.surface != nil`, so
+        // they would silently return nil anyway — this guard makes the
+        // intent explicit and keeps the pulse from spending work on a
+        // session that's about to be filtered from the iOS list (see
+        // `gatherActiveSessions`).
+        guard engine.isRunning else { return nil }
         // Prefer the styled snapshot so iOS renders fg/bg/bold/etc. with
         // fidelity. Wave-Styled-v2 uses ghostty_surface_snapshot_viewport
         // which copies the cell grid + palette into a caller-owned buffer

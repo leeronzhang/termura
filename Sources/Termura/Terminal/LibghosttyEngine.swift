@@ -37,10 +37,23 @@ final class LibghosttyEngine: TerminalEngine {
     private var currentFontSize: CGFloat = FontSettings.defaultTerminalSize
     private var currentTheme: ThemeColors = .dark
 
+    /// Optional observer fired once when the underlying child process
+    /// exits and the engine moves to `.disposed`. Used by the composition
+    /// root to refresh the iOS-visible session list (§3.6 push-on-change)
+    /// so a remote client never sees a session whose engine has died.
+    /// Optional under §3.3 because non-remote builds (and previews / unit
+    /// tests) don't need to plumb a sink — diagnostics-class dependency.
+    private let onLifecycleChanged: (@MainActor @Sendable () -> Void)?
+
     // MARK: - Init
 
-    init(sessionID: SessionID, workingDirectory: String? = nil) {
+    init(
+        sessionID: SessionID,
+        workingDirectory: String? = nil,
+        onLifecycleChanged: (@MainActor @Sendable () -> Void)? = nil
+    ) {
         self.sessionID = sessionID
+        self.onLifecycleChanged = onLifecycleChanged
         // WHY: Terminal output must be bridged from ghostty callbacks into async consumers with bounded buffering.
         // OWNER: LibghosttyEngine owns outputContinuation and shellContinuation for the engine lifetime.
         // TEARDOWN: deinit/close paths finish the continuations when the engine is released.
@@ -90,6 +103,11 @@ final class LibghosttyEngine: TerminalEngine {
             outCont.yield(.processExited(code))
             outCont.finish()
             state = .disposed
+            // Notify the composition root so the broadcaster re-emits a
+            // session list with this dead session filtered out — without
+            // it iOS keeps the session in its list and lands on the 30s
+            // timeout fallback the next time the user taps it.
+            onLifecycleChanged?()
         }
         // ghostty OSC 133;D → shell integration event
         view.onCommandFinished = { [shellCont] exitCode in

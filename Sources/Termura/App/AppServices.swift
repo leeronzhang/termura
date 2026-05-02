@@ -32,7 +32,7 @@ struct AppServices {
     let remoteControlController: RemoteControlController
     /// PR8 Phase 2 — agent ↔ app bridge lifecycle. Free build:
     /// `NullRemoteAgentBridgeLifecycle` (no-op). Harness build: a
-    /// concrete impl wired by `RemoteIntegrationFactory.makeAgentBridge`
+    /// concrete impl wired by `RemoteIntegrationLauncher.makeAgentBridge`
     /// that owns the XPC client + ingress + auto-connector. Call sites
     /// only see the protocol surface (no harness concrete types leak
     /// into the open-core repo).
