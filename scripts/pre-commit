@@ -26,19 +26,19 @@ set -euo pipefail
 # appears (e.g. a new tracked file mistakenly hardcodes the sibling
 # repo path), fix the file — don't extend the pattern.
 LEAK_PATTERN='termura-harness'
-# Self-exclude the three scanner / cross-repo orchestrator scripts that
+# Self-exclude the four scanner / cross-repo orchestrator scripts that
 # physically MUST embed the leak literal because that IS their job:
-#   - scripts/pre-commit       — a scanner that can't grep its own
-#                                 pattern is non-functional
-#   - scripts/regen-all.sh     — cross-repo xcodegen orchestrator must
-#                                 `cd` into the sibling repo's path
-#   - scripts/quality-gate.sh  — `--include-private` mode must `cd`
-#                                 into the sibling repo to run paired
-#                                 quality checks
+#   - scripts/pre-commit              — scanner can't grep its own pattern
+#   - scripts/regen-all.sh            — cross-repo xcodegen orchestrator
+#                                        must `cd` into the sibling repo
+#   - scripts/quality-gate.sh         — `--include-private` mode must `cd`
+#                                        into the sibling repo
+#   - scripts/check-baseline-drift.sh — verifies LEAK_PATTERN literal value;
+#                                        must contain the literal to compare
 # This is a physical-self-reference exclusion, not a policy whitelist:
-# any attempt to extend SELF_EXCLUDE_FILES with other entries must be
+# any attempt to extend SELF_EXCLUDE_FILES with a 5th entry must be
 # rejected at review (see CLAUDE.md §12.3).
-SELF_EXCLUDE_FILES='^(scripts/pre-commit|scripts/regen-all\.sh|scripts/quality-gate\.sh)$'
+SELF_EXCLUDE_FILES='^(scripts/pre-commit|scripts/regen-all\.sh|scripts/quality-gate\.sh|scripts/check-baseline-drift\.sh)$'
 
 STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR)"
 LEAKS=""
@@ -85,6 +85,14 @@ if [ -n "$FORBIDDEN_FORCED" ]; then
     echo "stay gitignored — never use 'git add -f' on them."
     exit 1
 fi
+
+# ---------- Open-core baseline drift check ----------
+#
+# Locks in the post-whitelist-removal state so future PRs can't silently
+# re-add WHITELIST_REGEX, broaden LEAK_PATTERN with type names, or extend
+# SELF_EXCLUDE_FILES with a 4th entry. See scripts/check-baseline-drift.sh
+# header for the three invariants.
+bash scripts/check-baseline-drift.sh
 
 # ---------- Quality gate ----------
 bash scripts/quality-gate.sh --staged

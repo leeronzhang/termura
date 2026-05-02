@@ -123,7 +123,17 @@ run_gate_check() {
             return 0
             ;;
         3)
-            record_warning
+            # Advisory exit (file-size soft cap, view-global-access, …).
+            # Default policy: STRICT BASELINE — treat advisories as
+            # failures so the current 0-violation state is locked in.
+            # Any PR that introduces a new advisory hit fails the gate.
+            # Local incremental work that wants the legacy WARN behaviour
+            # can opt out with `ALLOW_ADVISORY_WARN=1`.
+            if [[ "${ALLOW_ADVISORY_WARN:-0}" == "1" ]]; then
+                record_warning
+            else
+                record_failure
+            fi
             return 0
             ;;
         *)
@@ -328,6 +338,7 @@ fi
 
 run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
 run_gate_check "Version sync check" bash scripts/check-version-sync.sh
+run_gate_check "Open-core baseline drift check" bash scripts/check-baseline-drift.sh
 
 echo "-> Forbidden Swift pattern checks..."
 # Pre-build the list of paths the inline Python should scan. We pass them via
@@ -476,6 +487,14 @@ else
                 bash scripts/check-task-ownership.sh "$root"
         done
     fi
+fi
+
+run_gate_check "Entitlements hygiene gate" \
+    env HARNESS_ROOT="$HARNESS_ROOT" bash scripts/check-entitlements-hygiene.sh
+
+if [[ -n "$HARNESS_ROOT" ]]; then
+    run_gate_check "iOS App Store permissions / privacy gate" \
+        env IOS_HARNESS_ROOT="$HARNESS_ROOT" bash scripts/check-ios-permissions.sh
 fi
 
 echo "-> Harness private file leak check..."

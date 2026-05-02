@@ -39,6 +39,7 @@ Makefile
 # scripts/* (not scripts/) so the negations below can re-include specific files —
 # git ignores `!foo` when the parent directory itself is excluded by `scripts/`.
 scripts/*
+!scripts/check-baseline-drift.sh
 !scripts/check-signing-setup.sh
 !scripts/check-version-sync.sh
 !scripts/check-xcstrings-coverage.sh
