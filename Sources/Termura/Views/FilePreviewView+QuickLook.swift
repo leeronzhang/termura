@@ -53,12 +53,12 @@ final class QuickLookHostView: NSView {
     /// `Edit > Copy` menu item with the ⌘C key equivalent. Without that
     /// equivalent, `QLPreviewView` / `PDFView` never see ⌘C even when they
     /// are first responder. Catch the shortcut here and forward to whatever
-    /// inside the preview implements `copy:` via `NSApp.sendAction(_:to:from:)`,
-    /// which walks the responder chain just like a menu item would.
+    /// inside the preview implements `copy:` by walking the responder chain
+    /// like a menu item would.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command),
            event.charactersIgnoringModifiers == "c",
-           NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) {
+           NSApplication.shared.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) {
             return true
         }
         return super.performKeyEquivalent(with: event)
