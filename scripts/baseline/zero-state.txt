@@ -1,0 +1,5 @@
+wave-0-zero-state: 2026-05-02T10:50:25Z
+swiftlint: 0 violations / 0 serious in 365 files
+quality-gate: All quality checks passed (0 errors, 0 warnings)
+leak-pattern: path-only (see scripts/check-baseline-drift.sh for the current literal)
+self-exclude-files: scripts/{pre-commit,regen-all.sh,quality-gate.sh,check-baseline-drift.sh}

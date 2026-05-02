@@ -1,0 +1,11 @@
+33:  excluded:
+43:  excluded:
+99:excluded:
+124:    excluded: ".*GhosttyAppContext\\.swift"
+180:    excluded: ".*Sources/Termura/App/.*"
+194:    excluded: ".*Preview.*\\.swift"
+210:    excluded: ".*AppConfig.*\\.swift"
+219:    excluded: ".*AppConfig.*\\.swift"
+232:    excluded: ".*Tests.*\\.swift"
+240:    excluded: ".*Tests.*\\.swift"
+266:    excluded:

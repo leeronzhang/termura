@@ -339,6 +339,7 @@ fi
 run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
 run_gate_check "Version sync check" bash scripts/check-version-sync.sh
 run_gate_check "Open-core baseline drift check" bash scripts/check-baseline-drift.sh
+run_gate_check "Open-core baseline snapshots check" bash scripts/check-baseline-snapshots.sh
 
 echo "-> Forbidden Swift pattern checks..."
 # Pre-build the list of paths the inline Python should scan. We pass them via

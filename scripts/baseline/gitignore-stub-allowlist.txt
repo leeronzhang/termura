@@ -1,0 +1,5 @@
+28:!Sources/Termura/Harness/HarnessModels.swift
+29:!Sources/Termura/Harness/RuleFileRepositoryProtocol.swift
+30:!Sources/Termura/Harness/HarnessViewModel+Stub.swift
+31:!Sources/Termura/Harness/ExperienceCodifier+Stub.swift
+32:!Sources/Termura/Harness/RemoteIntegration+Stub.swift
