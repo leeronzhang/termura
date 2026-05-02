@@ -41,11 +41,12 @@ public struct ScreenUnsubscribeRequest: Sendable, Codable, Equatable {
 /// truncate; the client should not assume a maximum length and must
 /// render with a monospaced font so columns line up.
 ///
-/// Plain-text only in this MVP — colors, bold, underline, cursor
-/// position, and selection are intentionally omitted. The client
-/// renders enough to read REPL output (Claude Code, IRB, Python REPL)
-/// and basic shell sessions; richer rendering arrives in a follow-up
-/// once the wire path is proven.
+/// `styledLines`, when present, carries the same viewport but with
+/// per-cell color and SGR attributes — see `StyledScreenFrame.swift`.
+/// Newer clients should prefer `styledLines` and fall back to `lines`
+/// when the field is `nil` (older Mac server, or transient extraction
+/// failure). Older clients ignore the field entirely thanks to
+/// `decodeIfPresent`, so the wire stays backward-compatible.
 public struct ScreenFramePayload: Sendable, Codable, Equatable {
     public let sessionId: UUID
     public let frameId: UUID
@@ -53,6 +54,7 @@ public struct ScreenFramePayload: Sendable, Codable, Equatable {
     public let rows: Int
     public let cols: Int
     public let lines: [String]
+    public let styledLines: [StyledLine]?
 
     public init(
         sessionId: UUID,
@@ -60,7 +62,8 @@ public struct ScreenFramePayload: Sendable, Codable, Equatable {
         capturedAt: Date = Date(),
         rows: Int,
         cols: Int,
-        lines: [String]
+        lines: [String],
+        styledLines: [StyledLine]? = nil
     ) {
         self.sessionId = sessionId
         self.frameId = frameId
@@ -68,17 +71,40 @@ public struct ScreenFramePayload: Sendable, Codable, Equatable {
         self.rows = rows
         self.cols = cols
         self.lines = lines
+        self.styledLines = styledLines
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case sessionId, frameId, capturedAt, rows, cols, lines, styledLines
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try container.decode(UUID.self, forKey: .sessionId)
+        frameId = try container.decode(UUID.self, forKey: .frameId)
+        capturedAt = try container.decode(Date.self, forKey: .capturedAt)
+        rows = try container.decode(Int.self, forKey: .rows)
+        cols = try container.decode(Int.self, forKey: .cols)
+        lines = try container.decode([String].self, forKey: .lines)
+        styledLines = try container.decodeIfPresent([StyledLine].self, forKey: .styledLines)
     }
 
     /// Stable digest used by the server-side pulse to skip pushing an
-    /// unchanged render. SHA256-isomorphic but plain string hash is
-    /// enough — collisions only delay one frame.
+    /// unchanged render. Plain-string hash is enough — collisions only
+    /// delay one frame. Includes `styledLines` so a pure-styling change
+    /// (e.g. cursor moves under the same character) still triggers a
+    /// push.
     public var renderHash: Int {
         var hasher = Hasher()
         hasher.combine(rows)
         hasher.combine(cols)
         for line in lines {
             hasher.combine(line)
+        }
+        if let styledLines {
+            for line in styledLines {
+                hasher.combine(line)
+            }
         }
         return hasher.finalize()
     }
