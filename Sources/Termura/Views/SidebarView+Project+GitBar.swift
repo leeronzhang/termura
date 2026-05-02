@@ -94,9 +94,9 @@ extension SidebarProjectContent {
 
     /// Pluralized "N change(s)" prefix; nil when working tree is clean.
     var changeSummary: String? {
-        let n = git.files.count
-        guard n > 0 else { return nil }
-        return "\u{00B7} \(n) change\(n == 1 ? "" : "s")"
+        let count = git.files.count
+        guard count > 0 else { return nil }
+        return "\u{00B7} \(count) change\(count == 1 ? "" : "s")"
     }
 
     // MARK: - Commit button

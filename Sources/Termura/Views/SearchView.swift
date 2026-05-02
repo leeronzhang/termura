@@ -97,15 +97,15 @@ struct SearchView: View {
                 SearchResultRowView(result: result)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if case let .session(s) = result {
-                            onSelectSession(s.id)
+                        if case let .session(session) = result {
+                            onSelectSession(session.id)
                             isPresented = false
                         }
                     }
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction(.default) {
-                        if case let .session(s) = result {
-                            onSelectSession(s.id)
+                        if case let .session(session) = result {
+                            onSelectSession(session.id)
                             isPresented = false
                         }
                     }

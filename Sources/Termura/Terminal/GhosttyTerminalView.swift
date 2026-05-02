@@ -108,11 +108,9 @@ final class GhosttyTerminalView: NSView {
 
     deinit {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
-        if let s = surface {
-            // ghostty_surface_free must be called on main thread.
-            // Pointer is captured by value for the task.
+        if let surface {
             Task { @MainActor in
-                ghostty_surface_free(s)
+                ghostty_surface_free(surface)
             }
         }
         logger.debug("GhosttyTerminalView deinit")
