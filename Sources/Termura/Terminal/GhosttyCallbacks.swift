@@ -71,7 +71,7 @@ func ghosttyPtyOutputCb(_ userdata: UnsafeMutableRawPointer?, _ buf: UnsafePoint
 // Terminated by BEL (\x07) or ST (ESC \).
 // A/B/C/X are emitted here; D is handled by GHOSTTY_ACTION_COMMAND_FINISHED.
 // X is Termura's private extension carrying `key=value;...` metadata that
-// `PTYCommandBridge` injects to tag remote-issued commands.
+// `RemoteCommandRunner` injects to tag remote-issued commands.
 private func scanOSC133ShellEvents(
     _ buf: UnsafePointer<UInt8>,
     len: Int,

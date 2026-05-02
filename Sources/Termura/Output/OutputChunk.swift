@@ -31,7 +31,7 @@ struct OutputChunk: Identifiable, Sendable {
     let uiContent: UIContentBlock
     /// Free-form metadata captured from `OSC 133;X;key=value` sequences
     /// that the active foreground program may emit. Empty by default; the
-    /// remote-control flow no longer injects markers (see PTYCommandBridge
+    /// remote-control flow no longer injects markers (see RemoteCommandRunner
     /// docstring for rationale), so today this only fills when shell
     /// integration scripts the user has installed publish their own
     /// key=value pairs.

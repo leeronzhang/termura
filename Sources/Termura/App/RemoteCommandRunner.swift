@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-private let logger = Logger(subsystem: "com.termura.app", category: "PTYCommandBridge")
+private let logger = Logger(subsystem: "com.termura.app", category: "RemoteCommandRunner")
 
 /// Bridges remote-issued commands (from the active `RemoteIntegration`
 /// implementation) onto the live terminal engine and waits for the next
@@ -29,7 +29,7 @@ private let logger = Logger(subsystem: "com.termura.app", category: "PTYCommandB
 /// - TEARDOWN: every exit path (success, timeout, cancellation, throw)
 ///   removes the chunkHandler via `defer`-style guard
 @MainActor
-enum PTYCommandBridge {
+enum RemoteCommandRunner {
     /// Default deadline before falling back to best-effort capture. Picked to
     /// cover the 95th percentile of interactive commands without keeping a
     /// remote client blocked indefinitely on misbehaving shells.

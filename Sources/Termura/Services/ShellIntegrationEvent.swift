@@ -13,7 +13,7 @@ enum ShellIntegrationEvent: Sendable, Equatable {
     case executionFinished(exitCode: Int?)
     /// OSC 133;X;key=value;key=value... — Termura private extension carrying
     /// arbitrary metadata that gets attached to the next command's chunk.
-    /// `PTYCommandBridge` (remote control) used to inject these markers but
+    /// `RemoteCommandRunner` (remote control) used to inject these markers but
     /// stopped because the `printf` source line was visible to the user via
     /// shell echo on every command; today the field stays for any
     /// user-installed shell-integration script that wants to publish its

@@ -125,7 +125,7 @@ extension AppDelegate {
         }
         let id = SessionID(rawValue: sessionId)
         do {
-            let outcome = try await PTYCommandBridge.run(
+            let outcome = try await RemoteCommandRunner.run(
                 line: line,
                 sessionId: id,
                 commandId: UUID(),
@@ -143,9 +143,9 @@ extension AppDelegate {
             // live-screen rendering.
             let fallback = "Command dispatched. See the Mac terminal screen for live output."
             return CommandRunResult(stdout: fallback, exitCode: outcome.exitCode)
-        } catch PTYCommandBridge.Failure.sessionNotFound {
+        } catch RemoteCommandRunner.Failure.sessionNotFound {
             throw RemoteAdapterError.sessionNotFound
-        } catch PTYCommandBridge.Failure.noActiveProject {
+        } catch RemoteCommandRunner.Failure.noActiveProject {
             throw RemoteAdapterError.noActiveProject
         }
     }

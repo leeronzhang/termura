@@ -16,7 +16,7 @@ set -euo pipefail
 # Allowed callers carry the literal in commentary or config; they're listed
 # in WHITELIST_REGEX. Anything else trips the hook.
 
-LEAK_PATTERN='(termura-harness/|RemoteServerHarness|RemoteEnvelopeRouter|RemoteAgentBridgeAssembly|RemoteAgentXPCClient|AppMailboxXPCBridge|AgentInjectedCloudKitIngress|TrustedSourceGate|RemoteAgentAutoConnector|AgentVirtualReplyChannel)'
+LEAK_PATTERN='(termura-harness/|RemoteServerHarness|RemoteEnvelopeRouter|RemoteAgentBridgeAssembly|RemoteAgentXPCClient|AppMailboxXPCBridge|AgentInjectedCloudKitIngress|TrustedSourceGate|RemoteAgentAutoConnector|AgentVirtualReplyChannel|RemoteIntegrationFactory)'
 # Meta config / cross-repo orchestrator scripts and docs are allowed to mention
 # the private repo path because their job is precisely to know about it.
 # Code under Sources/ / Packages/ is not — that's where leaks would slip into
