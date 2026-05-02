@@ -10,30 +10,80 @@ private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKit
 /// Database. Push-driven wake-ups call `ingestPushNotification()` to bypass
 /// the poll interval; otherwise a background Task ticks at `pollInterval`.
 ///
+/// Wave 1 — poll failures now feed an exponential-backoff schedule + a
+/// `pollHealth()` snapshot the iOS UI can surface, so a CloudKit outage
+/// stops looking to the user like "the app froze". Cipher decode
+/// failures distinguish transient (Keychain locked / first-unlock
+/// pending) from permanent (key missing / tampered); transient
+/// outcomes leave the record in the mailbox for a future unlocked run.
+///
 /// OWNER: caller (typically `RemoteStore`)
 /// CANCEL: `disconnect()` cancels the poll Task and resumes pending receivers
 /// TEARDOWN: drop reference; actor cleanup runs on disconnect
 public actor CloudKitClientTransport: ClientTransport {
     public struct Configuration: Sendable {
         public let pollInterval: Duration
+        /// Maximum consecutive poll failures before the transport flags itself
+        /// `.unhealthy`. Tuned to ~5 × 60s — long enough to ride out a Wi-Fi
+        /// roam, short enough that a sustained CloudKit outage gets visible.
+        public let healthFailureThreshold: Int
+        /// Cap on the exponential backoff delay applied between poll
+        /// attempts after consecutive failures.
+        public let backoffCap: Duration
 
-        public init(pollInterval: Duration = .seconds(60)) {
+        public init(
+            pollInterval: Duration = .seconds(60),
+            healthFailureThreshold: Int = 5,
+            backoffCap: Duration = .seconds(600)
+        ) {
             self.pollInterval = pollInterval
+            self.healthFailureThreshold = healthFailureThreshold
+            self.backoffCap = backoffCap
         }
     }
 
+    /// Poll-loop health summary. `unhealthy` flips on after
+    /// `healthFailureThreshold` consecutive failures and clears the moment a
+    /// poll succeeds; consumers (RemoteStore, Settings UI) read it to surface
+    /// "CloudKit unreachable" without polling the actor every tick.
+    public struct PollHealth: Sendable, Equatable {
+        public let isHealthy: Bool
+        public let consecutiveFailures: Int
+        public let lastFailureReason: String?
+
+        public init(isHealthy: Bool, consecutiveFailures: Int, lastFailureReason: String? = nil) {
+            self.isHealthy = isHealthy
+            self.consecutiveFailures = consecutiveFailures
+            self.lastFailureReason = lastFailureReason
+        }
+
+        public static let healthy = PollHealth(isHealthy: true, consecutiveFailures: 0)
+    }
+
     nonisolated let codec: any RemoteCodec
-    private let localDeviceId: UUID
+    /// Module-internal so the same-module `+Polling` extension can use
+    /// it as the fetch target without an extra accessor.
+    let localDeviceId: UUID
     private let peerDeviceId: UUID
-    private let gateway: any CloudKitDatabaseGateway
-    private let pairKeyStore: (any PairKeyStore)?
-    private let configuration: Configuration
+    /// Module-internal for the same reason as `localDeviceId` above.
+    let gateway: any CloudKitDatabaseGateway
+    /// Module-internal so the same-module `+CipherDecode` extension can
+    /// reach the store without widening the public actor surface.
+    let pairKeyStore: (any PairKeyStore)?
+    /// Module-internal so the same-module `+Polling` extension can read
+    /// the backoff parameters when scheduling the next tick.
+    let configuration: Configuration
     private let clock: @Sendable () -> Date
     private var pollingTask: Task<Void, Never>?
-    private var lastSeen: Date = .distantPast
+    /// Module-internal so the same-module `+Polling` and `+CipherDecode`
+    /// extensions can read/update without re-routing through public
+    /// surfaces. The actor's isolation domain still serialises access.
+    var lastSeen: Date = .distantPast
     private var queue: [Envelope] = []
     private var waiters: [CheckedContinuation<Envelope, any Error>] = []
-    private var isConnected = false
+    var isConnected = false
+    var consecutivePollFailures = 0
+    var lastPollFailureReason: String?
     /// PR7 — `pairingId` of the active relationship. Set after iOS sees
     /// `PairingCompleteAck` (RemoteStore drives it). While `nil`, `send`
     /// writes plaintext records (the bootstrap path used by the
@@ -67,6 +117,17 @@ public actor CloudKitClientTransport: ClientTransport {
         activePairingId = id
     }
 
+    /// Snapshot of the most recent poll outcome. iOS UI / RemoteStore
+    /// can read this to surface "CloudKit unreachable" instead of
+    /// leaving the user staring at a hung session list.
+    public func pollHealth() -> PollHealth {
+        PollHealth(
+            isHealthy: consecutivePollFailures < configuration.healthFailureThreshold,
+            consecutiveFailures: consecutivePollFailures,
+            lastFailureReason: lastPollFailureReason
+        )
+    }
+
     public func connect() async throws {
         guard !isConnected else { return }
         do {
@@ -85,9 +146,8 @@ public actor CloudKitClientTransport: ClientTransport {
             throw ClientTransportError.connectFailure(reason: error.localizedDescription)
         }
         isConnected = true
-        let interval = configuration.pollInterval
         pollingTask = Task { [weak self] in
-            await self?.runPollLoop(interval: interval)
+            await self?.runPollLoop()
         }
     }
 
@@ -180,81 +240,7 @@ public actor CloudKitClientTransport: ClientTransport {
         return await pollOnce()
     }
 
-    private func runPollLoop(interval: Duration) async {
-        while !Task.isCancelled {
-            _ = await pollOnce()
-            do {
-                try await Task.sleep(for: interval)
-            } catch {
-                return
-            }
-        }
-    }
-
-    @discardableResult
-    private func pollOnce() async -> Bool {
-        guard isConnected else { return false }
-        let records: [CloudKitEnvelopeRecord]
-        do {
-            records = try await gateway.fetch(targetDeviceId: localDeviceId, since: lastSeen)
-        } catch let CloudKitGatewayError.unsupportedSchema(version) {
-            // Skip the entire batch but record the version so a stuck
-            // v1 leftover surfaces in `log stream`. Same handling as the
-            // server CloudKitTransport.
-            logger.warning("Skipping fetch batch with unsupported schemaVersion=\(version)")
-            return false
-        } catch {
-            logger.error("Poll failed: \(error.localizedDescription)")
-            return false
-        }
-        for record in records {
-            switch record.payload {
-            case let .plaintext(envelope):
-                deliver(envelope: envelope)
-            case let .cipher(blob):
-                if let envelope = await openCipher(blob) {
-                    deliver(envelope: envelope)
-                }
-                // Drop unreadable cipher records below — same warning
-                // path as `openCipher` already logged.
-            }
-            if record.createdAt > lastSeen {
-                lastSeen = record.createdAt
-            }
-            do {
-                try await gateway.delete(id: record.id)
-            } catch {
-                logger.warning("Failed to delete consumed record \(record.id): \(error.localizedDescription)")
-            }
-        }
-        return true
-    }
-
-    private func openCipher(_ blob: CipherBlob) async -> Envelope? {
-        guard let store = pairKeyStore else {
-            logger.warning("CipherBlob received but no PairKeyStore configured; dropping record")
-            return nil
-        }
-        let pairKey: PairKey?
-        do {
-            pairKey = try await store.key(forPairing: blob.keyId)
-        } catch {
-            logger.warning("PairKey lookup failed for \(blob.keyId): \(error.localizedDescription)")
-            return nil
-        }
-        guard let pairKey else {
-            logger.warning("No PairKey for keyId=\(blob.keyId); dropping record")
-            return nil
-        }
-        do {
-            return try CloudEnvelopeCrypto.open(blob, with: pairKey, codec: codec)
-        } catch {
-            logger.warning("CloudEnvelopeCrypto.open failed: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    private func deliver(envelope: Envelope) {
+    func deliver(envelope: Envelope) {
         if waiters.isEmpty {
             queue.append(envelope)
             return

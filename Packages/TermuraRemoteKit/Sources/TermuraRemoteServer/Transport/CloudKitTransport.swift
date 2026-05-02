@@ -9,29 +9,73 @@ private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKit
 /// Push-driven wake-ups (silent APNs) call `ingestPushNotification()` to
 /// trigger an immediate poll without waiting for the next tick.
 ///
+/// Wave 1 — poll failures now feed an exponential-backoff schedule + a
+/// `pollHealth()` snapshot the harness/Settings UI can surface, so a
+/// CloudKit outage stops looking to the user like "the app froze".
+/// Cipher decode failures distinguish transient (Keychain locked /
+/// first-unlock pending) from permanent (key missing / tampered);
+/// transient outcomes leave the record in the mailbox for a future
+/// unlocked run.
+///
 /// OWNER: caller (typically `RemoteServerHarness`)
 /// CANCEL: `stop()` cancels the poll Task and clears handler/channels
 /// TEARDOWN: drop reference; actor cleanup runs on stop
 public actor CloudKitTransport: RemoteTransport {
     public struct Configuration: Sendable {
         public let pollInterval: Duration
+        /// Maximum consecutive poll failures before the transport flags itself
+        /// `.unhealthy`. Tuned to ~5 × 60s — long enough to ride out a Wi-Fi
+        /// roam, short enough that a sustained CloudKit outage gets visible.
+        public let healthFailureThreshold: Int
+        /// Cap on the exponential backoff delay applied between poll
+        /// attempts after consecutive failures.
+        public let backoffCap: Duration
 
-        public init(pollInterval: Duration = .seconds(60)) {
+        public init(
+            pollInterval: Duration = .seconds(60),
+            healthFailureThreshold: Int = 5,
+            backoffCap: Duration = .seconds(600)
+        ) {
             self.pollInterval = pollInterval
+            self.healthFailureThreshold = healthFailureThreshold
+            self.backoffCap = backoffCap
         }
+    }
+
+    /// Poll-loop health summary. `unhealthy` flips on after
+    /// `healthFailureThreshold` consecutive failures and clears the moment a
+    /// poll succeeds; consumers (the harness, Settings UI) read it to surface
+    /// "CloudKit unreachable" without polling the actor every tick.
+    public struct PollHealth: Sendable, Equatable {
+        public let isHealthy: Bool
+        public let consecutiveFailures: Int
+        public let lastFailureReason: String?
+
+        public init(isHealthy: Bool, consecutiveFailures: Int, lastFailureReason: String? = nil) {
+            self.isHealthy = isHealthy
+            self.consecutiveFailures = consecutiveFailures
+            self.lastFailureReason = lastFailureReason
+        }
+
+        public static let healthy = PollHealth(isHealthy: true, consecutiveFailures: 0)
     }
 
     public nonisolated let name: String
     private let deviceId: UUID
     private let gateway: any CloudKitDatabaseGateway
-    private let pairKeyStore: (any PairKeyStore)?
-    private let codec: any RemoteCodec
+    /// Module-internal so the same-module `+CipherDecode` extension can
+    /// reach the store without widening the public actor surface.
+    let pairKeyStore: (any PairKeyStore)?
+    /// Module-internal for the same reason as `pairKeyStore` above.
+    let codec: any RemoteCodec
     private let configuration: Configuration
     private let clock: @Sendable () -> Date
     private var pollingTask: Task<Void, Never>?
     private var handler: (any EnvelopeHandler)?
     private var lastSeen: Date = .distantPast
     private var channels: [UUID: CloudKitReplyChannel] = [:]
+    private var consecutivePollFailures = 0
+    private var lastPollFailureReason: String?
 
     public init(
         name: String,
@@ -61,6 +105,17 @@ public actor CloudKitTransport: RemoteTransport {
         await channels[source]?.setActivePairingId(id)
     }
 
+    /// Snapshot of the most recent poll outcome. Settings UI / harness
+    /// can read this to surface "CloudKit unreachable" instead of leaving
+    /// the user staring at a hung session list.
+    public func pollHealth() -> PollHealth {
+        PollHealth(
+            isHealthy: consecutivePollFailures < configuration.healthFailureThreshold,
+            consecutiveFailures: consecutivePollFailures,
+            lastFailureReason: lastPollFailureReason
+        )
+    }
+
     public func start(handler: any EnvelopeHandler) async throws {
         guard pollingTask == nil else { throw TransportError.alreadyRunning }
         self.handler = handler
@@ -77,9 +132,8 @@ public actor CloudKitTransport: RemoteTransport {
             self.handler = nil
             throw TransportError.bindFailure(reason: error.localizedDescription)
         }
-        let interval = configuration.pollInterval
         pollingTask = Task { [weak self] in
-            await self?.runPollLoop(interval: interval)
+            await self?.runPollLoop()
         }
     }
 
@@ -98,15 +152,35 @@ public actor CloudKitTransport: RemoteTransport {
         await pollOnce()
     }
 
-    private func runPollLoop(interval: Duration) async {
+    private func runPollLoop() async {
         while !Task.isCancelled {
             await pollOnce()
             do {
-                try await Task.sleep(for: interval)
+                try await Task.sleep(for: nextPollDelay())
             } catch {
                 return
             }
         }
+    }
+
+    /// Computes the wait between this poll and the next. After a clean
+    /// poll, `consecutivePollFailures == 0` and we sleep the configured
+    /// interval. After failures we sleep `pollInterval × 2^(failures-1)`
+    /// up to `backoffCap`, so a sustained CloudKit outage doesn't keep
+    /// hammering the gateway every minute.
+    private func nextPollDelay() -> Duration {
+        guard consecutivePollFailures > 0 else { return configuration.pollInterval }
+        let baseSeconds = Self.durationInSeconds(configuration.pollInterval)
+        let multiplier = pow(2.0, Double(min(consecutivePollFailures - 1, 16)))
+        let candidateSeconds = baseSeconds * multiplier
+        let capSeconds = Self.durationInSeconds(configuration.backoffCap)
+        let bounded = min(candidateSeconds, capSeconds)
+        return .seconds(bounded)
+    }
+
+    private static func durationInSeconds(_ duration: Duration) -> Double {
+        let comp = duration.components
+        return Double(comp.seconds) + Double(comp.attoseconds) / 1.0e18
     }
 
     private func pollOnce() async {
@@ -116,16 +190,15 @@ public actor CloudKitTransport: RemoteTransport {
             records = try await gateway.fetch(targetDeviceId: deviceId, since: lastSeen)
         } catch let CloudKitGatewayError.unsupportedSchema(version) {
             // PR7 — v1 records (pre-encryption) are intentionally rejected
-            // on read. We can't reach the offending recordId from here
-            // without the gateway reporting it, so the warning surfaces
-            // the version and the next poll will see a fresh batch
-            // (the live gateway aborts the entire fetch). The legacy
-            // record stays in CloudKit until manual cleanup or a future
-            // gateway pass that reports per-record errors.
+            // on read. The transport skips the entire batch with a warning.
+            // Schema mismatch is not a transport health concern (the
+            // gateway is healthy; the data is stale), so we don't bump
+            // the failure counter.
             logger.warning("Skipping fetch batch with unsupported schemaVersion=\(version)")
+            recordPollSuccess()
             return
         } catch {
-            logger.error("Poll failed: \(error.localizedDescription)")
+            recordPollFailure(reason: error.localizedDescription)
             return
         }
         for record in records {
@@ -133,6 +206,27 @@ public actor CloudKitTransport: RemoteTransport {
             if record.createdAt > lastSeen {
                 lastSeen = record.createdAt
             }
+        }
+        recordPollSuccess()
+    }
+
+    private func recordPollSuccess() {
+        if consecutivePollFailures > 0 {
+            logger.info(
+                "CloudKit poll recovered after \(consecutivePollFailures) failures"
+            )
+        }
+        consecutivePollFailures = 0
+        lastPollFailureReason = nil
+    }
+
+    private func recordPollFailure(reason: String) {
+        consecutivePollFailures += 1
+        lastPollFailureReason = reason
+        if consecutivePollFailures >= configuration.healthFailureThreshold {
+            logger.error("Poll failed (#\(consecutivePollFailures)): \(reason, privacy: .public)")
+        } else {
+            logger.warning("Poll failed (#\(consecutivePollFailures)): \(reason, privacy: .public)")
         }
     }
 
@@ -142,15 +236,26 @@ public actor CloudKitTransport: RemoteTransport {
         case let .plaintext(value):
             envelope = value
         case let .cipher(blob):
-            guard let decrypted = await openCipher(blob) else {
-                // Drop unreadable record (no key / wrong key / tampered).
-                // Warning is logged inside `openCipher`; deletion below
-                // keeps the mailbox clean so we don't re-fetch it on the
-                // next poll.
+            switch await openCipher(blob) {
+            case let .success(decrypted):
+                envelope = decrypted
+            case .terminalDrop:
+                // Permanent failure (key missing / tampered): drop the
+                // record so the mailbox doesn't keep re-feeding it on
+                // every poll.
                 await deleteAfterDispatch(id: record.id)
                 return
+            case .transientLeave:
+                // Transient failure (Keychain locked / not yet
+                // unlocked). Leave the record in CloudKit and bump
+                // `lastSeen` past it so we don't loop on it for the
+                // current session — a future agent / app run with an
+                // unlocked keychain can still see it.
+                if record.createdAt > lastSeen {
+                    lastSeen = record.createdAt
+                }
+                return
             }
-            envelope = decrypted
         }
         let channel = channelFor(sourceDeviceId: record.sourceDeviceId)
         await handler.handle(envelope: envelope, replyChannel: channel)
@@ -162,30 +267,6 @@ public actor CloudKitTransport: RemoteTransport {
             try await gateway.delete(id: id)
         } catch {
             logger.warning("Failed to delete consumed record \(id): \(error.localizedDescription)")
-        }
-    }
-
-    private func openCipher(_ blob: CipherBlob) async -> Envelope? {
-        guard let store = pairKeyStore else {
-            logger.warning("CipherBlob received but no PairKeyStore configured; dropping record")
-            return nil
-        }
-        let pairKey: PairKey?
-        do {
-            pairKey = try await store.key(forPairing: blob.keyId)
-        } catch {
-            logger.warning("PairKey lookup failed for \(blob.keyId): \(error.localizedDescription)")
-            return nil
-        }
-        guard let pairKey else {
-            logger.warning("No PairKey for keyId=\(blob.keyId); dropping record")
-            return nil
-        }
-        do {
-            return try CloudEnvelopeCrypto.open(blob, with: pairKey, codec: codec)
-        } catch {
-            logger.warning("CloudEnvelopeCrypto.open failed: \(error.localizedDescription)")
-            return nil
         }
     }
 
