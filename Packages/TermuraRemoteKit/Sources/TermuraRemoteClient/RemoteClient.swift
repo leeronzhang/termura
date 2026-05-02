@@ -36,11 +36,12 @@ public actor RemoteClient {
     }
 
     /// Flip the inner-payload codec to the value the server selected during
-    /// pair handshake. Call exactly once per connection, between the
-    /// `PairingCompleteAck` decode and the moment the UI lets the user issue
-    /// commands — both sides must be on the agreed codec before the first
-    /// `cmd_exec` envelope crosses the wire. Idempotent on equal kinds so a
-    /// duplicated ack delivery doesn't churn the codec instance.
+    /// pair handshake. Wave 2 — `inbox()` now drives this internally on
+    /// every `.pairComplete` / `.rejoinAck` envelope, so callers (the iOS
+    /// `RemoteStore`, harness tests) no longer have to remember to call
+    /// it. Kept public + idempotent so existing call sites still compile
+    /// and so tests that don't drive a real handshake can still seed the
+    /// codec directly.
     public func setActiveCodec(_ kind: CodecKind) {
         switch kind {
         case .json:
@@ -48,6 +49,53 @@ public actor RemoteClient {
         case .messagepack:
             activeCodec = messagepackCodec
         }
+    }
+
+    /// Wave 2 — peeks at every inbound envelope before yielding to the
+    /// inbox stream and self-applies the codec flip when it sees a
+    /// pair-handshake terminator. Pre-Wave-2 the caller had to decode
+    /// the ack itself and remember to invoke `setActiveCodec(_:)`; a
+    /// fresh PR (or a refactor that broke the call site) silently kept
+    /// JSON-encoding subsequent business envelopes, the server then
+    /// rejected them as `Bad command payload`, and the UI hung waiting
+    /// for an ack/snapshot that never came. Decoding failures here are
+    /// non-fatal — the envelope is still yielded so the caller's own
+    /// decode path sees the failure and can fail the pair flow.
+    private func applyImplicitPhaseTransitions(envelope: Envelope) {
+        switch envelope.kind {
+        case .pairComplete:
+            decodeAndApplyAck(PairingCompleteAck.self, from: envelope) { $0.negotiatedCodec }
+        case .rejoinAck:
+            decodeAndApplyAck(RejoinAck.self, from: envelope) { $0.negotiatedCodec }
+        default:
+            break
+        }
+    }
+
+    /// Helper for `applyImplicitPhaseTransitions`. Decodes the inner
+    /// payload as `T` using the handshake codec and, on success, drives
+    /// `setActiveCodec` with the codec the closure extracts. Decode
+    /// failures are intentionally swallowed here — the envelope is
+    /// still yielded to the inbox so the caller's own decode path can
+    /// observe the failure and fail the pair flow.
+    private func decodeAndApplyAck<T: Decodable>(
+        _ type: T.Type,
+        from envelope: Envelope,
+        codec extract: (T) -> CodecKind
+    ) {
+        let decoded: T
+        do {
+            decoded = try envelope.decode(T.self, codec: handshakeCodec)
+        } catch {
+            // Non-critical: the caller surfaces the same decode error
+            // through its own handshake-complete / rejoin-ack handler
+            // (e.g. `RemoteStore+Pairing.handlePairComplete`), which is
+            // where the user-visible "pair handshake response unreadable"
+            // error originates. Swallowing here keeps RemoteClient's
+            // peek path side-effect-free on bad input.
+            return
+        }
+        setActiveCodec(extract(decoded))
     }
 
     public func connect() async throws {
@@ -111,8 +159,8 @@ public actor RemoteClient {
     public func inbox() -> AsyncStream<Envelope> {
         AsyncStream { continuation in
             inboxContinuation = continuation
-            receiveTask = Task { [transport] in
-                await Self.receiveLoop(transport: transport, continuation: continuation)
+            receiveTask = Task { [weak self] in
+                await self?.receiveLoop(continuation: continuation)
             }
             continuation.onTermination = { _ in
                 Task { [weak self] in await self?.markInboxClosed() }
@@ -124,13 +172,11 @@ public actor RemoteClient {
         inboxContinuation = nil
     }
 
-    private static func receiveLoop(
-        transport: any ClientTransport,
-        continuation: AsyncStream<Envelope>.Continuation
-    ) async {
+    private func receiveLoop(continuation: AsyncStream<Envelope>.Continuation) async {
         while !Task.isCancelled {
             do {
                 let envelope = try await transport.receive()
+                applyImplicitPhaseTransitions(envelope: envelope)
                 continuation.yield(envelope)
             } catch {
                 continuation.finish()

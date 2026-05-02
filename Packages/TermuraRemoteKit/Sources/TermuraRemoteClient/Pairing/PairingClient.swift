@@ -8,7 +8,7 @@ public struct PairingClient: Sendable {
         invitationToken: String,
         identity: DeviceIdentity,
         nickname: String,
-        supportedCodecs: [CodecKind] = [.json]
+        supportedCodecs: [CodecKind] = CodecKind.preferredOrder
     ) throws -> PairingChallengeResponse {
         let challenge = Self.challenge(token: invitationToken, devicePublicKey: identity.publicKeyData)
         let signature = try identity.sign(challenge)
