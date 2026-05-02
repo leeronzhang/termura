@@ -106,10 +106,12 @@ extension AppDelegate {
         guard let engine = scope.engines.engine(for: id) else { return nil }
         // Prefer the styled snapshot so iOS renders fg/bg/bold/etc. with
         // fidelity. Falls back to the plain-text path when the surface is
-        // not yet live, render-state alloc failed, or the engine type does
-        // not implement structured extraction. `lines` is always populated
-        // so older iOS clients still see content.
-        if let styled = engine.readVisibleStyledScreen() {
+        // not yet live, render-state alloc failed, the engine type does
+        // not implement structured extraction, or the styled extraction
+        // returned an empty viewport (transient: render state may report
+        // 0 rows on the very first pulse before the surface settles).
+        // `lines` is always populated so older iOS clients still see content.
+        if let styled = engine.readVisibleStyledScreen(), !styled.lines.isEmpty {
             return ScreenFramePayload(
                 sessionId: sessionId,
                 rows: styled.rows,

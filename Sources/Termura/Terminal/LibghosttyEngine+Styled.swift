@@ -100,8 +100,15 @@ final class StyledScreenExtractor {
               ghostty_render_state_get(renderState, GHOSTTY_RENDER_STATE_DATA_ROWS, &rows) == GHOSTTY_SUCCESS
         else { return nil }
 
+        // ROW_ITERATOR populates the iterator with row data from the render
+        // state. The C side writes to *out, so we must use the *populated*
+        // local `iter` for subsequent `_next` / `_row_get` calls — using the
+        // pre-allocated `rowIterator` handle directly leaves the iterator
+        // unpopulated and `_next` returns false on the first call, producing
+        // an empty snapshot.
         var iter: GhosttyRenderStateRowIterator? = rowIterator
-        guard ghostty_render_state_get(renderState, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &iter) == GHOSTTY_SUCCESS
+        guard ghostty_render_state_get(renderState, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &iter) == GHOSTTY_SUCCESS,
+              let liveIter = iter
         else { return nil }
 
         var styledLines: [StyledLine] = []
@@ -109,11 +116,13 @@ final class StyledScreenExtractor {
         styledLines.reserveCapacity(Int(rows))
         plainLines.reserveCapacity(Int(rows))
 
-        while ghostty_render_state_row_iterator_next(rowIterator) {
+        while ghostty_render_state_row_iterator_next(liveIter) {
+            // Same dance for cells: ROW_DATA_CELLS populates the cells handle.
             var cellsHandle: GhosttyRenderStateRowCells? = rowCells
-            guard ghostty_render_state_row_get(rowIterator, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &cellsHandle) == GHOSTTY_SUCCESS
+            guard ghostty_render_state_row_get(liveIter, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &cellsHandle) == GHOSTTY_SUCCESS,
+                  let liveCells = cellsHandle
             else { continue }
-            let (line, runs) = readRow(cells: rowCells, cols: Int(cols))
+            let (line, runs) = readRow(cells: liveCells, cols: Int(cols))
             styledLines.append(StyledLine(runs: runs))
             plainLines.append(line)
         }
