@@ -98,9 +98,11 @@ struct CodeEditorView: View {
                             : .secondary.opacity(AppUI.Opacity.dimmed)
                     )
                     .lineLimit(1)
+                    .truncationMode(.middle)
                     .textSelection(.enabled)
             }
             copyPathButton
+                .padding(.leading, AppUI.Spacing.md)
             if isModified {
                 Circle()
                     .fill(Color.orange)

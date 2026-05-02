@@ -15,12 +15,14 @@ struct MarkdownFileView: View {
     @Environment(\.themeManager) var themeManager
     @Environment(\.webViewPool) var webViewPool
     @Environment(\.webRendererBridge) var webRendererBridge
+    @Environment(\.commandRouter) private var commandRouter
 
     @State private var content = ""
     @State private var isLoading = true
     @State private var isModified = false
     @State private var errorMessage: String?
     @State private var viewMode: NoteViewMode = .reading
+    @State private var isHoveringPath = false
 
     private var absolutePath: String {
         if filePath.hasPrefix("/") { return filePath }
@@ -85,6 +87,8 @@ struct MarkdownFileView: View {
     private var header: some View {
         HStack(spacing: 0) {
             breadcrumbs
+            copyPathButton
+                .padding(.leading, AppUI.Spacing.md)
             if isModified {
                 Circle()
                     .fill(Color.orange)
@@ -105,6 +109,12 @@ struct MarkdownFileView: View {
         }
         .padding(.horizontal, AppUI.Spacing.xxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHoveringPath = hovering
+            }
+        }
     }
 
     private var breadcrumbs: some View {
@@ -123,8 +133,42 @@ struct MarkdownFileView: View {
                             : .secondary.opacity(AppUI.Opacity.dimmed)
                     )
                     .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
             }
         }
+    }
+
+    /// Hover-revealed shortcut: one click copies `<filename>\n<absolute path>`
+    /// to the system pasteboard. Mirrors the affordance in CodeEditorView so
+    /// markdown previews behave the same way.
+    private var copyPathButton: some View {
+        Button(action: copyNameAndPath) {
+            HStack(spacing: AppUI.Spacing.xs) {
+                Image(systemName: "doc.on.doc")
+                Text("Copy name & path")
+            }
+            .font(AppUI.Font.label)
+            .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .opacity(isHoveringPath ? 1 : 0)
+        .allowsHitTesting(isHoveringPath)
+        .help("Copy filename and absolute path to clipboard")
+    }
+
+    private func copyNameAndPath() {
+        let path = absolutePath
+        let fileName = (path as NSString).lastPathComponent
+        let payload = "\(fileName)\n\(path)"
+        // §3.2 exception: NSPasteboard is a platform bridge invoked from
+        // the view layer (matches existing usages in CodeEditorView /
+        // EditorTextView). Future PasteboardService extraction is tracked
+        // separately.
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        let didWrite = pasteboard.setString(payload, forType: .string)
+        commandRouter.showToast(didWrite ? "Copied filename and path" : "Copy failed")
     }
 
     private var modeToggle: some View {
