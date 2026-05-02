@@ -104,22 +104,15 @@ extension AppDelegate {
         guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
         let id = SessionID(rawValue: sessionId)
         guard let engine = scope.engines.engine(for: id) else { return nil }
-        // Prefer the styled snapshot so iOS renders fg/bg/bold/etc. with
-        // fidelity. Falls back to the plain-text path when the surface is
-        // not yet live, render-state alloc failed, the engine type does
-        // not implement structured extraction, or the styled extraction
-        // returned an empty viewport (transient: render state may report
-        // 0 rows on the very first pulse before the surface settles).
-        // `lines` is always populated so older iOS clients still see content.
-        if let styled = engine.readVisibleStyledScreen(), !styled.lines.isEmpty {
-            return ScreenFramePayload(
-                sessionId: sessionId,
-                rows: styled.rows,
-                cols: styled.cols,
-                lines: styled.lines,
-                styledLines: styled.styledLines
-            )
-        }
+        // HOTFIX: revert to plain-text path. The styled extractor
+        // (`readVisibleStyledScreen`) holds the surface's renderer mutex on
+        // every 200ms pulse, which appears to interfere with PTY input
+        // processing on the IO thread (user reported commands landing in
+        // the Mac terminal as text but Enter not firing on the same path).
+        // The pre-existing `readVisibleScreen()` uses Ghostty's own
+        // `read_text` API which does its own short-lived locking and is
+        // proven safe across the live remote flow. Re-enable styled once
+        // we have a non-blocking pull strategy.
         guard let plain = engine.readVisibleScreen() else { return nil }
         return ScreenFramePayload(
             sessionId: sessionId,
