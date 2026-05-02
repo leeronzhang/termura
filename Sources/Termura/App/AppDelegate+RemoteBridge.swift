@@ -104,15 +104,29 @@ extension AppDelegate {
         guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
         let id = SessionID(rawValue: sessionId)
         guard let engine = scope.engines.engine(for: id) else { return nil }
-        // HOTFIX: revert to plain-text path. The styled extractor
-        // (`readVisibleStyledScreen`) holds the surface's renderer mutex on
-        // every 200ms pulse, which appears to interfere with PTY input
-        // processing on the IO thread (user reported commands landing in
-        // the Mac terminal as text but Enter not firing on the same path).
-        // The pre-existing `readVisibleScreen()` uses Ghostty's own
-        // `read_text` API which does its own short-lived locking and is
-        // proven safe across the live remote flow. Re-enable styled once
-        // we have a non-blocking pull strategy.
+        // Prefer the styled snapshot so iOS renders fg/bg/bold/etc. with
+        // fidelity. Wave-Styled-v2 uses ghostty_surface_snapshot_viewport
+        // which copies the cell grid + palette into a caller-owned buffer
+        // under a brief lock and does NOT call render_state_update, so it
+        // does not consume terminal/page/row dirty flags that the host's
+        // Metal renderer relies on for incremental redraws (the v1 issue
+        // that froze the Mac terminal display every pulse).
+        //
+        // Falls back to the plain-text path when:
+        //   - the surface is not yet live (lazy attach)
+        //   - the C snapshot returned an error
+        //   - the engine type does not implement structured extraction
+        //   - the styled extraction returned an empty viewport
+        // `lines` is always populated so older iOS clients still see content.
+        if let styled = engine.readVisibleStyledScreen(), !styled.lines.isEmpty {
+            return ScreenFramePayload(
+                sessionId: sessionId,
+                rows: styled.rows,
+                cols: styled.cols,
+                lines: styled.lines,
+                styledLines: styled.styledLines
+            )
+        }
         guard let plain = engine.readVisibleScreen() else { return nil }
         return ScreenFramePayload(
             sessionId: sessionId,
