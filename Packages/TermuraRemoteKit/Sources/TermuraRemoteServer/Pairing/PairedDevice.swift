@@ -30,7 +30,7 @@ public struct PairedDevice: Sendable, Codable, Equatable, Identifiable {
     /// use for `sourceDeviceId`, and what the agent forwards as
     /// `AgentMailboxItem.sourceDeviceId`. Pure function of `publicKey` —
     /// caching it here avoids re-hashing on every trusted-source lookup
-    /// and gives `TrustedSourceGate` an O(1) reverse map. Optional only
+    /// and gives the trusted-source classifier an O(1) reverse map. Optional only
     /// for legacy entries created before PR8 landed; the migration path
     /// (`backfillCloudSourceDeviceIdIfMissing`) populates it on first
     /// read.

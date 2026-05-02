@@ -15,7 +15,7 @@ private let logger = Logger(subsystem: "com.termura.remote", category: "LocalFil
 /// limits, not a user-facing promise, and the spec deliberately keeps them
 /// out of the settings surface.
 ///
-/// OWNER: `RemoteServerHarness` constructs and shares the store
+/// OWNER: the host application's server assembly constructs and shares the store
 /// CANCEL: writes are atomic single-shot; in-flight writes are not
 ///         interruptible and finish naturally
 /// TEARDOWN: drop reference; files persist for the next session
@@ -69,7 +69,7 @@ public actor LocalFileAttachmentStore: AttachmentStore {
 
     /// Creates the root directory and indexes any existing `<sha>.bin` files
     /// left from a prior session so the LRU window survives restarts.
-    /// Idempotent — safe to call from `RemoteServerHarness.assembleIfNeeded`.
+    /// Idempotent — safe to call from the host's server-assembly bootstrap.
     public func bootstrap() throws {
         if bootstrapped { return }
         try ensureDirectoryExists()

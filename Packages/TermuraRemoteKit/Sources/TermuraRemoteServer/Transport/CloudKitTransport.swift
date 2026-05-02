@@ -17,7 +17,7 @@ private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKit
 /// transient outcomes leave the record in the mailbox for a future
 /// unlocked run.
 ///
-/// OWNER: caller (typically `RemoteServerHarness`)
+/// OWNER: caller (typically the host's server assembly)
 /// CANCEL: `stop()` cancels the poll Task and clears handler/channels
 /// TEARDOWN: drop reference; actor cleanup runs on stop
 public actor CloudKitTransport: RemoteTransport {

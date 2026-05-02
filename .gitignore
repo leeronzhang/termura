@@ -15,8 +15,8 @@ DerivedData/
 # Generated Xcode project
 *.xcodeproj/
 
-# Local-only workspace that bundles termura + termura-harness/iOS for parallel
-# Xcode editing. Each developer can regenerate with their own paths.
+# Local-only workspace bundle (per-machine).
+# Each developer can regenerate with their own paths.
 Termura.xcworkspace/
 
 # Tests (internal)

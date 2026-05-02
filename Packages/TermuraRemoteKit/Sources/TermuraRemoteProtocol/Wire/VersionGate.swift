@@ -1,7 +1,7 @@
 import Foundation
 
 /// Combines `VersionNegotiator` with `Envelope` validation so that both
-/// `RemoteEnvelopeRouter` (server) and `RemoteStore` (client) can reject
+/// the routing layer (server) and `RemoteStore` (client) can reject
 /// incompatible peers at the receive boundary with one call.
 ///
 /// Returns `nil` when the envelope's protocol version is compatible with the

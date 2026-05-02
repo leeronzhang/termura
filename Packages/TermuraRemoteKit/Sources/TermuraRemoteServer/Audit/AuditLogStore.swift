@@ -7,7 +7,7 @@ private let logger = Logger(subsystem: "com.termura.remote", category: "AuditLog
 /// Append-only log of remote command outcomes. Backed by JSON on disk so the
 /// user can review history across app restarts; capped to keep the file small.
 ///
-/// OWNER: typically `RemoteServerHarness` constructs and shares the store
+/// OWNER: typically the host application's server assembly constructs and shares the store
 /// CANCEL: stores are passive — no in-flight work to cancel
 /// TEARDOWN: drop reference; no resources to release
 public protocol AuditLogStore: Sendable {

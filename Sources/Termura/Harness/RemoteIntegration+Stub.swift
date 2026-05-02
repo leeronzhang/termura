@@ -1,5 +1,5 @@
 // Public protocol surface for the iOS remote-control feature. Always compiled.
-// Real implementation lives in `termura-harness/Sources/Remote/` and is gated by
+// Real implementation lives in the paid harness module and is gated by
 // HARNESS_ENABLED. Public callers go through `RemoteIntegrationLauncher` (defined
 // below); when HARNESS_ENABLED is absent (Free build), the launcher returns
 // `NullRemoteIntegration`, so call sites compile and run without changes.

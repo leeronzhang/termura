@@ -3,7 +3,7 @@
 # this codebase touches, in dependency order. Use this instead of running
 # `xcodegen generate` directly anywhere; missing one of the three pbxproj
 # updates is the most common cause of "Cannot find <symbol> in scope"
-# errors in this open-core split (public termura/ + private termura-harness/).
+# errors in this open-core split (public repo + sibling private repo).
 #
 # Modes:
 #   regen-all.sh           regenerate everything, exit 0 on success
@@ -15,13 +15,13 @@
 #                          error 30 seconds later.
 #
 # Project map (each row = one yml → one pbxproj):
-#   PUBLIC  project.yml                        → Termura.xcodeproj
-#   PRIVATE ../termura-harness/project-mac.yml → ../termura-harness/Termura-Mac.xcodeproj
-#   PRIVATE ../termura-harness/iOS/project-ios.yml → ../termura-harness/iOS/TermuraRemote.xcodeproj
+#   PUBLIC  project.yml                          → Termura.xcodeproj
+#   PRIVATE <private repo>/project-mac.yml       → <private repo>/Termura-Mac.xcodeproj
+#   PRIVATE <private repo>/iOS/project-ios.yml   → <private repo>/iOS/TermuraRemote.xcodeproj
 #
-# Private rows are skipped silently when termura-harness/ isn't present
-# (Free build / clean clone), so this script is safe to run from any
-# working tree.
+# Private rows are skipped silently when the sibling private repo isn't
+# present (Free build / clean clone), so this script is safe to run from
+# any working tree.
 
 set -euo pipefail
 
