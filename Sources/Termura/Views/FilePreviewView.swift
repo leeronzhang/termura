@@ -1,8 +1,6 @@
 import AppKit
 import OSLog
-import QuickLookUI
 import SwiftUI
-import VisionKit
 
 private let logger = Logger(subsystem: "com.termura.app", category: "FilePreviewView")
 
@@ -12,8 +10,10 @@ struct FilePreviewView: View {
     let filePath: String
     let projectRoot: String
 
+    @Environment(\.commandRouter) private var commandRouter
     @State private var zoomScale: CGFloat = 1.0
     @State private var isPathBlocked = false
+    @State private var isHoveringPath = false
 
     private var absoluteURL: URL {
         if filePath.hasPrefix("/") {
@@ -81,7 +81,9 @@ struct FilePreviewView: View {
             Text(absoluteURL.lastPathComponent)
                 .font(AppUI.Font.labelMono)
                 .lineLimit(1)
-                .truncationMode(.head)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            copyPathButton
             Spacer()
             if isImage {
                 zoomControls
@@ -95,6 +97,44 @@ struct FilePreviewView: View {
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
         .padding(.vertical, AppUI.Spacing.mdLg)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHoveringPath = hovering
+            }
+        }
+    }
+
+    /// Hover-revealed shortcut: one click copies `<filename>\n<absolute path>`
+    /// to the system pasteboard. Mirrors the affordance in CodeEditorView and
+    /// MarkdownFileView so the preview path bar feels the same.
+    private var copyPathButton: some View {
+        Button(action: copyNameAndPath) {
+            HStack(spacing: AppUI.Spacing.xs) {
+                Image(systemName: "doc.on.doc")
+                Text("Copy name & path")
+            }
+            .font(AppUI.Font.label)
+            .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+        .opacity(isHoveringPath ? 1 : 0)
+        .allowsHitTesting(isHoveringPath)
+        .help("Copy filename and absolute path to clipboard")
+    }
+
+    private func copyNameAndPath() {
+        let path = absoluteURL.path
+        let fileName = absoluteURL.lastPathComponent
+        let payload = "\(fileName)\n\(path)"
+        // §3.2 exception: NSPasteboard is a platform bridge invoked from
+        // the view layer (matches existing usages in CodeEditorView /
+        // MarkdownFileView). Future PasteboardService extraction is
+        // tracked separately.
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        let didWrite = pasteboard.setString(payload, forType: .string)
+        commandRouter.showToast(didWrite ? "Copied filename and path" : "Copy failed")
     }
 
     private var zoomControls: some View {
@@ -134,163 +174,8 @@ struct FilePreviewView: View {
     }
 }
 
-// MARK: - Image Preview (scrollable, 1:1 default, Live Text-enabled)
-
-/// Renders an image at native pixel size (1:1), centered in the view.
-/// Supports zoom via the header controls. A VisionKit
-/// `ImageAnalysisOverlayView` sits on top so users can select recognised
-/// text (Live Text / OCR) and ⌘C copies it to the pasteboard, matching
-/// the system Photos / Preview behaviour.
-struct ImagePreviewView: NSViewRepresentable {
-    let fileURL: URL
-    let zoom: CGFloat
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.contentView = CenteringClipView()
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.backgroundColor = .clear
-        scrollView.drawsBackground = false
-
-        let imageView = NSImageView()
-        imageView.imageScaling = .scaleNone
-        imageView.imageAlignment = .alignCenter
-
-        let overlay = ImageAnalysisOverlayView()
-        overlay.preferredInteractionTypes = .textSelection
-        overlay.autoresizingMask = [.width, .height]
-        imageView.addSubview(overlay)
-        context.coordinator.overlay = overlay
-
-        if let image = NSImage(contentsOf: fileURL) {
-            imageView.image = image
-            let size = image.size
-            let frame = NSRect(x: 0, y: 0, width: size.width * zoom, height: size.height * zoom)
-            imageView.frame = frame
-            overlay.frame = imageView.bounds
-            context.coordinator.analyze(image: image)
-        }
-
-        scrollView.documentView = imageView
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let imageView = scrollView.documentView as? NSImageView else { return }
-        if imageView.image == nil, let image = NSImage(contentsOf: fileURL) {
-            imageView.image = image
-            context.coordinator.analyze(image: image)
-        }
-        guard let image = imageView.image else { return }
-        let size = image.size
-        let newFrame = NSRect(x: 0, y: 0, width: size.width * zoom, height: size.height * zoom)
-        if imageView.frame.size != newFrame.size {
-            imageView.frame = newFrame
-            context.coordinator.overlay?.frame = imageView.bounds
-            scrollView.needsLayout = true
-        }
-    }
-
-    @MainActor
-    final class Coordinator {
-        weak var overlay: ImageAnalysisOverlayView?
-        private let analyzer = ImageAnalyzer()
-        private var lastAnalyzed: NSImage?
-
-        func analyze(image: NSImage) {
-            guard let overlay, lastAnalyzed !== image else { return }
-            lastAnalyzed = image
-            // WHY: VisionKit OCR is best-effort — if analysis fails the user
-            //   still sees the image, just without selectable text.
-            // OWNER: This coordinator owns the analysis Task; re-runs only
-            //   when `updateNSView` swaps the image (different fileURL).
-            // TEARDOWN: Each Task ends after one analysis; SwiftUI tears down
-            //   the coordinator with the view.
-            Task { @MainActor in
-                do {
-                    let configuration = ImageAnalyzer.Configuration([.text])
-                    let analysis = try await analyzer.analyze(
-                        image,
-                        orientation: .up,
-                        configuration: configuration
-                    )
-                    overlay.analysis = analysis
-                } catch {
-                    // Non-critical: image renders fine without Live Text.
-                    logger.debug("Live Text analysis failed: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Centering Clip View
-
-/// NSClipView subclass that centers the document view when it is smaller than the visible area.
-/// Uses `constrainBoundsRect` — the idiomatic AppKit approach that cooperates with
-/// NSScrollView's internal scroll management instead of fighting it via `setFrameOrigin`.
-final class CenteringClipView: NSClipView {
-    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
-        var rect = super.constrainBoundsRect(proposedBounds)
-        guard let docView = documentView else { return rect }
-
-        let docFrame = docView.frame
-        if rect.width > docFrame.width {
-            rect.origin.x = (docFrame.width - rect.width) / 2
-        }
-        if rect.height > docFrame.height {
-            rect.origin.y = (docFrame.height - rect.height) / 2
-        }
-
-        return rect
-    }
-}
-
-// MARK: - QuickLook (for non-image files: PDF, docx, etc.)
-
-struct QuickLookPreviewRepresentable: NSViewRepresentable {
-    let fileURL: URL
-
-    func makeNSView(context: Context) -> QuickLookHostView {
-        let host = QuickLookHostView()
-        let preview = QLPreviewView(frame: .zero, style: .normal) ?? QLPreviewView()
-        preview.autostarts = true
-        preview.previewItem = fileURL as QLPreviewItem
-        preview.translatesAutoresizingMaskIntoConstraints = false
-        host.addSubview(preview)
-        host.preview = preview
-        NSLayoutConstraint.activate([
-            preview.leadingAnchor.constraint(equalTo: host.leadingAnchor),
-            preview.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-            preview.topAnchor.constraint(equalTo: host.topAnchor),
-            preview.bottomAnchor.constraint(equalTo: host.bottomAnchor)
-        ])
-        return host
-    }
-
-    func updateNSView(_ nsView: QuickLookHostView, context: Context) {
-        guard let preview = nsView.preview else { return }
-        if preview.previewItem as? URL != fileURL {
-            preview.previewItem = fileURL as QLPreviewItem
-        }
-    }
-}
-
-/// Hosts a `QLPreviewView` and promotes it to the window's first responder
-/// once the view is mounted, so ⌘C reaches the preview's NSResponder
-/// chain. Without this, SwiftUI's `NSViewRepresentable` wrapper leaves
-/// the preview without keyboard focus and Cmd+C silently no-ops on
-/// selected PDF / document text.
-final class QuickLookHostView: NSView {
-    weak var preview: QLPreviewView?
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard let preview, let window else { return }
-        window.makeFirstResponder(preview)
-    }
-}
+// `ImagePreviewView` lives in `FilePreviewView+ImageOCR.swift` (image
+// + Live Text overlay + centering clip view). `QuickLookPreviewRepresentable`
+// lives in `FilePreviewView+QuickLook.swift` (PDF / docx / etc).
+// Splitting keeps this file under the SwiftLint file-length budget while
+// preserving the public API (`ImagePreviewView`, `QuickLookPreviewRepresentable`).

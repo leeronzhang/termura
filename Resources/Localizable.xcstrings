@@ -403,6 +403,9 @@
         }
       }
     },
+    "Copy name & path" : {
+
+    },
     "Corruption Detection" : {
       "comment" : "Harness upsell: feature name for rule-file corruption scanning",
       "extractionState" : "manual",
@@ -650,6 +653,7 @@
     "Export Session…" : {
       "comment" : "Menu item: open the session export sheet",
       "extractionState" : "manual",
+      "generatesSymbol" : false,
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -657,12 +661,12 @@
             "value" : "Export Session…"
           }
         }
-      },
-      "generatesSymbol" : false
+      }
     },
     "Export…" : {
       "comment" : "Context menu item: open the export sheet for this session",
       "extractionState" : "manual",
+      "generatesSymbol" : false,
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -670,8 +674,7 @@
             "value" : "Export…"
           }
         }
-      },
-      "generatesSymbol" : false
+      }
     },
     "Failed to open project" : {
       "comment" : "NSAlert title when a project directory cannot be opened",
@@ -787,6 +790,7 @@
     "Harness Rules…" : {
       "comment" : "Menu item: open the Harness rules panel",
       "extractionState" : "manual",
+      "generatesSymbol" : false,
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -794,8 +798,7 @@
             "value" : "Harness Rules…"
           }
         }
-      },
-      "generatesSymbol" : false
+      }
     },
     "Harness turns hard-won prompt engineering into permanent, versioned rules — so every agent session starts smarter." : {
       "comment" : "Harness upsell: marketing subtitle below the PRO badge",
@@ -971,6 +974,7 @@
     "Merge Branch Summary…" : {
       "comment" : "Menu item: open the branch merge summary sheet",
       "extractionState" : "manual",
+      "generatesSymbol" : false,
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -978,8 +982,7 @@
             "value" : "Merge Branch Summary…"
           }
         }
-      },
-      "generatesSymbol" : false
+      }
     },
     "Merge to Parent" : {
       "comment" : "Confirm button: merge current branch summary back into the parent session",
@@ -1197,6 +1200,7 @@
     "Open Project…" : {
       "comment" : "Menu item: open the project directory picker",
       "extractionState" : "manual",
+      "generatesSymbol" : false,
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1204,8 +1208,7 @@
             "value" : "Open Project…"
           }
         }
-      },
-      "generatesSymbol" : false
+      }
     },
     "Paired %@" : {
 
@@ -2095,5 +2098,5 @@
       }
     }
   },
-  "version" : "1.0"
+  "version" : "1.1"
 }
