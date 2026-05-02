@@ -102,10 +102,13 @@ extension CloudKitClientTransport {
     }
 
     func recordPollSuccess() {
-        if consecutivePollFailures > 0 {
-            logger.info(
-                "CloudKit poll recovered after \(consecutivePollFailures) failures"
-            )
+        // Bind locally so the OSLog autoclosure interpolation does not
+        // implicitly capture `self`; SwiftFormat's redundantSelf rule
+        // strips explicit `self.` here, so the local is the only form
+        // that satisfies both the compiler and the formatter.
+        let failures = consecutivePollFailures
+        if failures > 0 {
+            logger.info("CloudKit poll recovered after \(failures) failures")
         }
         consecutivePollFailures = 0
         lastPollFailureReason = nil
@@ -114,10 +117,11 @@ extension CloudKitClientTransport {
     func recordPollFailure(reason: String) {
         consecutivePollFailures += 1
         lastPollFailureReason = reason
-        if consecutivePollFailures >= configuration.healthFailureThreshold {
-            logger.error("Poll failed (#\(consecutivePollFailures)): \(reason, privacy: .public)")
+        let failures = consecutivePollFailures
+        if failures >= configuration.healthFailureThreshold {
+            logger.error("Poll failed (#\(failures)): \(reason, privacy: .public)")
         } else {
-            logger.warning("Poll failed (#\(consecutivePollFailures)): \(reason, privacy: .public)")
+            logger.warning("Poll failed (#\(failures)): \(reason, privacy: .public)")
         }
     }
 }

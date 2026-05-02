@@ -25,7 +25,7 @@ extension CloudKitTransport {
     }
 
     func openCipher(_ blob: CipherBlob) async -> CipherOutcome {
-        guard let store = pairKeyStoreReference else {
+        guard let store = pairKeyStore else {
             logger.warning("CipherBlob received but no PairKeyStore configured; dropping record")
             return .terminalDrop
         }
@@ -46,7 +46,7 @@ extension CloudKitTransport {
             return .terminalDrop
         }
         do {
-            let envelope = try CloudEnvelopeCrypto.open(blob, with: pairKey, codec: codecReference)
+            let envelope = try CloudEnvelopeCrypto.open(blob, with: pairKey, codec: codec)
             return .success(envelope)
         } catch {
             // ChaChaPoly tag verification failure is permanent: the
