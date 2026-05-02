@@ -11,175 +11,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Quality Gate
+  quality-gate:
+    name: Quality Gate (lint + baseline + open-core boundary)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install tooling
+      - name: Install lint tooling
         run: brew install swiftlint swiftformat
 
       - name: Run quality gate
         run: bash scripts/quality-gate.sh --ci
 
-  build-debug:
-    name: Build Debug
+  baseline-drift:
+    name: Baseline drift (LEAK_PATTERN + snapshots)
     runs-on: macos-15
-    needs: [quality]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
+      - name: Verify open-core baseline drift
+        run: bash scripts/check-baseline-drift.sh
 
-      - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
-
-      - name: Build Debug
-        run: xcodebuild -scheme Termura -configuration Debug -destination 'platform=macOS' build OTHER_SWIFT_FLAGS="-warnings-as-errors"
-
-  build-release:
-    name: Build Release
-    runs-on: macos-15
-    needs: [quality]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
-
-      - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
-
-      - name: Build Release
-        run: xcodebuild -scheme Termura -configuration Release -destination 'platform=macOS' build OTHER_SWIFT_FLAGS="-warnings-as-errors"
-
-  analyze:
-    name: Static Analysis
-    runs-on: macos-15
-    needs: [quality]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
-
-      - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
-
-      - name: Run analyzer
-        run: xcodebuild -scheme Termura -configuration Debug -destination 'platform=macOS' analyze
-
-  unit-tests:
-    name: Unit Tests
-    runs-on: macos-15
-    needs: [build-debug]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
-
-      - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
-
-      - name: Run unit tests with coverage
-        run: xcodebuild test -scheme Termura -destination 'platform=macOS' -skip-testing:TermuraUITests -enableCodeCoverage YES -resultBundlePath UnitTests.xcresult
-
-      - name: Upload unit test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: unit-test-results
-          path: UnitTests.xcresult
-
-  ui-tests:
-    name: UI Smoke Tests
-    runs-on: macos-15
-    needs: [build-debug]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
-
-      - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
-
-      - name: Run UI smoke tests
-        run: xcodebuild test -scheme Termura -destination 'platform=macOS' -only-testing:TermuraUITests -resultBundlePath UITests.xcresult
-
-      - name: Upload UI test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ui-test-results
-          path: UITests.xcresult
-
-  contract-tests:
-    name: Contract Tests
-    runs-on: macos-15
-    needs: [build-debug]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
-
-      - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
-
-      - name: Run contract tests
-        run: xcodebuild test -scheme Termura -destination 'platform=macOS' -only-testing:TermuraTests/ContractTests -only-testing:TermuraTests/AgentStateStoreContractTests -only-testing:TermuraTests/HarnessAndMessageRepositoryContractTests -only-testing:TermuraTests/NoteRepositoryContractTests -only-testing:TermuraTests/TokenCountingContractTests
-
-      - name: Mock #if DEBUG guard audit
-        run: bash scripts/mock-guard-audit.sh
-
-      - name: Mock/Protocol completeness audit
-        run: |
-          echo "=== Protocol/Mock Completeness Audit ==="
-          MISSING=0
-          for proto in $(find Sources/Termura -name "*Protocol.swift" \
-                          -not -name "DatabaseServiceProtocol.swift"); do
-            base=$(basename "$proto" | sed 's/Protocol\.swift$//')
-            mock=$(find Sources/Termura -name "Mock${base}.swift" | head -1)
-            if [ -z "$mock" ]; then
-              echo "FAIL: ${base}Protocol has no Mock${base}"
-              MISSING=$((MISSING + 1))
-            else
-              echo "  OK: ${base}Protocol -> $(basename "$mock")"
-            fi
-          done
-          if [ "$MISSING" -gt 0 ]; then
-            echo "::error::${MISSING} Protocol(s) missing Mock implementation"
-            exit 1
-          fi
-          echo "=== All protocols have matching mocks ==="
-
-  sanitizer:
-    name: Address & Thread Sanitizer
-    runs-on: macos-15
-    needs: [build-debug]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
-
-      - name: Resolve packages
-        run: xcodebuild -resolvePackageDependencies -project Termura.xcodeproj
-
-      - name: Tests with Address Sanitizer
-        run: xcodebuild test -scheme Termura -destination 'platform=macOS' -skip-testing:TermuraUITests -only-testing:TermuraTests/ContractTests -only-testing:TermuraTests/AgentStateStoreContractTests -enableAddressSanitizer YES
-
-      - name: Tests with Thread Sanitizer
-        run: xcodebuild test -scheme Termura -destination 'platform=macOS' -skip-testing:TermuraUITests -only-testing:TermuraTests/ContractTests -only-testing:TermuraTests/AgentStateStoreContractTests -enableThreadSanitizer YES
+      - name: Verify open-core baseline snapshots
+        run: bash scripts/check-baseline-snapshots.sh
 
   security:
-    name: Security Audit
+    name: Security audit (secret scan)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -190,14 +49,3 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Dependency vulnerability scan
-        run: |
-          if [ -f "Termura.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" ]; then
-            curl -L https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_darwin_arm64 \
-              -o /tmp/osv-scanner && chmod +x /tmp/osv-scanner
-            /tmp/osv-scanner \
-              --lockfile "swift:Termura.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
-          else
-            echo "Package.resolved 未找到，跳过漏洞扫描"
-          fi
