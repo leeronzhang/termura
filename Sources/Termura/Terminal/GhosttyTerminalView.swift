@@ -26,6 +26,13 @@ final class GhosttyTerminalView: NSView {
     /// Shell integration events parsed from raw PTY output (OSC 133 A/B/C).
     /// D is handled by ghostty's GHOSTTY_ACTION_COMMAND_FINISHED action.
     nonisolated let shellIntegrationContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
+    /// One-to-many fan-out of raw PTY bytes for the harness pty-stream
+    /// pump. Set once at init by `LibghosttyEngine`; never mutated after.
+    /// `nonisolated` because the IO thread calls `feedNonisolated` from
+    /// the surface callback without an actor hop.
+    /// OWNER: `LibghosttyEngine` (which constructs and stores this same
+    /// instance). TEARDOWN: `engine.terminate()` calls `tap.finishAll()`.
+    nonisolated let ptyByteTap: PtyByteTap
 
     // MARK: - Surface
 
@@ -81,11 +88,13 @@ final class GhosttyTerminalView: NSView {
         app: ghostty_app_t,
         workingDirectory: String? = nil,
         outputContinuation: AsyncStream<TerminalOutputEvent>.Continuation,
-        shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
+        shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation,
+        ptyByteTap: PtyByteTap
     ) {
         initialWorkingDirectory = workingDirectory
         ptyOutputContinuation = outputContinuation
         shellIntegrationContinuation = shellContinuation
+        self.ptyByteTap = ptyByteTap
         super.init(frame: frame)
         wantsLayer = true
         layer?.masksToBounds = true

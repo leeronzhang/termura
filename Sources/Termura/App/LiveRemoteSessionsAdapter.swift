@@ -18,22 +18,34 @@ struct LiveRemoteSessionsAdapter: RemoteSessionsAdapter {
     typealias ListProvider = @Sendable @MainActor () -> [RemoteSessionInfo]
     typealias CommandRunner = @Sendable @MainActor (String, UUID) async throws -> CommandRunResult
     typealias ScreenCapturer = @Sendable @MainActor (UUID) -> ScreenFramePayload?
+    typealias PtySubscriber = @Sendable @MainActor (UUID) async -> PtyByteTap.Subscription?
+    typealias PtyUnsubscriber = @Sendable @MainActor (UUID, UUID) async -> Void
+    typealias CheckpointProvider = @Sendable @MainActor (UUID, UInt64) -> PtyStreamCheckpoint?
 
     let listProvider: ListProvider
     let commandRunner: CommandRunner
     private let changeStream: AsyncStream<Void>
     let screenCapturer: ScreenCapturer
+    let ptySubscriber: PtySubscriber
+    let ptyUnsubscriber: PtyUnsubscriber
+    let checkpointProvider: CheckpointProvider
 
     init(
         listProvider: @escaping ListProvider,
         commandRunner: @escaping CommandRunner,
         changeStream: AsyncStream<Void>,
-        screenCapturer: @escaping ScreenCapturer
+        screenCapturer: @escaping ScreenCapturer,
+        ptySubscriber: @escaping PtySubscriber,
+        ptyUnsubscriber: @escaping PtyUnsubscriber,
+        checkpointProvider: @escaping CheckpointProvider
     ) {
         self.listProvider = listProvider
         self.commandRunner = commandRunner
         self.changeStream = changeStream
         self.screenCapturer = screenCapturer
+        self.ptySubscriber = ptySubscriber
+        self.ptyUnsubscriber = ptyUnsubscriber
+        self.checkpointProvider = checkpointProvider
     }
 
     func listSessions() async -> [RemoteSessionInfo] {
@@ -50,5 +62,17 @@ struct LiveRemoteSessionsAdapter: RemoteSessionsAdapter {
 
     func captureScreen(sessionId: UUID) async -> ScreenFramePayload? {
         await screenCapturer(sessionId)
+    }
+
+    func subscribePty(sessionId: UUID) async -> PtyByteTap.Subscription? {
+        await ptySubscriber(sessionId)
+    }
+
+    func unsubscribePty(sessionId: UUID, subscriptionId: UUID) async {
+        await ptyUnsubscriber(sessionId, subscriptionId)
+    }
+
+    func currentCheckpoint(sessionId: UUID, seq: UInt64) async -> PtyStreamCheckpoint? {
+        await checkpointProvider(sessionId, seq)
     }
 }

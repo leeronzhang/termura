@@ -60,6 +60,30 @@ protocol RemoteSessionsAdapter: Sendable {
     /// Default implementation returns `nil` so adapters without a live
     /// source (Free build, tests) compile without changes.
     func captureScreen(sessionId: UUID) async -> ScreenFramePayload?
+
+    /// Subscribe to a session's raw PTY byte stream so the harness
+    /// router's pty-stream pump can ship `.ptyStreamChunk` envelopes to
+    /// iOS. The returned `Subscription.stream` yields `Data` chunks as
+    /// the IO callback receives them; the router's pump coalesces them
+    /// per `PtyStreamPolicy` before shipping.
+    ///
+    /// Returns `nil` for unknown sessions, sessions without a live
+    /// engine, or builds without a live source (Free build, tests).
+    /// Default implementation returns `nil`.
+    func subscribePty(sessionId: UUID) async -> PtyByteTap.Subscription?
+
+    /// Cancel a previously-issued pty-byte subscription. Idempotent;
+    /// unknown ids are silently ignored. The router calls this on
+    /// `.ptyStreamUnsubscribe`, on `connectionClosed`, and on duplicate-
+    /// subscribe replacement. Default is a no-op.
+    func unsubscribePty(sessionId: UUID, subscriptionId: UUID) async
+
+    /// Build a `PtyStreamCheckpoint` keyframe for the current viewport
+    /// of `sessionId`. The router calls this once at subscribe-time
+    /// (cold-start basis) and again on its periodic 30 s / 256-chunk
+    /// resync cadence. Returns `nil` for unknown sessions or transient
+    /// extraction failures. Default implementation returns `nil`.
+    func currentCheckpoint(sessionId: UUID, seq: UInt64) async -> PtyStreamCheckpoint?
 }
 
 extension RemoteSessionsAdapter {
@@ -68,6 +92,16 @@ extension RemoteSessionsAdapter {
     }
 
     func captureScreen(sessionId _: UUID) async -> ScreenFramePayload? {
+        nil
+    }
+
+    func subscribePty(sessionId _: UUID) async -> PtyByteTap.Subscription? {
+        nil
+    }
+
+    func unsubscribePty(sessionId _: UUID, subscriptionId _: UUID) async {}
+
+    func currentCheckpoint(sessionId _: UUID, seq _: UInt64) async -> PtyStreamCheckpoint? {
         nil
     }
 }

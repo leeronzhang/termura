@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import GhosttyKit
 import OSLog
+import TermuraRemoteProtocol
 
 private let logger = Logger(subsystem: "com.termura.app", category: "LibghosttyEngine")
 
@@ -19,6 +20,16 @@ final class LibghosttyEngine: TerminalEngine {
     var isRunning: Bool { state == .running }
     let terminalNSView: NSView
     private let sessionID: SessionID
+    /// One-to-many fan-out of raw PTY bytes for the harness pty-stream
+    /// pump. Constructed once at engine init, shared with the underlying
+    /// `GhosttyTerminalView` (whose IO callback feeds it on every byte
+    /// chunk). Released via `tap.finishAll()` from `terminate()`.
+    /// OWNER: this engine. TEARDOWN: `terminate() → tap.finishAll()`.
+    /// TEST: `PtyByteTapTests` covers fan-out / unsubscribe / finishAll;
+    /// `LibghosttyEngineTests` covers the wiring here. `internal` (not
+    /// `private`) so `LibghosttyEngine+PtyStream.swift` can reach it
+    /// for the protocol method implementations.
+    let ptyByteTap: PtyByteTap
 
     // MARK: - Internal
 
@@ -79,12 +90,20 @@ final class LibghosttyEngine: TerminalEngine {
         guard let app = GhosttyAppContext.shared.app else {
             preconditionFailure("GhosttyAppContext has no app at engine init")
         }
+        // Construct the byte tap before the view so the view's IO
+        // callback sees a live tap on the very first frame. The actor
+        // is empty (zero subscribers) until the harness router calls
+        // `subscribeBytes()`; until then `feedNonisolated` is a no-op
+        // hop with no fan-out cost beyond a Task allocation.
+        let tap = PtyByteTap()
+        ptyByteTap = tap
         let view = GhosttyTerminalView(
             frame: NSRect(x: 0, y: 0, width: 800, height: 600),
             app: app,
             workingDirectory: workingDirectory,
             outputContinuation: outCont,
-            shellContinuation: shellCont
+            shellContinuation: shellCont,
+            ptyByteTap: tap
         )
         ghosttyView = view
         terminalNSView = view
@@ -171,6 +190,12 @@ final class LibghosttyEngine: TerminalEngine {
 
         outputContinuation.finish()
         shellContinuation.finish()
+        // Finish every pty-byte subscription so the harness router's
+        // pump exits cleanly. New `subscribe()` calls after this point
+        // get an immediately-finished stream so a late subscriber never
+        // hangs awaiting a dead engine. Synchronous because the tap
+        // uses an unfair lock for ordering, not an actor.
+        ptyByteTap.finishAll()
 
         // Force ghostty surface destruction; this triggers the child process exit
         // and eventually calls onProcessExited which sets state to .disposed.

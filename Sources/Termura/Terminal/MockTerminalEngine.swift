@@ -22,6 +22,13 @@ final class DebugTerminalEngine: TerminalEngine {
     var stubbedLinesNearCursor: [String] = []
     var stubbedScrollLine: Int = 0
     private(set) var scrollToLineCalls: [Int] = []
+    /// Stubbed plain snapshot for `readVisibleScreen` — drives W2 checkpoint
+    /// provider tests and other paths that exercise the snapshot fallback.
+    var stubbedScreen: TerminalScreenSnapshot?
+    /// Stubbed styled snapshot for `readVisibleStyledScreen`. When set,
+    /// `PtyCheckpointProvider.makeCheckpoint` prefers it (matching the
+    /// production path's preference order).
+    var stubbedStyledScreen: TerminalStyledScreenSnapshot?
 
     // MARK: - Continuations
 
@@ -99,7 +106,9 @@ final class DebugTerminalEngine: TerminalEngine {
     func applyTheme(_ theme: ThemeColors) {}
     func applyFont(family: String, size: CGFloat) {}
 
-    func readVisibleScreen() -> TerminalScreenSnapshot? { nil }
+    func readVisibleScreen() -> TerminalScreenSnapshot? { stubbedScreen }
+
+    func readVisibleStyledScreen() -> TerminalStyledScreenSnapshot? { stubbedStyledScreen }
 
     func terminate() async {
         state = .exiting

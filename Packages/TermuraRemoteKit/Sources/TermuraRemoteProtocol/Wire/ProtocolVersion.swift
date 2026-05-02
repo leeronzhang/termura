@@ -9,7 +9,14 @@ public struct ProtocolVersion: Sendable, Codable, Hashable, Comparable, CustomSt
         self.minor = minor
     }
 
-    public static let current = ProtocolVersion(major: 1, minor: 0)
+    /// Bumped 1.0 → 1.1 to introduce the PTY byte-stream pipeline
+    /// (`.ptyStreamSubscribe / .ptyStreamUnsubscribe / .ptyStreamChunk
+    /// / .ptyStreamCheckpoint`) and the derived `PeerCapabilities.ptyStream`
+    /// gate. `minimumSupported` stays at 1.0 so 1.0 peers continue to
+    /// connect — they just never see the new envelope kinds because
+    /// modern clients gate the subscribe call on the negotiated
+    /// capability.
+    public static let current = ProtocolVersion(major: 1, minor: 1)
 
     public static let minimumSupported = ProtocolVersion(major: 1, minor: 0)
 

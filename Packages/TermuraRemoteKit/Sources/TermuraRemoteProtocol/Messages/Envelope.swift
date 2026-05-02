@@ -32,6 +32,22 @@ public struct Envelope: Sendable, Codable, Equatable {
         /// subscribed session. Pushed by a per-subscription pulse on the
         /// server; coalesced when the rendered text hasn't changed.
         case screenFrame = "screen_frame"
+        /// Client → server: subscribe to a session's raw PTY byte stream
+        /// so the client can run its own vt engine locally and reflow
+        /// to its own viewport (iOS columns differ from Mac PTY columns).
+        /// Available when peer reports `PeerCapabilities.ptyStream`
+        /// (protocol >= 1.1).
+        case ptyStreamSubscribe = "pty_stream_subscribe"
+        /// Client → server: cancel a prior `.ptyStreamSubscribe`. Idempotent.
+        case ptyStreamUnsubscribe = "pty_stream_unsubscribe"
+        /// Server → client: a coalesced batch of raw PTY bytes for one
+        /// subscribed session. Carries a monotonic `seq` per channel/session
+        /// so the client can detect gaps and resume.
+        case ptyStreamChunk = "pty_stream_chunk"
+        /// Server → client: full-viewport keyframe for cold-restore /
+        /// resync after a chunk-seq gap. Built from the same data shape
+        /// `ScreenFramePayload` carries plus cursor position.
+        case ptyStreamCheckpoint = "pty_stream_checkpoint"
         case ping
         case pong
         case error

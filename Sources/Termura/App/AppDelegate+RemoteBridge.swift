@@ -74,6 +74,19 @@ extension AppDelegate {
             changeStream: changeStream,
             screenCapturer: { [weak coordinator] sessionId in
                 Self.captureRemoteScreen(coordinator: coordinator, sessionId: sessionId)
+            },
+            ptySubscriber: { [weak coordinator] sessionId in
+                await Self.subscribePtyStream(coordinator: coordinator, sessionId: sessionId)
+            },
+            ptyUnsubscriber: { [weak coordinator] sessionId, subscriptionId in
+                await Self.unsubscribePtyStream(
+                    coordinator: coordinator,
+                    sessionId: sessionId,
+                    subscriptionId: subscriptionId
+                )
+            },
+            checkpointProvider: { [weak coordinator] sessionId, seq in
+                Self.currentPtyCheckpoint(coordinator: coordinator, sessionId: sessionId, seq: seq)
             }
         )
     }
@@ -145,6 +158,57 @@ extension AppDelegate {
             cols: plain.cols,
             lines: plain.lines
         )
+    }
+
+    /// Subscribe to a session's raw PTY byte stream for the harness
+    /// pty-stream pump. Returns `nil` for unknown sessions, no active
+    /// project, or engines without a live surface — callers (the
+    /// harness router's `runPtyStreamPump`) treat `nil` as "session
+    /// gone, finish the pump cleanly". Mirrors `captureRemoteScreen`'s
+    /// resolution path so both the snapshot and stream paths see the
+    /// same engine identity.
+    @MainActor
+    static func subscribePtyStream(
+        coordinator: ProjectCoordinator?,
+        sessionId: UUID
+    ) async -> PtyByteTap.Subscription? {
+        guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
+        let id = SessionID(rawValue: sessionId)
+        guard let engine = scope.engines.engine(for: id) else { return nil }
+        return await engine.subscribeBytes()
+    }
+
+    /// Cancel a single pty-byte subscription. Idempotent — unknown ids
+    /// are silently ignored so the harness router's unsubscribe /
+    /// connectionClosed paths can call us without first checking the
+    /// session is still alive.
+    @MainActor
+    static func unsubscribePtyStream(
+        coordinator: ProjectCoordinator?,
+        sessionId: UUID,
+        subscriptionId: UUID
+    ) async {
+        guard let scope = coordinator?.activeContext?.sessionScope else { return }
+        let id = SessionID(rawValue: sessionId)
+        guard let engine = scope.engines.engine(for: id) else { return }
+        await engine.unsubscribeBytes(id: subscriptionId)
+    }
+
+    /// Build a `PtyStreamCheckpoint` keyframe for `sessionId` at `seq`.
+    /// Drives the harness pump's cold-start basis and its 30 s /
+    /// 256-chunk resync cadence. Returns `nil` for unknown sessions
+    /// or transient extraction failures (caller skips the keyframe and
+    /// retries on the next cadence tick).
+    @MainActor
+    static func currentPtyCheckpoint(
+        coordinator: ProjectCoordinator?,
+        sessionId: UUID,
+        seq: UInt64
+    ) -> PtyStreamCheckpoint? {
+        guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
+        let id = SessionID(rawValue: sessionId)
+        guard let engine = scope.engines.engine(for: id) else { return nil }
+        return engine.currentCheckpoint(sessionId: sessionId, seq: seq)
     }
 
     @MainActor

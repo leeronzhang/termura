@@ -1,114 +1,38 @@
 #if HARNESS_ENABLED
 import Foundation
 @testable import Termura
-import Testing
 import TermuraRemoteProtocol
 @testable import TermuraRemoteServer
+import Testing
 
 /// PR8 §3.6 / §8 — exercises `RemoteEnvelopeRouter.primeAuthenticatedChannel`
 /// from the outside through observable side-effects. The router's
-/// per-channel `channels` / `phases` maps are private, so each test
-/// drives the router through `handle(envelope:replyChannel:)` and
-/// asserts on the reply envelope, the audit log, or the codec the
-/// router used to decode the request.
+/// per-channel maps are private, so each test drives the router
+/// through `handle(envelope:replyChannel:)` and asserts on the
+/// reply envelope, the audit log, or the codec the router used to
+/// decode the request.
+///
+/// Test-doubles + factory helpers
+/// (`RouterPrimeRecordingReplyChannel`, `RouterPrimeStubSessionsAdapter`,
+/// `RouterPrimeRecordingActivator`, `RouterPrimeFactory`) live in
+/// `RouterPrimeTestHelpers.swift` so this file stays under the
+/// file-length / type-body / nesting budgets.
 @Suite("RemoteEnvelopeRouter.primeAuthenticatedChannel")
 struct RouterPrimeAuthenticatedChannelTests {
-    private actor RecordingReplyChannel: ReplyChannel {
-        nonisolated let channelId: UUID
-        private(set) var sent: [Envelope] = []
-        private(set) var closed = false
-
-        init(channelId: UUID = UUID()) {
-            self.channelId = channelId
-        }
-
-        func send(_ envelope: Envelope) async throws {
-            sent.append(envelope)
-        }
-
-        func close() async {
-            closed = true
-        }
-
-        func snapshot() -> [Envelope] { sent }
-    }
-
-    private actor ActivatorRecorder {
-        struct Call: Sendable {
-            let source: UUID
-            let pairingId: UUID
-        }
-
-        private(set) var captured: [Call] = []
-
-        func record(source: UUID, pairingId: UUID) {
-            captured.append(Call(source: source, pairingId: pairingId))
-        }
-
-        func calls() -> [Call] { captured }
-    }
-
-    private struct StubSessionsAdapter: RemoteSessionsAdapter {
-        let sessionId: UUID
-
-        func listSessions() async -> [RemoteSessionInfo] {
-            [RemoteSessionInfo(
-                id: sessionId,
-                title: "stub",
-                workingDirectory: nil,
-                lastActivityAt: Date(timeIntervalSince1970: 1_000)
-            )]
-        }
-
-        func executeCommand(line _: String, sessionId _: UUID) async throws -> CommandRunResult {
-            CommandRunResult(stdout: "ok", exitCode: 0)
-        }
-    }
-
-    private static func makeRouter(
-        codec: any RemoteCodec = JSONRemoteCodec(),
-        adapter: any RemoteSessionsAdapter = StubSessionsAdapter(sessionId: UUID()),
-        auditLog: InMemoryAuditLogStore = InMemoryAuditLogStore()
-    ) -> RemoteEnvelopeRouter {
-        let identity = DeviceIdentity.generate()
-        let issuer = PairingTokenIssuer(
-            lifetime: 300,
-            randomBytes: { count in Data(repeating: 0xAA, count: count) }
-        )
-        let pairingService = PairingService(
-            identity: identity,
-            tokenIssuer: issuer,
-            store: InMemoryPairedDeviceStore(),
-            serviceName: "test-mac"
-        )
-        let snapshotPublisher = SnapshotPublisher(attachmentStore: NullAttachmentStore())
-        return RemoteEnvelopeRouter(
-            adapter: adapter,
-            pairingService: pairingService,
-            policy: DangerousCommandPolicy(),
-            snapshotPublisher: snapshotPublisher,
-            codec: codec,
-            auditLog: auditLog
-        )
-    }
-
-    private static func encodeSessionListRequest(
-        codec: any RemoteCodec
-    ) -> Envelope {
-        Envelope(version: ProtocolVersion.current, kind: .sessionListRequest, payload: Data())
-    }
-
     @Test("primed channel accepts kinds that require authentication")
     func primedChannelAcceptsAuthenticatedKinds() async {
-        let router = Self.makeRouter()
-        let channel = RecordingReplyChannel()
+        let deviceId = UUID()
+        let router = RouterPrimeFactory.makeRouter(
+            seededPairedDevices: [RouterPrimeFactory.activePairedDevice(id: deviceId)]
+        )
+        let channel = RouterPrimeRecordingReplyChannel()
         await router.primeAuthenticatedChannel(
             channelId: channel.channelId,
-            deviceId: UUID(),
+            deviceId: deviceId,
             negotiatedCodec: .json
         )
         await router.handle(
-            envelope: Self.encodeSessionListRequest(codec: JSONRemoteCodec()),
+            envelope: RouterPrimeFactory.encodeSessionListRequest(),
             replyChannel: channel
         )
         let replies = await channel.snapshot()
@@ -118,10 +42,10 @@ struct RouterPrimeAuthenticatedChannelTests {
 
     @Test("unprimed channel still rejects authenticated kinds")
     func unprimedChannelRejectsAuthenticatedKinds() async {
-        let router = Self.makeRouter()
-        let channel = RecordingReplyChannel()
+        let router = RouterPrimeFactory.makeRouter()
+        let channel = RouterPrimeRecordingReplyChannel()
         await router.handle(
-            envelope: Self.encodeSessionListRequest(codec: JSONRemoteCodec()),
+            envelope: RouterPrimeFactory.encodeSessionListRequest(),
             replyChannel: channel
         )
         let replies = await channel.snapshot()
@@ -132,11 +56,14 @@ struct RouterPrimeAuthenticatedChannelTests {
     @Test("primed channel decodes business envelopes with the agreed codec")
     func primedChannelUsesNegotiatedCodec() async throws {
         let messagepack = MessagePackRemoteCodec()
-        let router = Self.makeRouter()
-        let channel = RecordingReplyChannel()
+        let deviceId = UUID()
+        let router = RouterPrimeFactory.makeRouter(
+            seededPairedDevices: [RouterPrimeFactory.activePairedDevice(id: deviceId)]
+        )
+        let channel = RouterPrimeRecordingReplyChannel()
         await router.primeAuthenticatedChannel(
             channelId: channel.channelId,
-            deviceId: UUID(),
+            deviceId: deviceId,
             negotiatedCodec: .messagepack
         )
         let command = RemoteCommand(
@@ -158,9 +85,11 @@ struct RouterPrimeAuthenticatedChannelTests {
 
     @Test("repeat prime with same params is a no-op")
     func repeatPrimeWithSameParamsIsNoOp() async {
-        let router = Self.makeRouter()
-        let channel = RecordingReplyChannel()
         let deviceId = UUID()
+        let router = RouterPrimeFactory.makeRouter(
+            seededPairedDevices: [RouterPrimeFactory.activePairedDevice(id: deviceId)]
+        )
+        let channel = RouterPrimeRecordingReplyChannel()
         await router.primeAuthenticatedChannel(
             channelId: channel.channelId,
             deviceId: deviceId,
@@ -172,7 +101,7 @@ struct RouterPrimeAuthenticatedChannelTests {
             negotiatedCodec: .json
         )
         await router.handle(
-            envelope: Self.encodeSessionListRequest(codec: JSONRemoteCodec()),
+            envelope: RouterPrimeFactory.encodeSessionListRequest(),
             replyChannel: channel
         )
         let replies = await channel.snapshot()
@@ -182,11 +111,9 @@ struct RouterPrimeAuthenticatedChannelTests {
     @Test("pairComplete activator receives cloudSourceDeviceId, not pairedDeviceId")
     func pairCompleteActivatorReceivesCloudSourceDeviceId() async throws {
         // Recorder captures whatever the router hands to the activator.
-        // The captured `sourceDeviceId` is the value
-        // `CloudKitTransport.setActivePairingId(_:forSourceDeviceId:)`
-        // would receive — must be `cloudSourceDeviceId`, not the
-        // randomly-generated paired-device id.
-        let recorder = ActivatorRecorder()
+        // The captured `sourceDeviceId` must be `cloudSourceDeviceId`,
+        // not the randomly-generated paired-device id.
+        let recorder = RouterPrimeActivatorRecorder()
         let identity = DeviceIdentity.generate()
         let issuer = PairingTokenIssuer(
             lifetime: 300,
@@ -200,14 +127,12 @@ struct RouterPrimeAuthenticatedChannelTests {
         )
         let snapshotPublisher = SnapshotPublisher(attachmentStore: NullAttachmentStore())
         let router = RemoteEnvelopeRouter(
-            adapter: StubSessionsAdapter(sessionId: UUID()),
+            adapter: RouterPrimeStubSessionsAdapter(sessionId: UUID()),
             pairingService: pairingService,
             policy: DangerousCommandPolicy(),
             snapshotPublisher: snapshotPublisher,
             codec: JSONRemoteCodec(),
-            cloudKitPairingActivator: { source, pairingId in
-                await recorder.record(source: source, pairingId: pairingId)
-            }
+            cloudKitChannelActivator: RouterPrimeRecordingActivator(recorder: recorder)
         )
         let invitation = await pairingService.beginPairing()
         let peer = DeviceIdentity.generate()
@@ -226,7 +151,7 @@ struct RouterPrimeAuthenticatedChannelTests {
         )
         let payload = try JSONRemoteCodec().encode(request)
         let envelope = Envelope(version: ProtocolVersion.current, kind: .pairInit, payload: payload)
-        let channel = RecordingReplyChannel()
+        let channel = RouterPrimeRecordingReplyChannel()
         await router.handle(envelope: envelope, replyChannel: channel)
 
         let calls = await recorder.calls()
@@ -246,13 +171,17 @@ struct RouterPrimeAuthenticatedChannelTests {
     func repeatPrimeKeepsFirstDeviceIdInAuditLog() async throws {
         let auditLog = InMemoryAuditLogStore()
         let sessionId = UUID()
-        let router = Self.makeRouter(
-            adapter: StubSessionsAdapter(sessionId: sessionId),
-            auditLog: auditLog
-        )
-        let channel = RecordingReplyChannel()
         let firstDeviceId = UUID()
         let secondDeviceId = UUID()
+        let router = RouterPrimeFactory.makeRouter(
+            adapter: RouterPrimeStubSessionsAdapter(sessionId: sessionId),
+            auditLog: auditLog,
+            seededPairedDevices: [
+                RouterPrimeFactory.activePairedDevice(id: firstDeviceId),
+                RouterPrimeFactory.activePairedDevice(id: secondDeviceId)
+            ]
+        )
+        let channel = RouterPrimeRecordingReplyChannel()
         await router.primeAuthenticatedChannel(
             channelId: channel.channelId,
             deviceId: firstDeviceId,
@@ -274,7 +203,7 @@ struct RouterPrimeAuthenticatedChannelTests {
         await router.handle(envelope: envelope, replyChannel: channel)
         let entries = await auditLog.recent(limit: 10)
         let dispatchedDeviceIds = entries
-            .filter { if case .dispatched = $0.outcome { return true } else { return false } }
+            .filter { if case .dispatched = $0.outcome { true } else { false } }
             .map(\.deviceId)
         #expect(dispatchedDeviceIds == [firstDeviceId])
         #expect(!dispatchedDeviceIds.contains(secondDeviceId))
