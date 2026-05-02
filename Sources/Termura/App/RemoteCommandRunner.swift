@@ -130,8 +130,15 @@ enum RemoteCommandRunner {
             }
             switch outcome {
             case let .matched(chunk):
+                // rawANSI preserves the original SGR / OSC sequences so the
+                // iOS SnapshotBlock can render colors via OutputRenderer
+                // (which parses ANSI in the renderer). Earlier versions sent
+                // the ANSI-stripped `outputLines` here, which surfaced as
+                // monochrome text on iOS even though the live screen frame
+                // already carried styling — those two paths now stay in
+                // visual sync.
                 return Result(
-                    stdout: chunk.outputLines.joined(separator: "\n"),
+                    stdout: chunk.rawANSI,
                     exitCode: chunk.exitCode.map(Int32.init),
                     chunkMatched: true
                 )

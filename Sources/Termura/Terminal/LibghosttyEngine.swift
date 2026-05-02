@@ -22,9 +22,16 @@ final class LibghosttyEngine: TerminalEngine {
 
     // MARK: - Internal
 
-    private let ghosttyView: GhosttyTerminalView
+    /// Internal (not private) so `LibghosttyEngine+Styled.swift` can read the
+    /// surface for render-state extraction without exposing a public wrapper.
+    let ghosttyView: GhosttyTerminalView
     private let outputContinuation: AsyncStream<TerminalOutputEvent>.Continuation
     private let shellContinuation: AsyncStream<ShellIntegrationEvent>.Continuation
+    /// Lazily-initialised holder for the per-session GhosttyRenderState +
+    /// row/cell iterators used by `readVisibleStyledScreen()`. `nil` until
+    /// the first remote screen-frame pull, so non-remote sessions don't pay
+    /// the C-side allocation. See `LibghosttyEngine+Styled.swift`.
+    var styledExtractor: StyledScreenExtractor?
     /// Tracks the last-applied values so surface config updates always carry the full state.
     private var currentFontFamily: String = FontSettings.defaultFamily
     private var currentFontSize: CGFloat = FontSettings.defaultTerminalSize

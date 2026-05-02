@@ -103,14 +103,27 @@ extension AppDelegate {
     ) -> ScreenFramePayload? {
         guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
         let id = SessionID(rawValue: sessionId)
-        guard let engine = scope.engines.engine(for: id),
-              let snapshot = engine.readVisibleScreen()
-        else { return nil }
+        guard let engine = scope.engines.engine(for: id) else { return nil }
+        // Prefer the styled snapshot so iOS renders fg/bg/bold/etc. with
+        // fidelity. Falls back to the plain-text path when the surface is
+        // not yet live, render-state alloc failed, or the engine type does
+        // not implement structured extraction. `lines` is always populated
+        // so older iOS clients still see content.
+        if let styled = engine.readVisibleStyledScreen() {
+            return ScreenFramePayload(
+                sessionId: sessionId,
+                rows: styled.rows,
+                cols: styled.cols,
+                lines: styled.lines,
+                styledLines: styled.styledLines
+            )
+        }
+        guard let plain = engine.readVisibleScreen() else { return nil }
         return ScreenFramePayload(
             sessionId: sessionId,
-            rows: snapshot.rows,
-            cols: snapshot.cols,
-            lines: snapshot.lines
+            rows: plain.rows,
+            cols: plain.cols,
+            lines: plain.lines
         )
     }
 

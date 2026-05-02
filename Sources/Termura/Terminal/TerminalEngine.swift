@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import TermuraRemoteProtocol
 
 /// Operational states for the terminal engine lifecycle.
 enum TerminalLifecycleState: String, Sendable {
@@ -92,14 +93,41 @@ protocol TerminalEngine: AnyObject, Sendable {
     /// push so iOS clients can render REPLs (Claude Code, IRB, Python REPL)
     /// that don't complete chunks via OSC 133;D shell integration.
     func readVisibleScreen() -> TerminalScreenSnapshot?
+
+    /// Snapshot of the visible viewport with per-cell styling preserved
+    /// (foreground / background / attrs). Returns `nil` for engines that
+    /// don't implement structured extraction (e.g. preview / debug
+    /// engines) or transient extraction failure; callers fall back to the
+    /// plain-text path. iOS clients render this directly into an
+    /// AttributedString for color + bold + underline fidelity.
+    func readVisibleStyledScreen() -> TerminalStyledScreenSnapshot?
+}
+
+extension TerminalEngine {
+    // Default implementation lets non-libghostty engines (debug, mock) opt
+    // out of styled extraction without forcing a stub on every conformer.
+    func readVisibleStyledScreen() -> TerminalStyledScreenSnapshot? { nil }
 }
 
 /// Engine-agnostic snapshot returned by `TerminalEngine.readVisibleScreen()`.
 /// `lines.count` should equal `rows`; missing trailing rows imply blank lines.
 /// Plain text only — colors / attributes / cursor position are intentionally
-/// out of scope for the MVP screen-frame push.
+/// out of scope for this fallback path; richer rendering goes through
+/// `TerminalStyledScreenSnapshot`.
 struct TerminalScreenSnapshot: Sendable, Equatable {
     let rows: Int
     let cols: Int
     let lines: [String]
+}
+
+/// Snapshot returned by `TerminalEngine.readVisibleStyledScreen()`. Carries
+/// the same plain-text view as `TerminalScreenSnapshot.lines` plus a parallel
+/// `styledLines` array where each row is split into RLE-merged style runs.
+/// Both are produced together to keep the wire `ScreenFramePayload.lines`
+/// fallback consistent with the styled view at the same instant.
+struct TerminalStyledScreenSnapshot: Sendable {
+    let rows: Int
+    let cols: Int
+    let lines: [String]
+    let styledLines: [StyledLine]
 }

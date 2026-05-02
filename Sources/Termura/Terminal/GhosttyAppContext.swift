@@ -35,8 +35,12 @@ final class GhosttyAppContext {
     }
 
     private func initGhosttyGlobal() -> Bool {
+        // ghostty_init returns 0 on success. We compare against the literal
+        // here rather than a named constant — ghostty.h's previous
+        // `GHOSTTY_SUCCESS` macro was removed to avoid colliding with the
+        // typed `GhosttyResult.GHOSTTY_SUCCESS` enumerator from vt/types.h.
         let result = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
-        guard result == GHOSTTY_SUCCESS else {
+        guard result == 0 else {
             logger.error("ghostty_init failed with code \(result)")
             return false
         }
