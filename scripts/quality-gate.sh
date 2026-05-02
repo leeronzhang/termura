@@ -122,20 +122,6 @@ run_gate_check() {
         0)
             return 0
             ;;
-        3)
-            # Advisory exit (file-size soft cap, view-global-access, …).
-            # Default policy: STRICT BASELINE — treat advisories as
-            # failures so the current 0-violation state is locked in.
-            # Any PR that introduces a new advisory hit fails the gate.
-            # Local incremental work that wants the legacy WARN behaviour
-            # can opt out with `ALLOW_ADVISORY_WARN=1`.
-            if [[ "${ALLOW_ADVISORY_WARN:-0}" == "1" ]]; then
-                record_warning
-            else
-                record_failure
-            fi
-            return 0
-            ;;
         *)
             record_failure
             return 0
@@ -453,8 +439,8 @@ echo "--------------------------------------"
 if [[ "$MODE" == "staged" ]]; then
     run_gate_check "Legacy Mock placement audit" bash scripts/mock-guard-audit.sh --staged Sources/Termura
     run_gate_check "File-size budget check" bash scripts/check-file-size.sh --staged Sources/Termura
-    run_gate_check "View/ViewModel global access advisory" bash scripts/check-view-global-access.sh --staged
-    run_gate_check "Background task ownership advisory" bash scripts/check-task-ownership.sh --staged Sources/Termura
+    run_gate_check "View/ViewModel global access check" bash scripts/check-view-global-access.sh --staged
+    run_gate_check "Background task ownership check" bash scripts/check-task-ownership.sh --staged Sources/Termura
 else
     run_gate_check "Legacy Mock placement audit (Sources/Termura)" \
         bash scripts/mock-guard-audit.sh Sources/Termura
@@ -472,19 +458,19 @@ else
                 bash scripts/check-file-size.sh "$root"
         done
     fi
-    run_gate_check "View/ViewModel global access advisory" \
+    run_gate_check "View/ViewModel global access check" \
         bash scripts/check-view-global-access.sh
     if [[ -n "$HARNESS_ROOT" ]]; then
         for root in "${PRIVATE_VIEW_ROOTS[@]}"; do
-            run_gate_check "View/ViewModel global access advisory (${root#"$HARNESS_ROOT/"})" \
+            run_gate_check "View/ViewModel global access check (${root#"$HARNESS_ROOT/"})" \
                 bash scripts/check-view-global-access.sh "$root"
         done
     fi
-    run_gate_check "Background task ownership advisory (Sources/Termura)" \
+    run_gate_check "Background task ownership check (Sources/Termura)" \
         bash scripts/check-task-ownership.sh Sources/Termura
     if [[ -n "$HARNESS_ROOT" ]]; then
         for root in "${PRIVATE_TERMURA_LIKE_ROOTS[@]}"; do
-            run_gate_check "Background task ownership advisory (${root#"$HARNESS_ROOT/"})" \
+            run_gate_check "Background task ownership check (${root#"$HARNESS_ROOT/"})" \
                 bash scripts/check-task-ownership.sh "$root"
         done
     fi
