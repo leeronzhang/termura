@@ -129,6 +129,22 @@ if [ "$MODE" = "--check" ]; then
 fi
 
 # Default mode: regenerate every project, in order.
+#
+# Step 1 — reverse-sync version edits from pbxproj into Versions.xcconfig.
+# Xcode UI writes "Version" / "Build" into pbxproj target overrides; without
+# this step xcodegen would discard them on the regen below. Skipped silently
+# when no pbxproj has any override (the normal case). See
+# scripts/sync-version-from-xcode.sh for the mapping.
+#
+# We export TERMURA_HARNESS_ROOT so the sync script can reach the private
+# pbxprojs without naming the sibling path itself — keeping the open-core
+# leak baseline intact (CLAUDE.md §12.3).
+echo "regen-all: reverse-syncing Xcode UI version edits → Versions.xcconfig…"
+export TERMURA_HARNESS_ROOT="${HARNESS_ROOT}"
+bash "$REPO_ROOT/scripts/sync-version-from-xcode.sh"
+
+# Step 2 — regenerate every Xcode project, in dependency order.
+echo ""
 echo "regen-all: regenerating $(echo "${#TARGETS[@]}") project(s)…"
 for row in "${TARGETS[@]}"; do
     IFS='|' read -r dir yml pbx <<< "$row"

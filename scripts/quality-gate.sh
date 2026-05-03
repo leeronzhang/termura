@@ -32,9 +32,10 @@ cd "$REPO_ROOT"
 # caller explicitly asked for it (or invoked us via the harness wrapper), we
 # scan both repos under the same gate. Private path resolution is relative to
 # the public repo's cwd so a single config tree drives both. Public-only checks
-# (xcstrings catalog, project.yml ↔ pbxproj sync, layer deps tied to Termura
-# Session/Output/Input) are not duplicated for private — those concepts don't
-# exist there.
+# (xcstrings catalog, layer deps tied to Termura Session/Output/Input) are not
+# duplicated for private — those concepts don't exist there. Versions.xcconfig
+# ↔ pbxproj sync IS shared across both, since iOS and Mac each have their own
+# xcconfig owned by check-version-sync.sh.
 HARNESS_ROOT=""
 if [[ $INCLUDE_PRIVATE -eq 1 ]]; then
     if [[ ! -d "$REPO_ROOT/../termura-harness" ]]; then
@@ -323,7 +324,10 @@ if [[ -n "$HARNESS_ROOT" ]]; then
 fi
 
 run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
-run_gate_check "Version sync check" bash scripts/check-version-sync.sh
+# Export sibling repo root so check-version-sync.sh can locate the private
+# Mac + iOS pbxprojs without literal path strings (open-core leak baseline,
+# CLAUDE.md §12.3). Empty TERMURA_HARNESS_ROOT → public-only check.
+TERMURA_HARNESS_ROOT="$HARNESS_ROOT" run_gate_check "Version sync check" bash scripts/check-version-sync.sh
 run_gate_check "Open-core baseline drift check" bash scripts/check-baseline-drift.sh
 run_gate_check "Open-core baseline snapshots check" bash scripts/check-baseline-snapshots.sh
 
