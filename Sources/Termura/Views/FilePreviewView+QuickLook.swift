@@ -50,17 +50,51 @@ final class QuickLookHostView: NSView {
 
     /// Termura's main window is AppKit-managed and uses a `Settings` SwiftUI
     /// Scene, so SwiftUI doesn't inject `EditCommands` and there's no global
-    /// `Edit > Copy` menu item with the ⌘C key equivalent. Without that
-    /// equivalent, `QLPreviewView` / `PDFView` never see ⌘C even when they
-    /// are first responder. Catch the shortcut here and forward to whatever
-    /// inside the preview implements `copy:` by walking the responder chain
-    /// like a menu item would.
+    /// `Edit > Copy` menu item with the ⌘C key equivalent. Catch the shortcut
+    /// here and route it to the inner content view (PDFView / NSTextView)
+    /// directly — see `copyTarget()` for why a plain responder-chain hop fails.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command),
            event.charactersIgnoringModifiers == "c",
-           NSApplication.shared.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) {
+           let target = copyTarget(),
+           NSApplication.shared.sendAction(#selector(NSText.copy(_:)), to: target, from: self) {
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    /// Right-click anywhere in the preview shows a single "Copy" item that
+    /// routes to the same descendant responder as ⌘C. Always enabled — like
+    /// macOS Preview.app, the action is a no-op when nothing is selected.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        let item = NSMenuItem(title: String(localized: "Copy"), action: #selector(forwardCopy(_:)), keyEquivalent: "c")
+        item.target = self
+        menu.addItem(item)
+        return menu
+    }
+
+    @objc private func forwardCopy(_ sender: Any?) {
+        guard let target = copyTarget() else { return }
+        NSApplication.shared.sendAction(#selector(NSText.copy(_:)), to: target, from: self)
+    }
+
+    /// `QLPreviewView` is a container that swaps in a per-format content view
+    /// (PDFView for PDFs, NSTextView for plaintext, etc.). Those content views
+    /// implement `copy:`, but `QLPreviewView` itself does not. The system
+    /// responder chain walks UP from first responder and never DOWN into
+    /// `QLPreviewView`'s private subtree, so `sendAction(copy:, to: nil)`
+    /// silently no-ops. Resolve the target ourselves with a depth-first walk
+    /// that prefers the deepest descendant implementing `copy:`.
+    private func copyTarget() -> NSResponder? {
+        guard let preview else { return nil }
+        return Self.deepestResponder(in: preview, implementing: #selector(NSText.copy(_:)))
+    }
+
+    private static func deepestResponder(in view: NSView, implementing selector: Selector) -> NSResponder? {
+        for sub in view.subviews {
+            if let found = deepestResponder(in: sub, implementing: selector) { return found }
+        }
+        return view.responds(to: selector) ? view : nil
     }
 }
