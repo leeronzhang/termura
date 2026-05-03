@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TermuraRemoteProtocol
 
@@ -64,29 +65,35 @@ extension AppDelegate {
         coordinator: ProjectCoordinator,
         changeStream: AsyncStream<Void>
     ) -> LiveRemoteSessionsAdapter {
-        LiveRemoteSessionsAdapter(
+        installAgentEventSourceFor(coordinator: coordinator)
+        return LiveRemoteSessionsAdapter(
             listProvider: { [weak coordinator] in
                 Self.gatherActiveSessions(coordinator: coordinator)
             },
-            commandRunner: { [weak coordinator] line, sessionId in
-                try await Self.runRemoteCommand(coordinator: coordinator, line: line, sessionId: sessionId)
+            commandRunner: { [weak coordinator] line, sid in
+                try await Self.runRemoteCommand(coordinator: coordinator, line: line, sessionId: sid)
             },
             changeStream: changeStream,
-            screenCapturer: { [weak coordinator] sessionId in
-                Self.captureRemoteScreen(coordinator: coordinator, sessionId: sessionId)
+            screenCapturer: { [weak coordinator] sid in
+                Self.captureRemoteScreen(coordinator: coordinator, sessionId: sid)
             },
-            ptySubscriber: { [weak coordinator] sessionId in
-                await Self.subscribePtyStream(coordinator: coordinator, sessionId: sessionId)
+            ptySubscriber: { [weak coordinator] sid in
+                await Self.subscribePtyStream(coordinator: coordinator, sessionId: sid)
             },
-            ptyUnsubscriber: { [weak coordinator] sessionId, subscriptionId in
-                await Self.unsubscribePtyStream(
-                    coordinator: coordinator,
-                    sessionId: sessionId,
-                    subscriptionId: subscriptionId
-                )
+            ptyUnsubscriber: { [weak coordinator] sid, subId in
+                await Self.unsubscribePtyStream(coordinator: coordinator, sessionId: sid, subscriptionId: subId)
             },
-            checkpointProvider: { [weak coordinator] sessionId, seq in
-                Self.currentPtyCheckpoint(coordinator: coordinator, sessionId: sessionId, seq: seq)
+            checkpointProvider: { [weak coordinator] sid, seq in
+                Self.currentPtyCheckpoint(coordinator: coordinator, sessionId: sid, seq: seq)
+            },
+            ptyResizer: { [weak coordinator] sid, cols, rows in
+                await Self.resizeRemotePty(coordinator: coordinator, sessionId: sid, cols: cols, rows: rows)
+            },
+            agentEventSubscriber: { [weak coordinator] sid, sinceEventId in
+                await Self.subscribeAgentEvents(coordinator: coordinator, sessionId: sid, sinceEventId: sinceEventId)
+            },
+            agentEventUnsubscriber: { [weak coordinator] sid, subId in
+                await Self.unsubscribeAgentEvents(coordinator: coordinator, sessionId: sid, subscriptionId: subId)
             }
         )
     }
@@ -160,56 +167,13 @@ extension AppDelegate {
         )
     }
 
-    /// Subscribe to a session's raw PTY byte stream for the harness
-    /// pty-stream pump. Returns `nil` for unknown sessions, no active
-    /// project, or engines without a live surface — callers (the
-    /// harness router's `runPtyStreamPump`) treat `nil` as "session
-    /// gone, finish the pump cleanly". Mirrors `captureRemoteScreen`'s
-    /// resolution path so both the snapshot and stream paths see the
-    /// same engine identity.
-    @MainActor
-    static func subscribePtyStream(
-        coordinator: ProjectCoordinator?,
-        sessionId: UUID
-    ) async -> PtyByteTap.Subscription? {
-        guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
-        let id = SessionID(rawValue: sessionId)
-        guard let engine = scope.engines.engine(for: id) else { return nil }
-        return await engine.subscribeBytes()
-    }
-
-    /// Cancel a single pty-byte subscription. Idempotent — unknown ids
-    /// are silently ignored so the harness router's unsubscribe /
-    /// connectionClosed paths can call us without first checking the
-    /// session is still alive.
-    @MainActor
-    static func unsubscribePtyStream(
-        coordinator: ProjectCoordinator?,
-        sessionId: UUID,
-        subscriptionId: UUID
-    ) async {
-        guard let scope = coordinator?.activeContext?.sessionScope else { return }
-        let id = SessionID(rawValue: sessionId)
-        guard let engine = scope.engines.engine(for: id) else { return }
-        await engine.unsubscribeBytes(id: subscriptionId)
-    }
-
-    /// Build a `PtyStreamCheckpoint` keyframe for `sessionId` at `seq`.
-    /// Drives the harness pump's cold-start basis and its 30 s /
-    /// 256-chunk resync cadence. Returns `nil` for unknown sessions
-    /// or transient extraction failures (caller skips the keyframe and
-    /// retries on the next cadence tick).
-    @MainActor
-    static func currentPtyCheckpoint(
-        coordinator: ProjectCoordinator?,
-        sessionId: UUID,
-        seq: UInt64
-    ) -> PtyStreamCheckpoint? {
-        guard let scope = coordinator?.activeContext?.sessionScope else { return nil }
-        let id = SessionID(rawValue: sessionId)
-        guard let engine = scope.engines.engine(for: id) else { return nil }
-        return engine.currentCheckpoint(sessionId: sessionId, seq: seq)
-    }
+    // PTY helpers (subscribePtyStream / unsubscribePtyStream /
+    // currentPtyCheckpoint / resizeRemotePty) live in
+    // `AppDelegate+RemoteBridge+Pty.swift`. Wave 8 agent helpers
+    // (subscribeAgentEvents / unsubscribeAgentEvents /
+    // installAgentEventSourceFor) live in
+    // `AppDelegate+RemoteBridge+Agent.swift`. Both moves keep this
+    // file under the §6.1 250-line soft budget.
 
     @MainActor
     static func runRemoteCommand(
@@ -234,12 +198,14 @@ extension AppDelegate {
             }
             // No chunk completed inside the window — typical for REPLs
             // (Claude Code, IRB) and bare shells without OSC 133;D
-            // integration. iOS sees the actual terminal content via the
-            // live `screenFrame` push (Phase C); this fallback string is
-            // a hint surfaced in the cmdAck stdout for clients without
-            // live-screen rendering.
-            let fallback = "Command dispatched. See the Mac terminal screen for live output."
-            return CommandRunResult(stdout: fallback, exitCode: outcome.exitCode)
+            // integration. Phase C+ clients render the live PTY content
+            // via `screenFrame` push or the W4+ streaming canvas, so emit
+            // an empty stdout: the older "Command dispatched. See the
+            // Mac terminal screen for live output." hint surfaced as a
+            // cmdAck snapshot underneath the iOS live screen and read
+            // as a confusing fallback alongside content that was clearly
+            // already streaming.
+            return CommandRunResult(stdout: "", exitCode: outcome.exitCode)
         } catch RemoteCommandRunner.Failure.sessionNotFound {
             throw RemoteAdapterError.sessionNotFound
         } catch RemoteCommandRunner.Failure.noActiveProject {

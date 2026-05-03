@@ -166,3 +166,33 @@ public enum PtyStreamPolicy {
     public static let checkpointEvery: Duration = .seconds(30)
     public static let checkpointEveryChunks: Int = 256
 }
+
+/// Client → server: forward an iOS-driven local reflow to the Mac PTY
+/// so the upstream shell / REPL re-emits output at the new column count
+/// instead of letting the iOS-side SwiftTerm render bytes that Mac
+/// already auto-wrapped at the wider Mac PTY cols (the legacy folded-
+/// twice display).
+///
+/// Fire-and-forget: the server may silently reject (e.g. when the Mac
+/// user is actively focused on the app — see the A2 guard in the
+/// AppDelegate bridge — or when the session no longer has a live
+/// engine). iOS keeps the local reflow either way; the next chunk /
+/// checkpoint will reflect Mac's column state.
+///
+/// Available when peer reports `PeerCapabilities.ptyResize`
+/// (protocol >= 1.2).
+public struct PtyResizeRequest: Sendable, Codable, Equatable {
+    public let sessionId: UUID
+    public let cols: Int
+    public let rows: Int
+
+    public init(sessionId: UUID, cols: Int, rows: Int) {
+        self.sessionId = sessionId
+        self.cols = cols
+        self.rows = rows
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case sessionId, cols, rows
+    }
+}

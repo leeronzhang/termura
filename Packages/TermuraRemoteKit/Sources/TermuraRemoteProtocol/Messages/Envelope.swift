@@ -48,6 +48,29 @@ public struct Envelope: Sendable, Codable, Equatable {
         /// resync after a chunk-seq gap. Built from the same data shape
         /// `ScreenFramePayload` carries plus cursor position.
         case ptyStreamCheckpoint = "pty_stream_checkpoint"
+        /// Client → server: forward an iOS-driven local reflow to the Mac
+        /// PTY so the upstream shell / REPL re-emits its own output at
+        /// the new column count. Fire-and-forget — the server may reject
+        /// (Mac user is currently active, see A2 guard) without an
+        /// envelope reply. Available when peer reports
+        /// `PeerCapabilities.ptyResize` (protocol >= 1.2).
+        case ptyResize = "pty_resize"
+        /// Client → server: subscribe to a session's agent conversation
+        /// event stream (Mac parses Claude Code transcript JSONL into
+        /// structured `AgentEvent` envelopes; iOS renders with native
+        /// SwiftUI chat UI instead of vt terminal emulation).
+        /// Available when peer reports `PeerCapabilities.agentEvents`
+        /// (protocol >= 1.3).
+        case agentEventSubscribe = "agent_event_subscribe"
+        /// Client → server: cancel a prior `.agentEventSubscribe`.
+        /// Idempotent.
+        case agentEventUnsubscribe = "agent_event_unsubscribe"
+        /// Server → client: a single agent conversation event.
+        case agentEvent = "agent_event"
+        /// Server → client: cold-start basis (most recent N events)
+        /// shipped on subscribe-success when the client has no
+        /// `sinceEventId` or its cursor fell outside retention.
+        case agentEventCheckpoint = "agent_event_checkpoint"
         case ping
         case pong
         case error

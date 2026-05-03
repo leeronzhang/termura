@@ -28,10 +28,20 @@ enum HarnessBootstrap {
         @MainActor @Sendable (any RemoteSessionsAdapter) -> any RemoteIntegration
     typealias AgentBridgeFactory =
         @MainActor @Sendable (any RemoteIntegration) -> any RemoteAgentBridgeLifecycle
+    /// Wave 8 — the harness install registers a closure that builds
+    /// the live `AgentEventSource` (Claude Code transcript watcher)
+    /// given a session-id → cwd resolver. The resolver is supplied
+    /// by `AppDelegate.makeRemoteAdapter` (it captures the active
+    /// `ProjectCoordinator`) via `installAgentEventSource(cwdResolver:)`.
+    /// Read the constructed singleton via `currentAgentEventSource()`.
+    typealias AgentEventSourceFactory =
+        @MainActor @Sendable (@escaping @MainActor @Sendable (UUID) -> String?) -> any AgentEventSource
 
     private struct State {
         var integrationFactory: IntegrationFactory?
         var agentBridgeFactory: AgentBridgeFactory?
+        var agentEventSourceFactory: AgentEventSourceFactory?
+        var agentEventSource: (any AgentEventSource)?
         var didRun: Bool = false
     }
 
@@ -97,5 +107,43 @@ enum HarnessBootstrap {
     /// builds so the launcher falls back to `NullRemoteAgentBridgeLifecycle`.
     static func currentAgentBridgeFactory() -> AgentBridgeFactory? {
         state.withLock(\.agentBridgeFactory)
+    }
+
+    /// Wave 8 — sets the agent-event source factory closure. Called
+    /// from `HarnessIntegrationFactory.install()` in the harness
+    /// build; left `nil` in Free builds. The factory is not invoked
+    /// here — `installAgentEventSource(cwdResolver:)` runs it once
+    /// the AppDelegate has the active coordinator and can supply
+    /// the resolver.
+    static func setAgentEventSourceFactory(
+        _ factory: @escaping AgentEventSourceFactory
+    ) {
+        state.withLock { $0.agentEventSourceFactory = factory }
+    }
+
+    /// Build the singleton `AgentEventSource` using the registered
+    /// factory and the supplied cwd resolver. Idempotent — repeat
+    /// calls keep the first source so a re-pair / makeRemoteAdapter
+    /// flow does not orphan the existing file watchers; supply a
+    /// fresh resolver after `disconnect()` only if needed.
+    /// No-op in Free builds (no factory registered).
+    static func installAgentEventSource(
+        cwdResolver: @escaping @MainActor @Sendable (UUID) -> String?
+    ) {
+        let alreadyInstalled = state.withLock { $0.agentEventSource != nil }
+        guard !alreadyInstalled else { return }
+        let factory = state.withLock(\.agentEventSourceFactory)
+        guard let factory else { return }
+        let source = factory(cwdResolver)
+        state.withLock { $0.agentEventSource = source }
+    }
+
+    /// Read the singleton `AgentEventSource` if installed. Returns
+    /// `nil` in Free builds and before `installAgentEventSource(...)`
+    /// runs; callers that depend on agent events should treat that
+    /// as "no agent stream available" and fall back to the PTY
+    /// stream path.
+    static func currentAgentEventSource() -> (any AgentEventSource)? {
+        state.withLock(\.agentEventSource)
     }
 }

@@ -84,27 +84,47 @@ protocol RemoteSessionsAdapter: Sendable {
     /// resync cadence. Returns `nil` for unknown sessions or transient
     /// extraction failures. Default implementation returns `nil`.
     func currentCheckpoint(sessionId: UUID, seq: UInt64) async -> PtyStreamCheckpoint?
+
+    /// Forward an iOS-driven local reflow to the Mac PTY so the
+    /// upstream shell / REPL re-emits output at the new column count
+    /// and the iOS canvas stops re-folding bytes that Mac auto-wrapped
+    /// at a different width.
+    ///
+    /// Returns `true` when the Mac engine accepted and resized;
+    /// `false` when rejected (Mac user is active per the A2 guard,
+    /// session has no live engine, no active project, or builds
+    /// without a live source). The router uses the bool only for
+    /// observability; iOS treats the call as fire-and-forget.
+    /// Default returns `false` so Free build / tests safely no-op.
+    func resizePty(sessionId: UUID, cols: Int, rows: Int) async -> Bool
+
+    /// Wave 8 — subscribe to structured agent-conversation events
+    /// (Claude Code transcript JSONL). Returns nil for sessions with
+    /// no resolvable transcript or builds without a live source.
+    /// `sinceEventId` is the resume cursor.
+    func subscribeAgentEvents(
+        sessionId: UUID,
+        sinceEventId: UUID?
+    ) async -> AgentEventSubscription?
+
+    /// Cancel an agent-event subscription. Idempotent.
+    func unsubscribeAgentEvents(sessionId: UUID, subscriptionId: UUID) async
 }
 
 extension RemoteSessionsAdapter {
-    func sessionListChanges() -> AsyncStream<Void> {
-        AsyncStream { $0.finish() }
-    }
-
-    func captureScreen(sessionId _: UUID) async -> ScreenFramePayload? {
-        nil
-    }
-
-    func subscribePty(sessionId _: UUID) async -> PtyByteTap.Subscription? {
-        nil
-    }
-
+    func sessionListChanges() -> AsyncStream<Void> { AsyncStream { $0.finish() } }
+    func captureScreen(sessionId _: UUID) async -> ScreenFramePayload? { nil }
+    func subscribePty(sessionId _: UUID) async -> PtyByteTap.Subscription? { nil }
     func unsubscribePty(sessionId _: UUID, subscriptionId _: UUID) async {}
-
-    func currentCheckpoint(sessionId _: UUID, seq _: UInt64) async -> PtyStreamCheckpoint? {
-        nil
-    }
+    func currentCheckpoint(sessionId _: UUID, seq _: UInt64) async -> PtyStreamCheckpoint? { nil }
+    func resizePty(sessionId _: UUID, cols _: Int, rows _: Int) async -> Bool { false }
+    func subscribeAgentEvents(sessionId _: UUID, sinceEventId _: UUID?) async -> AgentEventSubscription? { nil }
+    func unsubscribeAgentEvents(sessionId _: UUID, subscriptionId _: UUID) async {}
 }
+
+// `AgentEventSubscription` + `AgentEventSource` live in
+// `AgentEventSource.swift` to keep this file under the file_length
+// budget.
 
 struct CommandRunResult: Sendable, Equatable {
     let stdout: String
@@ -141,39 +161,21 @@ enum RemoteAdapterError: Error, Sendable, Equatable {
     case partialRevokeAllFailed(failed: [UUID])
 }
 
+/// Free build: every mutating op throws `.integrationDisabled`;
+/// every read returns the empty answer.
+/// `revokeAll`/`auditLog` parallel `listPairedDevices()` (empty);
+/// `resetPairingState` throws explicitly so a caller asking to "wipe
+/// pairings" without a harness gets the same signal as `start()`.
 struct NullRemoteIntegration: RemoteIntegration {
-    func start() async throws {
-        throw RemoteAdapterError.integrationDisabled
-    }
-
+    func start() async throws { throw RemoteAdapterError.integrationDisabled }
     func stop() async {}
-
-    func issueInvitation() async throws -> PairingInvitation {
-        throw RemoteAdapterError.integrationDisabled
-    }
-
+    func issueInvitation() async throws -> PairingInvitation { throw RemoteAdapterError.integrationDisabled }
     func notifyPushReceived() async {}
-
     func listPairedDevices() async throws -> [PairedDeviceSummary] { [] }
-
-    func revokePairedDevice(id _: UUID) async throws {
-        throw RemoteAdapterError.integrationDisabled
-    }
-
-    /// Free build: nothing to revoke (no pairings exist), so return [].
-    /// Symmetric with `listPairedDevices()` returning [].
+    func revokePairedDevice(id _: UUID) async throws { throw RemoteAdapterError.integrationDisabled }
     func revokeAllPairedDevices() async throws -> [UUID] { [] }
-
-    /// Free build: there is no pairing state to clear, but a caller asking
-    /// "wipe pairings" without a harness present is almost certainly a
-    /// configuration error — surface that explicitly rather than silently
-    /// no-op'ing, matching the contract of `start()` / `issueInvitation()`.
-    func resetPairingState() async throws {
-        throw RemoteAdapterError.integrationDisabled
-    }
-
+    func resetPairingState() async throws { throw RemoteAdapterError.integrationDisabled }
     func auditLog() async throws -> [RemoteAuditEntry] { [] }
-
     var isRunning: Bool { get async { false } }
 }
 
@@ -200,11 +202,11 @@ protocol RemoteAgentBridgeLifecycle: Sendable {
     func resetAgentState() async throws
 }
 
+/// Free build: no agent process to reset; resetAgentState is a no-op
+/// so resetPairings happy path stays clean when harness isn't wired.
 struct NullRemoteAgentBridgeLifecycle: RemoteAgentBridgeLifecycle {
     func start() async {}
     func stop() async {}
-    /// Free build has no agent process to reset; treat as no-op so the
-    /// resetPairings happy path stays clean when the harness isn't wired.
     func resetAgentState() async throws {}
 }
 
