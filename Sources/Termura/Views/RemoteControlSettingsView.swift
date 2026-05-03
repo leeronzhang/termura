@@ -95,7 +95,7 @@ struct RemoteControlSettingsView: View {
         } header: {
             Text("Pairing")
         } footer: {
-            Text("Open Termura Remote on your iPhone and paste this JSON to pair. "
+            Text("Open Termura Remote on your iPhone, then either scan the QR code or paste the JSON to pair. "
                 + "Each invitation can only be used once and expires after 5 minutes.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -166,16 +166,22 @@ struct RemoteControlSettingsView: View {
 
     private func invitationBlock(json: String) -> some View {
         VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
-            ScrollView {
-                Text(json)
-                    .font(.system(.footnote, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: AppUI.Spacing.md) {
+                PairingQRCodeView(payload: json, side: 160)
                     .padding(AppUI.Spacing.sm)
+                    .background(Color.white)
+                    .cornerRadius(6)
+                ScrollView {
+                    Text(json)
+                        .font(.system(.footnote, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(AppUI.Spacing.sm)
+                }
+                .frame(minHeight: 160, maxHeight: 200)
+                .background(Color(nsColor: .textBackgroundColor))
+                .cornerRadius(6)
             }
-            .frame(minHeight: 80, maxHeight: 160)
-            .background(Color(nsColor: .textBackgroundColor))
-            .cornerRadius(6)
             Button("Copy to clipboard") { copyToClipboard(json) }
                 .buttonStyle(.bordered)
         }
