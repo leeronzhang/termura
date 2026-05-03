@@ -53,16 +53,36 @@ extension TerminalAreaView {
         // Cmd+V while composer is open: paste directly into EditorTextView and consume event.
         // Changing firstResponder inside a monitor does not redirect the in-flight event —
         // the event was already targeted at the old responder. We must paste programmatically.
+        //
+        // DUAL-PANE NOTE: each TerminalAreaView installs its own local monitor and they
+        // share the window's run loop, so both panes' monitors fire for the same key
+        // event. The dual-pane focus guard above only short-circuits the pane that does
+        // NOT hold `focusedDualPaneID`. While the composer is open, the mouse monitor
+        // intentionally keeps `focusedDualPaneID` pinned to the composer's pane (see
+        // `installMouseEventMonitor` invariant) — but the user can still click into the
+        // OTHER pane's terminal NSView, making it the actual `firstResponder`. Without a
+        // firstResponder check here, the composer's monitor would steal a Cmd+V the user
+        // intends for the other pane's terminal. So only intercept when the in-flight
+        // first responder is actually inside this pane (composer textView, this pane's
+        // terminal NSView, or no specific responder).
         let cmdOnly = flags.subtracting(.capsLock) == .command
         if ctx.router.showComposer, cmdOnly,
-           event.charactersIgnoringModifiers == "v" {
-            if let textView = ctx.handle.textView {
+           event.charactersIgnoringModifiers == "v",
+           let textView = ctx.handle.textView {
+            let myTerminal = ctx.termEngine.terminalNSView
+            let firstResponder = window.firstResponder
+            let belongsToThisPane = firstResponder == nil
+                || (firstResponder as AnyObject) === textView
+                || (firstResponder as AnyObject) === myTerminal
+            if belongsToThisPane {
                 if window.firstResponder !== textView {
                     window.makeFirstResponder(textView)
                 }
                 textView.paste(nil)
+                return nil
             }
-            return nil
+            // Otherwise fall through — AppKit's responder chain delivers Cmd+V to the
+            // actual first responder (e.g., the other pane's terminal NSView).
         }
         if flags.contains(.command) { return event }
         if ctx.router.showComposer { return event }
