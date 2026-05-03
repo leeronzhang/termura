@@ -45,3 +45,14 @@ enum RemoteHelperError: Error, Sendable, Equatable {
     case helperNotBundled(path: String)
     case helperNotExecutable(path: String)
 }
+
+extension RemoteHelperError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case let .helperNotBundled(path):
+            "Remote helper is not bundled at \(path)."
+        case let .helperNotExecutable(path):
+            "Remote helper at \(path) is not executable."
+        }
+    }
+}

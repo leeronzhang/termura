@@ -84,6 +84,16 @@ public enum DeviceIdentityError: Error, Sendable, Equatable {
     case malformedPersistedKey(byteCount: Int)
 }
 
+extension DeviceIdentityError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case let .malformedPersistedKey(byteCount):
+            "Persisted device identity is \(byteCount) bytes; expected the 64-byte v2 format. " +
+                "Reset the keychain entry to regenerate a fresh identity."
+        }
+    }
+}
+
 public enum DeviceSignature {
     public static func verify(signature: Data, message: Data, publicKey: Data) throws -> Bool {
         let pub = try Curve25519.Signing.PublicKey(rawRepresentation: publicKey)

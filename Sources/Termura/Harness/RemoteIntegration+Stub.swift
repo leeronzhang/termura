@@ -161,6 +161,21 @@ enum RemoteAdapterError: Error, Sendable, Equatable {
     case partialRevokeAllFailed(failed: [UUID])
 }
 
+extension RemoteAdapterError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .sessionNotFound:
+            "Session not found."
+        case .noActiveProject:
+            "Open a project before performing this remote action."
+        case .integrationDisabled:
+            "Remote integration is not available in this build."
+        case let .partialRevokeAllFailed(failed):
+            "\(failed.count) device(s) could not be revoked."
+        }
+    }
+}
+
 /// Free build: every mutating op throws `.integrationDisabled`;
 /// every read returns the empty answer.
 /// `revokeAll`/`auditLog` parallel `listPairedDevices()` (empty);

@@ -31,6 +31,20 @@ public enum CloudKitSubscriptionError: Error, Sendable, Equatable {
     case backingFailure(reason: String)
 }
 
+extension CloudKitSubscriptionError: LocalizedError {
+    /// Surface the wrapped CKError reason instead of letting Foundation's
+    /// fallback render `"<Type> error 0."`. The toggle in Settings binds
+    /// directly to `error.localizedDescription`, so without this
+    /// conformance the user sees a stack-trace-shaped opacity instead of
+    /// the actionable underlying cause.
+    public var errorDescription: String? {
+        switch self {
+        case let .backingFailure(reason):
+            "CloudKit subscription failed: \(reason)"
+        }
+    }
+}
+
 public actor LiveCloudKitSubscriptionGateway: CloudKitSubscriptionGateway {
     /// Pre-fix shared id — both Mac and iOS used to register against
     /// this single id with their respective predicates, which caused

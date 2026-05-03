@@ -46,6 +46,7 @@ scripts/*
 !scripts/check-baseline-drift.sh
 !scripts/check-baseline-snapshots.sh
 !scripts/check-entitlements-hygiene.sh
+!scripts/check-error-localization.sh
 !scripts/check-ios-permissions.sh
 !scripts/check-mirrored-state-freshness.sh
 !scripts/check-signing-setup.sh

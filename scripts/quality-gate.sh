@@ -323,6 +323,14 @@ if [[ -n "$HARNESS_ROOT" ]]; then
     done
 fi
 
+run_gate_check "Error LocalizedError conformance check" bash scripts/check-error-localization.sh
+if [[ -n "$HARNESS_ROOT" ]]; then
+    if [[ ${#PRIVATE_SOURCE_ROOTS[@]} -gt 0 ]]; then
+        run_gate_check "Error LocalizedError conformance check (harness)" \
+            bash scripts/check-error-localization.sh "${PRIVATE_SOURCE_ROOTS[@]}"
+    fi
+fi
+
 run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
 # Export sibling repo root so check-version-sync.sh can locate the private
 # Mac + iOS pbxprojs without literal path strings (open-core leak baseline,

@@ -25,3 +25,20 @@ public enum TransportError: Error, Sendable, Equatable {
     case sendFailure(reason: String)
     case decodeFailure(reason: String)
 }
+
+extension TransportError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .alreadyRunning:
+            "Transport is already running."
+        case .notRunning:
+            "Transport is not running."
+        case let .bindFailure(reason):
+            "Transport bind failed: \(reason)"
+        case let .sendFailure(reason):
+            "Transport send failed: \(reason)"
+        case let .decodeFailure(reason):
+            "Transport decode failed: \(reason)"
+        }
+    }
+}

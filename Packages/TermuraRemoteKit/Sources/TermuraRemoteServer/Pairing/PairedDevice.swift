@@ -156,3 +156,16 @@ public enum PairedDeviceStoreError: Error, Sendable, Equatable {
     case persistenceFailure(code: Int32)
     case decodingFailure
 }
+
+extension PairedDeviceStoreError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case let .notFound(id):
+            "No paired device with id \(id.uuidString)."
+        case let .persistenceFailure(code):
+            "Paired-device keychain operation failed (OSStatus \(code))."
+        case .decodingFailure:
+            "Could not decode the paired-device blob from the keychain."
+        }
+    }
+}
