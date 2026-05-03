@@ -47,6 +47,7 @@ scripts/*
 !scripts/check-baseline-snapshots.sh
 !scripts/check-entitlements-hygiene.sh
 !scripts/check-ios-permissions.sh
+!scripts/check-mirrored-state-freshness.sh
 !scripts/check-signing-setup.sh
 !scripts/check-version-sync.sh
 !scripts/check-xcstrings-coverage.sh

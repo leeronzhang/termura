@@ -488,6 +488,11 @@ if [[ -n "$HARNESS_ROOT" ]]; then
         env IOS_HARNESS_ROOT="$HARNESS_ROOT" bash scripts/check-ios-permissions.sh
 fi
 
+if [[ -n "$HARNESS_ROOT" && -d "$HARNESS_ROOT/iOS/TermuraRemote" ]]; then
+    run_gate_check "Mirrored remote state freshness (CLAUDE.md §3.6)" \
+        bash scripts/check-mirrored-state-freshness.sh "$HARNESS_ROOT/iOS/TermuraRemote"
+fi
+
 echo "-> Harness private file leak check..."
 HARNESS_WHITELIST='HarnessModels.swift|RuleFileRepositoryProtocol.swift|HarnessViewModel\+Stub.swift|ExperienceCodifier\+Stub.swift|RemoteIntegration\+Stub.swift|HarnessBootstrap.swift|AgentEventSource.swift'
 if [[ "$MODE" == "staged" ]]; then

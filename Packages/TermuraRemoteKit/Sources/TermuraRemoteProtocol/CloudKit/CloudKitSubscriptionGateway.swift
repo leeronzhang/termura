@@ -1,22 +1,30 @@
 import CloudKit
 import Foundation
+import OSLog
 
-/// Manages the long-lived `CKQuerySubscription` that fires a silent push
+private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKitSubscriptionGateway")
+
+/// Manages a per-target `CKQuerySubscription` that fires a silent push
 /// whenever a record matching `targetDeviceId == self` is created in the
-/// shared private database. Once registered, the subscription persists in
-/// CloudKit's per-device server-side state — no per-launch re-registration
-/// needed (and re-registering with the same id is a no-op).
+/// shared private database. Subscriptions are scoped per `targetDeviceId`
+/// so a Mac and an iPhone signed into the same iCloud account can each
+/// register their own without colliding — the prior shared-id design
+/// silently caused the second registrant's call to short-circuit on
+/// `subscriptionExists` and ride the wrong predicate, which broke
+/// Mac → iPhone push delivery entirely.
 public protocol CloudKitSubscriptionGateway: Sendable {
-    /// Registers the subscription if not already present. Idempotent — the
-    /// implementation may bail out fast when `subscriptionExists()` returns true.
+    /// Idempotent. Registers a per-target subscription so records whose
+    /// `targetDeviceId` matches `targetDeviceId` fire silent push to
+    /// this device. Re-registering the same id is a no-op.
     func register(targetDeviceId: UUID) async throws
 
-    /// True if the subscription is currently registered for this user.
-    func subscriptionExists() async throws -> Bool
+    /// True iff a subscription for `targetDeviceId` is currently
+    /// registered for this user.
+    func subscriptionExists(for targetDeviceId: UUID) async throws -> Bool
 
-    /// Removes the subscription. Used when the user disables remote control
-    /// so push wake-ups stop arriving.
-    func unregister() async throws
+    /// Removes the subscription scoped to `targetDeviceId`. Other
+    /// targets' subscriptions are left in place.
+    func unregister(for targetDeviceId: UUID) async throws
 }
 
 public enum CloudKitSubscriptionError: Error, Sendable, Equatable {
@@ -24,7 +32,18 @@ public enum CloudKitSubscriptionError: Error, Sendable, Equatable {
 }
 
 public actor LiveCloudKitSubscriptionGateway: CloudKitSubscriptionGateway {
-    private static let subscriptionID = "termura-remote-envelope-inbox"
+    /// Pre-fix shared id — both Mac and iOS used to register against
+    /// this single id with their respective predicates, which caused
+    /// the second registrant to short-circuit on `subscriptionExists`
+    /// and silently ride the wrong predicate. Migration: every
+    /// `register` best-effort deletes this so it stops firing pushes
+    /// for a stale target.
+    private static let legacySubscriptionID = "termura-remote-envelope-inbox"
+
+    private static func subscriptionID(for targetDeviceId: UUID) -> String {
+        "termura-remote-envelope-inbox-\(targetDeviceId.uuidString)"
+    }
+
     private let database: CKDatabase
 
     public init(containerIdentifier: String = CloudKitSchema.containerIdentifier) {
@@ -33,7 +52,8 @@ public actor LiveCloudKitSubscriptionGateway: CloudKitSubscriptionGateway {
     }
 
     public func register(targetDeviceId: UUID) async throws {
-        if try await subscriptionExists() { return }
+        if try await subscriptionExists(for: targetDeviceId) { return }
+        await migrateLegacyIfPresent()
         let predicate = NSPredicate(
             format: "%K == %@",
             CloudKitSchema.Field.targetDeviceId,
@@ -42,11 +62,11 @@ public actor LiveCloudKitSubscriptionGateway: CloudKitSubscriptionGateway {
         let subscription = CKQuerySubscription(
             recordType: CloudKitSchema.recordType,
             predicate: predicate,
-            subscriptionID: Self.subscriptionID,
+            subscriptionID: Self.subscriptionID(for: targetDeviceId),
             options: [.firesOnRecordCreation]
         )
         let info = CKSubscription.NotificationInfo()
-        // Silent push: no UI, just wakes the agent so it can poll the inbox.
+        // Silent push: no UI, just wakes the receiver so it can poll the inbox.
         info.shouldSendContentAvailable = true
         subscription.notificationInfo = info
         do {
@@ -56,9 +76,9 @@ public actor LiveCloudKitSubscriptionGateway: CloudKitSubscriptionGateway {
         }
     }
 
-    public func subscriptionExists() async throws -> Bool {
+    public func subscriptionExists(for targetDeviceId: UUID) async throws -> Bool {
         do {
-            _ = try await database.subscription(for: Self.subscriptionID)
+            _ = try await database.subscription(for: Self.subscriptionID(for: targetDeviceId))
             return true
         } catch let error as CKError where error.code == .unknownItem {
             return false
@@ -67,36 +87,52 @@ public actor LiveCloudKitSubscriptionGateway: CloudKitSubscriptionGateway {
         }
     }
 
-    public func unregister() async throws {
+    public func unregister(for targetDeviceId: UUID) async throws {
         do {
-            _ = try await database.deleteSubscription(withID: Self.subscriptionID)
+            _ = try await database.deleteSubscription(withID: Self.subscriptionID(for: targetDeviceId))
         } catch let error as CKError where error.code == .unknownItem {
             return
         } catch {
             throw CloudKitSubscriptionError.backingFailure(reason: error.localizedDescription)
         }
     }
+
+    /// One-shot best-effort cleanup of the pre-fix shared subscription
+    /// id. Failures (other than "not present") leave an orphan
+    /// subscription server-side but do not block the new per-target
+    /// registration that follows; logged so a persistent backend
+    /// issue surfaces in Console.
+    private func migrateLegacyIfPresent() async {
+        do {
+            _ = try await database.deleteSubscription(withID: Self.legacySubscriptionID)
+        } catch let error as CKError where error.code == .unknownItem {
+            // Migration already ran (or the legacy id was never created).
+        } catch {
+            // Non-critical: logged for visibility, registration continues.
+            logger.warning("Legacy subscription cleanup failed: \(error.localizedDescription)")
+        }
+    }
 }
 
 /// In-memory test double — mirrors registration state without touching CloudKit.
 public actor InMemoryCloudKitSubscriptionGateway: CloudKitSubscriptionGateway {
-    private var registeredFor: UUID?
+    private var registeredTargets: Set<UUID> = []
 
     public init() {}
 
     public func register(targetDeviceId: UUID) async throws {
-        registeredFor = targetDeviceId
+        registeredTargets.insert(targetDeviceId)
     }
 
-    public func subscriptionExists() async throws -> Bool {
-        registeredFor != nil
+    public func subscriptionExists(for targetDeviceId: UUID) async throws -> Bool {
+        registeredTargets.contains(targetDeviceId)
     }
 
-    public func unregister() async throws {
-        registeredFor = nil
+    public func unregister(for targetDeviceId: UUID) async throws {
+        registeredTargets.remove(targetDeviceId)
     }
 
-    public func currentTarget() -> UUID? {
-        registeredFor
+    public func registeredTargetIds() -> Set<UUID> {
+        registeredTargets
     }
 }
