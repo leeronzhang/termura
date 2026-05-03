@@ -97,24 +97,29 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
                 """,
                 arguments: [ftsQuery, AppConfig.Search.maxResults]
             )
-            return try rows.map { row in
-                let idStr: String = row["id"]
-                guard let uuid = UUID(uuidString: idStr) else {
-                    throw RepositoryError.invalidID(rawValue: idStr, entity: "Note")
+            return rows.compactIsolatedMap(
+                logger: logger,
+                recordKind: "note_fts",
+                rowID: { row in row["id"] },
+                transform: { row in
+                    let idStr: String = row["id"]
+                    guard let uuid = UUID(uuidString: idStr) else {
+                        throw RepositoryError.invalidID(rawValue: idStr, entity: "Note")
+                    }
+                    let title: String = row["title"]
+                    let body: String = row["body"]
+                    let isFavorite: Int = row["is_snippet"]
+                    let createdAt: Double = row["created_at"]
+                    let updatedAt: Double = row["updated_at"]
+                    var record = NoteRecord(
+                        id: NoteID(rawValue: uuid), title: title, body: body,
+                        isFavorite: isFavorite != 0
+                    )
+                    record.createdAt = Date(timeIntervalSince1970: createdAt)
+                    record.updatedAt = Date(timeIntervalSince1970: updatedAt)
+                    return record
                 }
-                let title: String = row["title"]
-                let body: String = row["body"]
-                let isFavorite: Int = row["is_snippet"]
-                let createdAt: Double = row["created_at"]
-                let updatedAt: Double = row["updated_at"]
-                var record = NoteRecord(
-                    id: NoteID(rawValue: uuid), title: title, body: body,
-                    isFavorite: isFavorite != 0
-                )
-                record.createdAt = Date(timeIntervalSince1970: createdAt)
-                record.updatedAt = Date(timeIntervalSince1970: updatedAt)
-                return record
-            }
+            )
         }
     }
 

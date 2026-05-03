@@ -19,7 +19,12 @@ extension SessionRepository {
                 """,
                 arguments: [idStr]
             )
-            return try rows.map { try $0.toRecord() }
+            return rows.compactIsolatedMap(
+                logger: logger,
+                recordKind: "session",
+                rowID: { $0.id },
+                transform: { try $0.toRecord() }
+            )
         }
     }
 
@@ -42,7 +47,12 @@ extension SessionRepository {
                 """,
                 arguments: [idStr]
             )
-            return try rows.map { try $0.toRecord() }
+            return rows.compactIsolatedMap(
+                logger: logger,
+                recordKind: "session",
+                rowID: { $0.id },
+                transform: { try $0.toRecord() }
+            )
         }
     }
 

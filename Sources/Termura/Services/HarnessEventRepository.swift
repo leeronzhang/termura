@@ -96,7 +96,12 @@ actor HarnessEventRepository: HarnessEventRepositoryProtocol {
                 """,
                 arguments: [idStr]
             )
-            return try rows.map { try $0.toEvent() }
+            return rows.compactIsolatedMap(
+                logger: logger,
+                recordKind: "harness_event",
+                rowID: { $0.id },
+                transform: { try $0.toEvent() }
+            )
         }
     }
 
@@ -123,7 +128,12 @@ actor HarnessEventRepository: HarnessEventRepositoryProtocol {
                 """,
                 arguments: [idStr, type.rawValue]
             )
-            return try rows.map { try $0.toEvent() }
+            return rows.compactIsolatedMap(
+                logger: logger,
+                recordKind: "harness_event",
+                rowID: { $0.id },
+                transform: { try $0.toEvent() }
+            )
         }
     }
 }

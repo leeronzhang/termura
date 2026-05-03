@@ -44,25 +44,45 @@ extension CloudKitClientTransport {
     @discardableResult
     func pollOnce() async -> Bool {
         guard isConnected else { return false }
-        let records: [CloudKitEnvelopeRecord]
+        let page: CloudKitFetchPage
         do {
-            records = try await gateway.fetch(targetDeviceId: localDeviceId, since: lastSeen)
-        } catch let CloudKitGatewayError.unsupportedSchema(version) {
-            // Skip the entire batch but record the version so a stuck
-            // v1 leftover surfaces in `log stream`. Same handling as the
-            // server `CloudKitTransport`.
-            logger.warning("Skipping fetch batch with unsupported schemaVersion=\(version)")
-            recordPollSuccess()
-            return false
+            page = try await gateway.fetch(targetDeviceId: localDeviceId, since: lastSeen)
         } catch {
             recordPollFailure(reason: error.localizedDescription)
             return false
         }
-        for record in records {
-            await processFetchedRecord(record)
-        }
+        await consume(page: page)
         recordPollSuccess()
         return true
+    }
+
+    /// Shared consumption path for both `connect`'s initial backlog
+    /// drain and the poll loop. Quarantined entries are deleted +
+    /// cursor advances past them so a poison record can't keep
+    /// blocking later legitimate ones.
+    func consume(page: CloudKitFetchPage) async {
+        for record in page.records {
+            await processFetchedRecord(record)
+        }
+        for entry in page.quarantined {
+            await handleQuarantined(entry)
+        }
+    }
+
+    private func handleQuarantined(_ entry: QuarantinedRecord) async {
+        logger.warning(
+            "Quarantining unparseable record \(entry.id, privacy: .public): \(entry.reason, privacy: .public)"
+        )
+        if let createdAt = entry.createdAt, createdAt > lastSeen {
+            lastSeen = createdAt
+        }
+        do {
+            try await gateway.delete(id: entry.id)
+        } catch {
+            logger.warning(
+                "Failed to delete quarantined record \(entry.id): \(error.localizedDescription)"
+            )
+        }
     }
 
     /// Routes one fetched record through the cipher / plaintext switch

@@ -11,10 +11,55 @@ public protocol CloudKitDatabaseGateway: Sendable {
     /// Fetch records addressed to `targetDeviceId` whose `createdAt` is strictly
     /// greater than `since`. Cursor semantics: callers persist the max
     /// `createdAt` returned and pass it back next call.
-    func fetch(targetDeviceId: UUID, since: Date) async throws -> [CloudKitEnvelopeRecord]
+    ///
+    /// **Per-record isolation contract**: a single malformed or
+    /// schema-rejected record must NOT fail the whole batch. The gateway
+    /// returns parseable records in `records` and per-record parse
+    /// failures in `quarantined` so callers can advance the cursor past
+    /// poison records and remove them from the backing store. A network /
+    /// query-level failure (gateway is unhealthy) is the only condition
+    /// that throws — those are not partial outcomes and the caller
+    /// should retry rather than skip.
+    func fetch(targetDeviceId: UUID, since: Date) async throws -> CloudKitFetchPage
 
     /// Removes a consumed record so it isn't returned by subsequent fetches.
     func delete(id: String) async throws
+}
+
+/// One fetch round's outcome. Per-record parse failures are isolated
+/// into `quarantined` so a single poison record can no longer block the
+/// entire mailbox. Each `QuarantinedRecord.createdAt` (when known) lets
+/// the caller advance its cursor past the poison; `delete(id:)` should
+/// follow so the same record doesn't keep being requeried.
+public struct CloudKitFetchPage: Sendable, Equatable {
+    public let records: [CloudKitEnvelopeRecord]
+    public let quarantined: [QuarantinedRecord]
+
+    public init(records: [CloudKitEnvelopeRecord], quarantined: [QuarantinedRecord] = []) {
+        self.records = records
+        self.quarantined = quarantined
+    }
+}
+
+/// A record the gateway saw on the wire but couldn't parse into a
+/// `CloudKitEnvelopeRecord` (legacy schema, malformed fields, payload
+/// shape mismatch). Carries the recordName so callers can `delete` it
+/// and `createdAt` (when readable) so they can advance their cursor
+/// past the poison without losing later legitimate records.
+public struct QuarantinedRecord: Sendable, Equatable {
+    public let id: String
+    /// May be nil if the record's `createdAt` field itself was
+    /// unreadable; in that case CloudKit's `createdAt > since`
+    /// predicate will not match the record on subsequent fetches
+    /// either, so the only required follow-up is `delete(id:)`.
+    public let createdAt: Date?
+    public let reason: String
+
+    public init(id: String, createdAt: Date?, reason: String) {
+        self.id = id
+        self.createdAt = createdAt
+        self.reason = reason
+    }
 }
 
 public enum CloudKitGatewayError: Error, Sendable, Equatable, LocalizedError {
@@ -82,10 +127,11 @@ public actor InMemoryCloudKitDatabaseGateway: CloudKitDatabaseGateway {
         storage[record.id] = record
     }
 
-    public func fetch(targetDeviceId: UUID, since: Date) async throws -> [CloudKitEnvelopeRecord] {
-        storage.values
+    public func fetch(targetDeviceId: UUID, since: Date) async throws -> CloudKitFetchPage {
+        let records = storage.values
             .filter { $0.targetDeviceId == targetDeviceId && $0.createdAt > since }
             .sorted { $0.createdAt < $1.createdAt }
+        return CloudKitFetchPage(records: records)
     }
 
     public func delete(id: String) async throws {

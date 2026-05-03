@@ -61,21 +61,34 @@ public actor CloudKitTransport: RemoteTransport {
     }
 
     public nonisolated let name: String
-    private let deviceId: UUID
-    private let gateway: any CloudKitDatabaseGateway
+    /// Module-internal so the same-module `+Polling` extension can pass
+    /// `targetDeviceId` straight to the gateway without an extra hop.
+    let deviceId: UUID
+    /// Module-internal so the same-module `+Polling` / `+Quarantine`
+    /// extensions can fetch + delete without widening the public surface.
+    let gateway: any CloudKitDatabaseGateway
     /// Module-internal so the same-module `+CipherDecode` extension can
     /// reach the store without widening the public actor surface.
     let pairKeyStore: (any PairKeyStore)?
     /// Module-internal for the same reason as `pairKeyStore` above.
     let codec: any RemoteCodec
-    private let configuration: Configuration
+    /// Module-internal so the same-module `+Polling` extension can read
+    /// the backoff parameters when scheduling the next tick.
+    let configuration: Configuration
     private let clock: @Sendable () -> Date
     private var pollingTask: Task<Void, Never>?
-    private var handler: (any EnvelopeHandler)?
-    private var lastSeen: Date = .distantPast
+    /// Module-internal so the same-module `+Polling` extension can
+    /// route poll-fetched records to the active handler. The poll loop
+    /// short-circuits when this is nil (e.g. after `stop`).
+    var handler: (any EnvelopeHandler)?
+    /// Module-internal so the same-module `+Polling` extension can
+    /// advance the cursor as it consumes records / quarantines poison.
+    var lastSeen: Date = .distantPast
     private var channels: [UUID: CloudKitReplyChannel] = [:]
-    private var consecutivePollFailures = 0
-    private var lastPollFailureReason: String?
+    /// Module-internal so the same-module `+Polling` extension can
+    /// update health bookkeeping without going through public hops.
+    var consecutivePollFailures = 0
+    var lastPollFailureReason: String?
 
     public init(
         name: String,
@@ -119,19 +132,19 @@ public actor CloudKitTransport: RemoteTransport {
     public func start(handler: any EnvelopeHandler) async throws {
         guard pollingTask == nil else { throw TransportError.alreadyRunning }
         self.handler = handler
-        // Establish the cursor at the latest existing record so we don't replay
-        // an iPhone's pre-pair traffic on every Mac restart.
+        let initial: CloudKitFetchPage
         do {
-            let initial = try await gateway.fetch(targetDeviceId: deviceId, since: .distantPast)
-            if let max = initial.map(\.createdAt).max() {
-                lastSeen = max
-            } else {
-                lastSeen = clock()
-            }
+            initial = try await gateway.fetch(targetDeviceId: deviceId, since: .distantPast)
         } catch {
             self.handler = nil
             throw TransportError.bindFailure(reason: error.localizedDescription)
         }
+        // Consume any backlog the inbox already holds (offline iPhone /
+        // server restart) instead of advancing the cursor past it. Each
+        // dispatched record gets `delete`d, so subsequent restarts won't
+        // see it again; quarantined entries are removed + cursor is
+        // advanced past them by the same path the poll loop uses.
+        await consume(page: initial, handler: handler)
         pollingTask = Task { [weak self] in
             await self?.runPollLoop()
         }
@@ -152,89 +165,7 @@ public actor CloudKitTransport: RemoteTransport {
         await pollOnce()
     }
 
-    private func runPollLoop() async {
-        while !Task.isCancelled {
-            await pollOnce()
-            do {
-                try await Task.sleep(for: nextPollDelay())
-            } catch {
-                return
-            }
-        }
-    }
-
-    /// Computes the wait between this poll and the next. After a clean
-    /// poll, `consecutivePollFailures == 0` and we sleep the configured
-    /// interval. After failures we sleep `pollInterval × 2^(failures-1)`
-    /// up to `backoffCap`, so a sustained CloudKit outage doesn't keep
-    /// hammering the gateway every minute.
-    private func nextPollDelay() -> Duration {
-        guard consecutivePollFailures > 0 else { return configuration.pollInterval }
-        let baseSeconds = Self.durationInSeconds(configuration.pollInterval)
-        let multiplier = pow(2.0, Double(min(consecutivePollFailures - 1, 16)))
-        let candidateSeconds = baseSeconds * multiplier
-        let capSeconds = Self.durationInSeconds(configuration.backoffCap)
-        let bounded = min(candidateSeconds, capSeconds)
-        return .seconds(bounded)
-    }
-
-    private static func durationInSeconds(_ duration: Duration) -> Double {
-        let comp = duration.components
-        return Double(comp.seconds) + Double(comp.attoseconds) / 1.0e18
-    }
-
-    private func pollOnce() async {
-        guard let handler else { return }
-        let records: [CloudKitEnvelopeRecord]
-        do {
-            records = try await gateway.fetch(targetDeviceId: deviceId, since: lastSeen)
-        } catch let CloudKitGatewayError.unsupportedSchema(version) {
-            // PR7 — v1 records (pre-encryption) are intentionally rejected
-            // on read. The transport skips the entire batch with a warning.
-            // Schema mismatch is not a transport health concern (the
-            // gateway is healthy; the data is stale), so we don't bump
-            // the failure counter.
-            logger.warning("Skipping fetch batch with unsupported schemaVersion=\(version)")
-            recordPollSuccess()
-            return
-        } catch {
-            recordPollFailure(reason: error.localizedDescription)
-            return
-        }
-        for record in records {
-            await dispatch(record: record, handler: handler)
-            if record.createdAt > lastSeen {
-                lastSeen = record.createdAt
-            }
-        }
-        recordPollSuccess()
-    }
-
-    private func recordPollSuccess() {
-        // Bind locally so the OSLog autoclosure interpolation does not
-        // implicitly capture `self`; SwiftFormat's redundantSelf rule
-        // strips explicit `self.` here, so the local is the only form
-        // that satisfies both the compiler and the formatter.
-        let failures = consecutivePollFailures
-        if failures > 0 {
-            logger.info("CloudKit poll recovered after \(failures) failures")
-        }
-        consecutivePollFailures = 0
-        lastPollFailureReason = nil
-    }
-
-    private func recordPollFailure(reason: String) {
-        consecutivePollFailures += 1
-        lastPollFailureReason = reason
-        let failures = consecutivePollFailures
-        if failures >= configuration.healthFailureThreshold {
-            logger.error("Poll failed (#\(failures)): \(reason, privacy: .public)")
-        } else {
-            logger.warning("Poll failed (#\(failures)): \(reason, privacy: .public)")
-        }
-    }
-
-    private func dispatch(record: CloudKitEnvelopeRecord, handler: any EnvelopeHandler) async {
+    func dispatch(record: CloudKitEnvelopeRecord, handler: any EnvelopeHandler) async {
         let envelope: Envelope
         switch record.payload {
         case let .plaintext(value):
@@ -266,7 +197,7 @@ public actor CloudKitTransport: RemoteTransport {
         await deleteAfterDispatch(id: record.id)
     }
 
-    private func deleteAfterDispatch(id: String) async {
+    func deleteAfterDispatch(id: String) async {
         do {
             try await gateway.delete(id: id)
         } catch {

@@ -130,9 +130,9 @@ public actor CloudKitClientTransport: ClientTransport {
 
     public func connect() async throws {
         guard !isConnected else { return }
+        let initial: CloudKitFetchPage
         do {
-            let initial = try await gateway.fetch(targetDeviceId: localDeviceId, since: .distantPast)
-            lastSeen = initial.map(\.createdAt).max() ?? clock()
+            initial = try await gateway.fetch(targetDeviceId: localDeviceId, since: .distantPast)
         } catch {
             // Mirror the diagnostic surface `pollOnce` already provides
             // (`logger.error("Poll failed: …")`). Without this, a failed
@@ -146,6 +146,12 @@ public actor CloudKitClientTransport: ClientTransport {
             throw ClientTransportError.connectFailure(reason: error.localizedDescription)
         }
         isConnected = true
+        // Drain the offline-backlog before the poll loop starts so
+        // messages queued while the iPhone was offline / asleep aren't
+        // silently skipped past. Quarantined entries are deleted from
+        // CloudKit + the cursor advances past them so they don't loop
+        // forever on the next fetch.
+        await consume(page: initial)
         pollingTask = Task { [weak self] in
             await self?.runPollLoop()
         }

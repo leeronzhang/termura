@@ -128,7 +128,12 @@ actor SessionMessageRepository: SessionMessageRepositoryProtocol {
                     arguments: [idStr]
                 )
             }
-            return try rows.map { try $0.toMessage() }
+            return rows.compactIsolatedMap(
+                logger: logger,
+                recordKind: "session_message",
+                rowID: { $0.id },
+                transform: { try $0.toMessage() }
+            )
         }
     }
 
