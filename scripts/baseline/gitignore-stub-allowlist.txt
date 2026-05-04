@@ -5,3 +5,4 @@
 32:!Sources/Termura/Harness/RemoteIntegration+Stub.swift
 33:!Sources/Termura/Harness/HarnessBootstrap.swift
 34:!Sources/Termura/Harness/AgentEventSource.swift
+35:!Sources/Termura/Harness/RemoteTransportFailure.swift

@@ -61,6 +61,14 @@ public actor CloudKitTransport: RemoteTransport {
     }
 
     public nonisolated let name: String
+    /// Out-of-band failure stream. Surfaced through the `RemoteTransport`
+    /// protocol so the host (Mac `RemoteServerHarness` →
+    /// `RemoteControlController` → Settings UI) can show *why* a reply
+    /// pipeline went silent — without this, `CloudKitReplyChannel.send`
+    /// errors only landed in the router's catch-and-log and the user
+    /// saw a frozen iPhone with no actionable hint.
+    public nonisolated let events: AsyncStream<ServerTransportEvent>
+    private let eventsContinuation: AsyncStream<ServerTransportEvent>.Continuation
     /// Module-internal so the same-module `+Polling` extension can pass
     /// `targetDeviceId` straight to the gateway without an extra hop.
     let deviceId: UUID
@@ -106,6 +114,16 @@ public actor CloudKitTransport: RemoteTransport {
         self.codec = codec
         self.configuration = configuration
         self.clock = clock
+        let made = AsyncStream.makeStream(of: ServerTransportEvent.self)
+        events = made.stream
+        eventsContinuation = made.continuation
+    }
+
+    deinit {
+        // Subscribers iterating `for await` fall out of their loop
+        // when the actor is released; mirrors `WebSocketClientTransport`'s
+        // teardown so consumers do not need to special-case CloudKit.
+        eventsContinuation.finish()
     }
 
     /// Switches the per-peer reply channel from plaintext-bootstrap mode
@@ -207,13 +225,18 @@ public actor CloudKitTransport: RemoteTransport {
 
     private func channelFor(sourceDeviceId: UUID) -> CloudKitReplyChannel {
         if let existing = channels[sourceDeviceId] { return existing }
+        // Capture the continuation by value (Sendable) rather than `self`,
+        // so the channel actor can yield without re-entering this actor's
+        // isolation domain on every send-failure.
+        let continuation = eventsContinuation
         let channel = CloudKitReplyChannel(
             transportDeviceId: deviceId,
             peerDeviceId: sourceDeviceId,
             gateway: gateway,
             pairKeyStore: pairKeyStore,
             codec: codec,
-            clock: clock
+            clock: clock,
+            eventSink: { event in continuation.yield(event) }
         )
         channels[sourceDeviceId] = channel
         return channel

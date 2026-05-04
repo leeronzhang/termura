@@ -61,6 +61,16 @@ public actor CloudKitClientTransport: ClientTransport {
     }
 
     nonisolated let codec: any RemoteCodec
+    /// Out-of-band failure stream shared with `WebSocketClientTransport`
+    /// so the iOS reconnect controller can react to a CloudKit-side
+    /// `gateway.save` failure without polling. Pre-fix the iOS user saw
+    /// "no reply received" with no signal that the *outbound* write
+    /// itself had failed (CKError quota / unauthorized / network drop);
+    /// the next `send` would still throw, but until something tried to
+    /// send the only place the failure surfaced was the actor-internal
+    /// throw → router catch-and-log on the Mac side.
+    public nonisolated let events: AsyncStream<TransportEvent>
+    private let eventsContinuation: AsyncStream<TransportEvent>.Continuation
     /// Module-internal so the same-module `+Polling` extension can use
     /// it as the fetch target without an extra accessor.
     let localDeviceId: UUID
@@ -107,6 +117,16 @@ public actor CloudKitClientTransport: ClientTransport {
         self.codec = codec
         self.configuration = configuration
         self.clock = clock
+        let made = AsyncStream.makeStream(of: TransportEvent.self)
+        events = made.stream
+        eventsContinuation = made.continuation
+    }
+
+    deinit {
+        // Mirror `WebSocketClientTransport.deinit`: subscribers iterating
+        // `for await` fall out of their loop the moment the transport is
+        // released so the iOS reconnect controller never hangs.
+        eventsContinuation.finish()
     }
 
     /// Switches `send` from plaintext-bootstrap mode to encrypted mode.
@@ -158,7 +178,11 @@ public actor CloudKitClientTransport: ClientTransport {
     }
 
     public func send(_ envelope: Envelope) async throws {
-        guard isConnected else { throw ClientTransportError.notConnected }
+        guard isConnected else {
+            let err = ClientTransportError.notConnected
+            yieldDisconnected(reason: err)
+            throw err
+        }
         let payload: CloudKitEnvelopeRecord.Payload
         if let pairKey = await resolvePairKey() {
             do {
@@ -189,8 +213,20 @@ public actor CloudKitClientTransport: ClientTransport {
         do {
             try await gateway.save(record)
         } catch {
-            throw ClientTransportError.sendFailure(reason: error.localizedDescription)
+            let err = ClientTransportError.sendFailure(reason: error.localizedDescription)
+            yieldDisconnected(reason: err)
+            throw err
         }
+    }
+
+    /// Mirrors `WebSocketClientTransport.markDeadIfFatal` — a CloudKit
+    /// `gateway.save` failure is the moral equivalent of a fatal NWError
+    /// on the WebSocket path: the outbound pipe is unusable until the
+    /// underlying issue (network / CKError quota / not-authenticated)
+    /// resolves. Yielding `.disconnected` lets the iOS reconnect
+    /// controller drive recovery uniformly across both transports.
+    private func yieldDisconnected(reason: ClientTransportError) {
+        eventsContinuation.yield(.disconnected(reason: reason))
     }
 
     private func resolvePairKey() async -> PairKey? {

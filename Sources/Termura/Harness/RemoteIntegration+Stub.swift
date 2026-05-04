@@ -37,6 +37,8 @@ protocol RemoteIntegration: Sendable {
     /// Recent audit entries, newest first, capped at the store's window
     /// (currently 500 entries). Returns `[]` when no harness.
     func auditLog() async throws -> [RemoteAuditEntry]
+    /// D-1 — see `RemoteTransportFailure.swift`; default empty.
+    func transportFailures() -> AsyncStream<RemoteTransportFailure>
     var isRunning: Bool { get async }
 }
 

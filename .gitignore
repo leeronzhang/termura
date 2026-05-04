@@ -32,13 +32,21 @@ Sources/Termura/Harness/*
 !Sources/Termura/Harness/RemoteIntegration+Stub.swift
 !Sources/Termura/Harness/HarnessBootstrap.swift
 !Sources/Termura/Harness/AgentEventSource.swift
+!Sources/Termura/Harness/RemoteTransportFailure.swift
 
-# Public-package contract test for the new TransportEvent surface.
-# The line-22 `Tests/` rule was meant for the internal Termura app's
-# tests, not the public package. Each public test file is unblocked
-# explicitly; bulk negation can land separately once previously-
-# shadowed tests have their lint debt cleaned up.
+# Public-package contract tests for the wire library. The line-22 `Tests/`
+# rule was meant for the internal Termura app's tests, not the public
+# package. Re-include the package's Tests/ directory + per-test whitelist
+# so each unblocked file is reviewer-visible (bulk negation can land
+# separately once previously-shadowed tests have their lint debt cleaned
+# up; until then, intentional file-by-file unblock).
+!Packages/TermuraRemoteKit/Tests/
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/
+Packages/TermuraRemoteKit/Tests/*/*
 !Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/TransportEventStreamTests.swift
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/CloudKitClientTransportTests.swift
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/CloudKitReplyChannelEventTests.swift
 
 # CI/CD and internal build tooling
 .github/*

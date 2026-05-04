@@ -124,10 +124,13 @@ extension RemoteControlController {
         }
     }
 
-    /// Sequenced transport teardown — bridge first (so no fresh
-    /// envelope can land in the router while we're stopping the
-    /// server), then integration. Both APIs are async-not-throws.
+    /// Sequenced transport teardown — drain first (so a late
+    /// in-flight failure event can't race against the impending
+    /// integration.stop()), bridge second (so no fresh envelope
+    /// lands in the router during shutdown), integration last. The
+    /// async APIs are non-throwing.
     func tearDownTransports() async {
+        stopTransportFailureDrain()
         await agentBridge.stop()
         await integration.stop()
     }

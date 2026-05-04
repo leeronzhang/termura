@@ -31,6 +31,11 @@ actor CloudKitReplyChannel: ReplyChannel {
     private let pairKeyStore: (any PairKeyStore)?
     private let codec: any RemoteCodec
     private let clock: @Sendable () -> Date
+    /// Out-of-band failure sink owned by the parent `CloudKitTransport`.
+    /// Called *before* `send` rethrows so the host (Mac Settings UI)
+    /// observes the failure even when the router catches the throw and
+    /// only logs it.
+    private let eventSink: @Sendable (ServerTransportEvent) -> Void
     private var isOpen = true
     private var activePairingId: UUID?
 
@@ -40,7 +45,8 @@ actor CloudKitReplyChannel: ReplyChannel {
         gateway: any CloudKitDatabaseGateway,
         pairKeyStore: (any PairKeyStore)?,
         codec: any RemoteCodec,
-        clock: @escaping @Sendable () -> Date
+        clock: @escaping @Sendable () -> Date,
+        eventSink: @escaping @Sendable (ServerTransportEvent) -> Void = { _ in }
     ) {
         channelId = peerDeviceId
         self.transportDeviceId = transportDeviceId
@@ -49,6 +55,7 @@ actor CloudKitReplyChannel: ReplyChannel {
         self.pairKeyStore = pairKeyStore
         self.codec = codec
         self.clock = clock
+        self.eventSink = eventSink
     }
 
     /// Called by the router after `PairingCompleteAck` is queued so
@@ -70,9 +77,9 @@ actor CloudKitReplyChannel: ReplyChannel {
                 )
                 payload = .cipher(blob)
             } catch {
-                throw TransportError.sendFailure(
-                    reason: "seal failed: \(error.localizedDescription)"
-                )
+                let reason = "seal failed: \(error.localizedDescription)"
+                emitSendFailure(reason: reason)
+                throw TransportError.sendFailure(reason: reason)
             }
         } else {
             // Pair-handshake bootstrap: no key yet, fall through to
@@ -90,8 +97,18 @@ actor CloudKitReplyChannel: ReplyChannel {
         do {
             try await gateway.save(record)
         } catch {
-            throw TransportError.sendFailure(reason: error.localizedDescription)
+            let reason = error.localizedDescription
+            emitSendFailure(reason: reason)
+            throw TransportError.sendFailure(reason: reason)
         }
+    }
+
+    private func emitSendFailure(reason: String) {
+        eventSink(.replyChannelSendFailed(
+            peerDeviceId: peerDeviceId,
+            reason: reason,
+            occurredAt: clock()
+        ))
     }
 
     func close() async {
