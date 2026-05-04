@@ -6,11 +6,23 @@
 // module-internal so this same-module extension drives the pair-key
 // + re-pair plumbing without going through public hops.
 
+import CryptoKit
 import Foundation
 import OSLog
 import TermuraRemoteProtocol
 
 private let logger = Logger(subsystem: "com.termura.remote", category: "PairingService+PairKey")
+
+/// D-5 diagnostic — short fingerprint of a PairKey secret so the
+/// Mac side and iOS side can be cross-referenced in the log
+/// without exposing the raw symmetric key. Prefix only (8 hex
+/// chars = 32 bits); enough entropy to spot a mismatch, not
+/// enough to brute-force the secret.
+private func pairKeyFingerprint(_ secret: SymmetricKey) -> String {
+    let raw = secret.withUnsafeBytes { Data($0) }
+    let digest = SHA256.hash(data: raw)
+    return digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+}
 
 extension PairingService {
     /// Wave 6 — re-derives the symmetric `PairKey` using the **current**
@@ -79,9 +91,12 @@ extension PairingService {
             pairingId: existingPairingId
         )
         try await pairKeyStore.save(derived)
+        let fp = pairKeyFingerprint(derived.secret)
         logger.info("""
         PairKey refreshed under existing pairingId=\
-        \(existingPairingId, privacy: .public) on idempotent re-pair
+        \(existingPairingId, privacy: .public) on idempotent re-pair \
+        fp=\(fp, privacy: .public) noncePrefix=\
+        \(nonce.prefix(4).map { String(format: "%02x", $0) }.joined(), privacy: .public)
         """)
     }
 
@@ -118,5 +133,11 @@ extension PairingService {
             pairingId: pairingId
         )
         try await pairKeyStore.save(pairKey)
+        let fp = pairKeyFingerprint(pairKey.secret)
+        logger.info("""
+        PairKey persisted (fresh pair) pairingId=\(pairingId, privacy: .public) \
+        fp=\(fp, privacy: .public) noncePrefix=\
+        \(nonce.prefix(4).map { String(format: "%02x", $0) }.joined(), privacy: .public)
+        """)
     }
 }

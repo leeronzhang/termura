@@ -1,8 +1,19 @@
+import CryptoKit
 import Foundation
 import OSLog
 import TermuraRemoteProtocol
 
 private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKitReplyChannel")
+
+/// D-5 diagnostic — short fingerprint matching the one in
+/// `PairingService+PairKey.swift` so a Mac-side encrypt log line
+/// can be cross-referenced with the iOS-side decrypt log line and
+/// the pair-time save log line.
+private func pairKeyFingerprint(_ secret: SymmetricKey) -> String {
+    let raw = secret.withUnsafeBytes { Data($0) }
+    let digest = SHA256.hash(data: raw)
+    return digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+}
 
 /// Virtual reply channel for the CloudKit transport. Each remote device gets
 /// exactly one of these on the Mac side; the `channelId` is set to the peer's
@@ -69,6 +80,13 @@ actor CloudKitReplyChannel: ReplyChannel {
         guard isOpen else { throw TransportError.notRunning }
         let payload: CloudKitEnvelopeRecord.Payload
         if let pairKey = await resolvePairKey() {
+            // D-5 diagnostic — log encrypt-time fingerprint so a Mac
+            // ↔ iOS mismatch can be confirmed across processes.
+            logger.info("""
+            Encrypting reply pairingId=\(pairKey.pairingId, privacy: .public) \
+            fp=\(pairKeyFingerprint(pairKey.secret), privacy: .public) \
+            kind=\(envelope.kind.rawValue, privacy: .public)
+            """)
             do {
                 let blob = try CloudEnvelopeCrypto.seal(
                     envelope: envelope,
