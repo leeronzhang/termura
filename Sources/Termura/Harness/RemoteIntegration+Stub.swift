@@ -151,14 +151,11 @@ enum RemoteAdapterError: Error, Sendable, Equatable {
     case sessionNotFound
     case noActiveProject
     case integrationDisabled
-    /// PR9 — `revokeAllPairedDevices()` ran to completion but at least
-    /// one device's persistence write failed. Successful revocations
-    /// are kept (no rollback); the failed ids are surfaced so the UI
-    /// can show "X of Y could not be revoked". Translated from the
-    /// kit-internal `PairingError.revokeAllFailed` at the harness
-    /// boundary so the controller stays free of `TermuraRemoteServer`
-    /// error surface.
+    /// PR9 — `revokeAll` partial failure: surviving successes are kept
+    /// (no rollback), failed ids surface so the UI can show "X of Y could
+    /// not be revoked". Translated from kit-internal `PairingError.revokeAllFailed`.
     case partialRevokeAllFailed(failed: [UUID])
+    case macSurfaceUnavailable
 }
 
 extension RemoteAdapterError: LocalizedError {
@@ -172,6 +169,8 @@ extension RemoteAdapterError: LocalizedError {
             "Remote integration is not available in this build."
         case let .partialRevokeAllFailed(failed):
             "\(failed.count) device(s) could not be revoked."
+        case .macSurfaceUnavailable:
+            "Mac terminal isn't visible. Bring the Termura window to the front and retry."
         }
     }
 }

@@ -210,6 +210,8 @@ extension AppDelegate {
             throw RemoteAdapterError.sessionNotFound
         } catch RemoteCommandRunner.Failure.noActiveProject {
             throw RemoteAdapterError.noActiveProject
+        } catch RemoteCommandRunner.Failure.surfaceUnavailable {
+            throw RemoteAdapterError.macSurfaceUnavailable
         }
     }
 }

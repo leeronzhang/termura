@@ -25,6 +25,8 @@ final class LibghosttyEngine: TerminalEngine {
     let shellEventsStream: AsyncStream<ShellIntegrationEvent>
     private(set) var state: TerminalLifecycleState = .created
     var isRunning: Bool { state == .running }
+
+    var hasSurface: Bool { ghosttyView.surface != nil }
     let terminalNSView: NSView
     private let sessionID: SessionID
     /// One-to-many fan-out of raw PTY bytes for the harness pty-stream
@@ -150,16 +152,29 @@ final class LibghosttyEngine: TerminalEngine {
     // MARK: - TerminalEngine methods
 
     func send(_ text: String) async {
-        guard let surface = ghosttyView.surface else { return }
+        guard let surface = ghosttyView.surface else {
+            // The remote-control path lands here when the iOS user hits Send
+            // for a session whose ghostty surface isn't allocated (window
+            // closed, view not yet attached). The PTY process can still be
+            // alive (engine.isRunning == true) so RemoteCommandRunner's
+            // existing guard doesn't catch it; surface a clear log so the
+            // failure mode is recoverable from Console rather than silent.
+            logger.warning("LibghosttyEngine.send no-op: surface is nil for session \(sessionID.rawValue)")
+            return
+        }
         let len = text.utf8CString.count
         guard len > 0 else { return }
+        logger.info("LibghosttyEngine.send: \(len - 1) bytes to session \(sessionID.rawValue)")
         text.withCString { ptr in
             ghostty_surface_text(surface, ptr, UInt(len - 1))
         }
     }
 
     func pressReturn() async {
-        guard let surface = ghosttyView.surface else { return }
+        guard let surface = ghosttyView.surface else {
+            logger.warning("LibghosttyEngine.pressReturn no-op: surface is nil for session \(sessionID.rawValue)")
+            return
+        }
         var key = ghostty_input_key_s()
         key.action = GHOSTTY_ACTION_PRESS
         key.keycode = 36

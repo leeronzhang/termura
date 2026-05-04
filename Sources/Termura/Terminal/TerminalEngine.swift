@@ -50,6 +50,15 @@ protocol TerminalEngine: AnyObject, Sendable {
     /// Whether the underlying PTY process is running.
     var isRunning: Bool { get }
 
+    /// Whether the engine currently holds a live ghostty / Metal surface.
+    /// `engine.send` and `engine.pressReturn` silently no-op when this is
+    /// false (their `guard let surface else { return }` short-circuit) —
+    /// the remote-control path uses this to fail fast with a typed error
+    /// instead of letting iOS time out 30s later with no clue why nothing
+    /// reached the PTY. Default impl returns `true` for engines without
+    /// a surface concept (mock, debug).
+    var hasSurface: Bool { get }
+
     /// The AppKit view backing this terminal engine, for focus and key routing.
     var terminalNSView: NSView { get }
 
@@ -125,6 +134,11 @@ protocol TerminalEngine: AnyObject, Sendable {
 }
 
 extension TerminalEngine {
+    // Default: engines without a separate surface concept (mock / debug)
+    // are always "ready" — only `LibghosttyEngine` currently overrides
+    // to forward the underlying ghostty view's surface state.
+    var hasSurface: Bool { true }
+
     // Default implementation lets non-libghostty engines (debug, mock) opt
     // out of styled extraction without forcing a stub on every conformer.
     func readVisibleStyledScreen() -> TerminalStyledScreenSnapshot? { nil }
