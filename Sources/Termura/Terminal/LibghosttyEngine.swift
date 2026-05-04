@@ -152,6 +152,10 @@ final class LibghosttyEngine: TerminalEngine {
     // MARK: - TerminalEngine methods
 
     func send(_ text: String) async {
+        // Bind sessionID locally so the log-string interpolation closure
+        // doesn't trip Swift 6 strict-concurrency's "explicit self capture"
+        // rule. (The same pattern is used in `terminate()` below.)
+        let sid = sessionID.rawValue
         guard let surface = ghosttyView.surface else {
             // The remote-control path lands here when the iOS user hits Send
             // for a session whose ghostty surface isn't allocated (window
@@ -159,20 +163,21 @@ final class LibghosttyEngine: TerminalEngine {
             // alive (engine.isRunning == true) so RemoteCommandRunner's
             // existing guard doesn't catch it; surface a clear log so the
             // failure mode is recoverable from Console rather than silent.
-            logger.warning("LibghosttyEngine.send no-op: surface is nil for session \(sessionID.rawValue)")
+            logger.warning("LibghosttyEngine.send no-op: surface is nil for session \(sid)")
             return
         }
         let len = text.utf8CString.count
         guard len > 0 else { return }
-        logger.info("LibghosttyEngine.send: \(len - 1) bytes to session \(sessionID.rawValue)")
+        logger.info("LibghosttyEngine.send: \(len - 1) bytes to session \(sid)")
         text.withCString { ptr in
             ghostty_surface_text(surface, ptr, UInt(len - 1))
         }
     }
 
     func pressReturn() async {
+        let sid = sessionID.rawValue
         guard let surface = ghosttyView.surface else {
-            logger.warning("LibghosttyEngine.pressReturn no-op: surface is nil for session \(sessionID.rawValue)")
+            logger.warning("LibghosttyEngine.pressReturn no-op: surface is nil for session \(sid)")
             return
         }
         var key = ghostty_input_key_s()
