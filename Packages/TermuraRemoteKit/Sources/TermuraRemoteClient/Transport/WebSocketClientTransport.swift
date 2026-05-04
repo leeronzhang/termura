@@ -26,11 +26,20 @@ public actor WebSocketClientTransport: ClientTransport {
     private let queue: DispatchQueue
     private var connection: NWConnection?
     private var isConnected = false
+    /// Backing continuation for the `events` stream. Yielded once on
+    /// the healthy → dead transition (see `markDead`); finished in
+    /// `deinit` so subscribers fall out of their `for await` loop when
+    /// the transport is released.
+    private let eventsContinuation: AsyncStream<TransportEvent>.Continuation
+    public nonisolated let events: AsyncStream<TransportEvent>
 
     public init(endpoint: Endpoint, codec: any RemoteCodec = JSONRemoteCodec()) {
         target = .hostPort(host: endpoint.host, port: endpoint.port)
         self.codec = codec
         queue = DispatchQueue(label: "termura.remote.client.\(endpoint.host)")
+        let made = AsyncStream.makeStream(of: TransportEvent.self)
+        events = made.stream
+        eventsContinuation = made.continuation
     }
 
     /// Build a transport from a `NWEndpoint` that came out of `LANBrowser` /
@@ -41,6 +50,13 @@ public actor WebSocketClientTransport: ClientTransport {
         target = .rawEndpoint(nwEndpoint)
         self.codec = codec
         queue = DispatchQueue(label: "termura.remote.client.bonjour")
+        let made = AsyncStream.makeStream(of: TransportEvent.self)
+        events = made.stream
+        eventsContinuation = made.continuation
+    }
+
+    deinit {
+        eventsContinuation.finish()
     }
 
     public func connect() async throws {
@@ -73,18 +89,57 @@ public actor WebSocketClientTransport: ClientTransport {
     public func send(_ envelope: Envelope) async throws {
         guard isConnected, let connection else { throw ClientTransportError.notConnected }
         let data = try codec.encode(envelope)
-        try await sendRaw(data: data, on: connection)
+        do {
+            try await sendRaw(data: data, on: connection)
+        } catch let transportError as ClientTransportError {
+            markDeadIfFatal(transportError)
+            throw transportError
+        }
     }
 
     public func receive() async throws -> Envelope {
         guard isConnected, let connection else { throw ClientTransportError.notConnected }
-        return try await receiveOne(on: connection, codec: codec)
+        do {
+            return try await receiveOne(on: connection, codec: codec)
+        } catch let transportError as ClientTransportError {
+            markDeadIfFatal(transportError)
+            throw transportError
+        }
     }
 
     public func disconnect() async {
+        // Explicit disconnect intentionally does NOT yield `.disconnected`
+        // on `events` — that signal is reserved for *unexpected* failures
+        // so the iOS reconnect controller doesn't treat a user-initiated
+        // re-pair / sign-out as a network drop and start backoff against
+        // an endpoint that is no longer the active peer.
         connection?.cancel()
         connection = nil
         isConnected = false
+    }
+
+    /// Promotes a thrown `ClientTransportError` into a one-shot health
+    /// transition. `.sendFailure` / `.receiveFailure` / `.connectFailure` /
+    /// `.notConnected` mean the underlying socket is unusable; cancel
+    /// the `NWConnection` and emit `.disconnected` so the consumer can
+    /// run its reconnect policy. `.decodeFailure` is payload-level
+    /// (the wire is still healthy) and intentionally does not flip
+    /// state.
+    private func markDeadIfFatal(_ error: ClientTransportError) {
+        switch error {
+        case .sendFailure, .receiveFailure, .connectFailure, .notConnected:
+            markDead(reason: error)
+        case .decodeFailure:
+            break
+        }
+    }
+
+    private func markDead(reason: ClientTransportError) {
+        guard isConnected || connection != nil else { return }
+        isConnected = false
+        connection?.cancel()
+        connection = nil
+        eventsContinuation.yield(.disconnected(reason: reason))
     }
 
     private func waitForReady(connection: NWConnection) async throws {
