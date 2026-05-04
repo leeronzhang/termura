@@ -42,7 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Init
 
     override init() {
-        // Register bundled fonts FIRST, before any UI or FontSettings init.
+        // Wave 1 hook — install harness factory closures (no-op in Free
+        // build) before any service constructor reads them. Single
+        // entry point; idempotent.
+        HarnessBootstrap.runIfNeeded()
+
+        // Register bundled fonts before any UI or FontSettings init.
         Self.registerBundledFonts()
 
         let collector = MetricsCollector()
@@ -53,10 +58,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let coordinator = ProjectCoordinator()
         // Push seam: SessionListBroadcaster yields to this; harness router subscribes via adapter.
         let (sessionChangeStream, sessionChangeContinuation) = AsyncStream<Void>.makeStream()
-        // Broadcaster constructed before the engine factory so the factory can hold a weak
-        // ping-on-exit ref back to it. snapshotProvider routes through `gatherActiveSessions`
-        // so engine-state changes (process exit) drive iOS list refreshes outside the
-        // `withObservationTracking` graph.
         let broadcaster = SessionListBroadcaster(
             coordinator: coordinator,
             changeContinuation: sessionChangeContinuation,
@@ -76,8 +77,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let remoteIntegration = RemoteIntegrationLauncher.make(adapter: remoteAdapter)
         let remoteAgentBridge = RemoteIntegrationLauncher.makeAgentBridge(integration: remoteIntegration)
-        services = AppServices(
+        services = Self.assembleServices(seed: ServicesSeed(
             engineFactory: engineFactory,
+            collector: collector,
+            shellInstaller: shellInstaller,
+            remoteAdapter: remoteAdapter,
+            remoteIntegration: remoteIntegration,
+            remoteAgentBridge: remoteAgentBridge
+        ))
+        projectCoordinator = coordinator
+        sessionListBroadcaster = broadcaster
+
+        super.init()
+    }
+
+    /// Inputs for `assembleServices`. Bundled into a struct so the
+    /// helper stays under the 5-parameter SwiftLint cap, and the
+    /// initializer call site stays under the 50-line body cap.
+    @MainActor
+    private struct ServicesSeed {
+        let engineFactory: any TerminalEngineFactory
+        let collector: MetricsCollector
+        let shellInstaller: any ShellHookInstallerProtocol
+        let remoteAdapter: LiveRemoteSessionsAdapter
+        let remoteIntegration: any RemoteIntegration
+        let remoteAgentBridge: any RemoteAgentBridgeLifecycle
+    }
+
+    /// Bundles the 16 service constructors that AppDelegate.init wires
+    /// up. Lifted out of `init()` to keep the initializer within budget.
+    @MainActor
+    private static func assembleServices(seed: ServicesSeed) -> AppServices {
+        AppServices(
+            engineFactory: seed.engineFactory,
             themeManager: ThemeManager(),
             fontSettings: FontSettings(),
             tokenCountingService: TokenCountingService(),
@@ -85,23 +117,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBarService: MenuBarService(),
             themeImportService: ThemeImportService(),
             recentProjects: RecentProjectsService(),
-            metricsCollector: collector,
-            metricsPersistenceService: MetricsPersistenceService(metrics: collector),
-            shellHookInstaller: shellInstaller,
+            metricsCollector: seed.collector,
+            metricsPersistenceService: MetricsPersistenceService(metrics: seed.collector),
+            shellHookInstaller: seed.shellInstaller,
             webViewPool: WebViewPool(),
-            remoteSessionsAdapter: remoteAdapter,
-            remoteIntegration: remoteIntegration,
+            remoteSessionsAdapter: seed.remoteAdapter,
+            remoteIntegration: seed.remoteIntegration,
             remoteControlController: RemoteControlController(
-                integration: remoteIntegration,
-                agentBridge: remoteAgentBridge,
+                integration: seed.remoteIntegration,
+                agentBridge: seed.remoteAgentBridge,
                 userDefaults: UserDefaults.standard
             ),
-            remoteAgentBridge: remoteAgentBridge
+            remoteAgentBridge: seed.remoteAgentBridge
         )
-        projectCoordinator = coordinator
-        sessionListBroadcaster = broadcaster
-
-        super.init()
     }
 
     private static func makeEngineFactory(
@@ -129,77 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let launchStart = ContinuousClock.now
-
-        // Expose the app bundle path so spawned shells can find bundled CLIs (tn).
-        setenv("TERMURA_APP_BUNDLE", Bundle.main.bundlePath, 1)
-
-        // UI-testing: apply env-var overrides before any persistent state is read.
-        let env = ProcessInfo.processInfo.environment
-        if env["UI_TESTING_SKIP_SHELL_ONBOARDING"] != nil {
-            UserDefaults.standard.set(true, forKey: AppConfig.ShellIntegration.installedDefaultsKey)
-        }
-        let launchProjectURL = env["UI_TESTING_PROJECT_PATH"].map { URL(fileURLWithPath: $0) }
-
-        // Check for prior crash context
-        if let priorCrash = CrashContext.loadPriorCrashContext() {
-            logger.warning(
-                "Prior crash context found: sessions=\(priorCrash.activeSessionCount) db=\(priorCrash.dbHealth)"
-            )
-        }
-        CrashContext.clearPersistedData()
-        Self.cleanStaleTempImages()
-
-        // Pre-create a WKWebView for note rendering so the first Reading toggle is fast.
-        services.webViewPool.preheat()
-
-        setupVisorShortcut()
-        setupMenuBarActivation()
-        projectCoordinator.start(with: ProjectCoordinator.Dependencies(
-            appServices: services,
-            windowChromeConfigurator: { [weak self] window in
-                self?.configureProjectWindow(window)
-            },
-            userDefaults: UserDefaults.standard,
-            openOnLaunchURL: launchProjectURL
-        ))
-        logger.info("Termura launched")
-
-        // Register for remote notifications so CloudKit silent pushes can wake
-        // the remote-control transport. The handler `application(_:didReceiveRemoteNotification:)`
-        // routes them into `services.remoteIntegration`; if remote control is
-        // disabled, the integration's notify is a no-op (NullRemoteIntegration
-        // or `isRunning == false` in the live harness).
-        NSApp.registerForRemoteNotifications()
-
-        // PR8 Phase 2 — kick off the agent ↔ app bridge. Free build is
-        // a no-op; harness build constructs the XPC client + ingress
-        // + auto-connector and demand-launches the LaunchAgent. Skip
-        // when an env flag is set so unit tests / UI tests can opt
-        // out of CloudKit / Keychain side-effects during launch.
-        //
-        // PR10 Step 3 — also fire `reinstallIfNeeded()` so a relaunch
-        // after an app update / relocate silently re-aligns the on-disk
-        // plist with the current `Termura.app` bundle. Same env gate as
-        // the bridge start so tests opt out together; intentionally
-        // detached since we don't want this to block applicationDidFinishLaunching.
-        if env["TERMURA_DISABLE_REMOTE_AGENT_BRIDGE"] == nil {
-            Self.startRemoteAgentBridge(services.remoteAgentBridge)
-            Self.scheduleReinstallIfNeeded(controller: services.remoteControlController)
-            Self.restoreRemoteIntegration(controller: services.remoteControlController)
-        }
-
-        // Start broadcasting session-list changes to paired iOS clients.
-        // Coordinator must already have started (above) so the broadcaster's
-        // first read of `activeContext` lands after `launcher.restoreLast…`
-        // dispatches its open task. The broadcaster itself dedupes the first
-        // emission so the empty-launcher window doesn't generate a spurious
-        // wake-up.
-        sessionListBroadcaster?.start()
-
-        let launchElapsed = ContinuousClock.now - launchStart
-        let collector = services.metricsCollector
-        Task { await collector.recordDuration(.launchDuration, seconds: launchElapsed.totalSeconds) }
+        performApplicationDidFinishLaunching()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

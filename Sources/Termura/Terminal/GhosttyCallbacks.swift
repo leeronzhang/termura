@@ -61,6 +61,12 @@ func ghosttyPtyOutputCb(_ userdata: UnsafeMutableRawPointer?, _ buf: UnsafePoint
     let view = Unmanaged<GhosttyTerminalView>.fromOpaque(userdata).takeUnretainedValue()
     let data = Data(bytes: buf, count: len)
     view.ptyOutputContinuation.yield(.data(data))
+    // Fan-out to the byte tap for the harness pty-stream pump. Calls a
+    // nonisolated entrypoint that hops to the tap actor on a detached
+    // task, so the IO thread is never blocked even when many subscribers
+    // are attached. `Data` is a value type — the caller's buffer pointer
+    // is safe to reuse the moment this returns.
+    view.ptyByteTap.feedNonisolated(data)
     // Scan raw PTY bytes for OSC 133 shell integration sequences (A/B/C).
     // ghostty only fires GHOSTTY_ACTION_COMMAND_FINISHED for D; A/B/C have
     // no corresponding action, so we parse them from the raw stream.

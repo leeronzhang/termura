@@ -40,7 +40,7 @@ public actor LiveCloudKitDatabaseGateway: CloudKitDatabaseGateway {
         }
     }
 
-    public func fetch(targetDeviceId: UUID, since: Date) async throws -> [CloudKitEnvelopeRecord] {
+    public func fetch(targetDeviceId: UUID, since: Date) async throws -> CloudKitFetchPage {
         let predicate = NSPredicate(
             format: "%K == %@ AND %K > %@",
             CloudKitSchema.Field.targetDeviceId,
@@ -54,39 +54,65 @@ public actor LiveCloudKitDatabaseGateway: CloudKitDatabaseGateway {
         ]
         do {
             let result = try await database.records(matching: query)
-            var parsed: [CloudKitEnvelopeRecord] = []
-            for case let (_, .success(ckRecord)) in result.matchResults {
-                // Lets `parseRecord`-thrown typed errors (e.g.
-                // `unsupportedSchema`) bubble straight up so the
-                // transport's per-error catches can distinguish them
-                // from network failures. `mapFetchError` below preserves
-                // that typed identity.
-                let record = try Self.parseRecord(ckRecord, codec: codec)
-                parsed.append(record)
-            }
-            return parsed
+            return Self.parseFetchResults(result.matchResults, codec: codec)
         } catch {
             // Cold-start bootstrap: a freshly-provisioned CloudKit
             // container has no `RemoteEnvelope` record type until the
             // first `save()` auto-creates it (Development env) or it is
             // deployed via the Dashboard (Production env). Both Mac
             // (`CloudKitTransport.start`) and iOS
-            // (`CloudKitClientTransport.connect`) seed `lastSeen` with
-            // a `since: .distantPast` fetch *before* anyone has saved
-            // anything — chicken-and-egg. CKError surfaces this as
-            // `Did not find record type: <name>` (CKInternalErrorDomain
-            // code 2003, exposed at the public layer as
-            // `CKError.unknownItem`). Treating it as an empty result is
-            // semantically correct ("type doesn't exist" ≡ "no records
-            // for this type yet") and lets the very first handshake
-            // `save()` auto-create the type, breaking the cold-start
-            // deadlock. Tests pin both the detection helper and this
-            // fetch behaviour.
+            // (`CloudKitClientTransport.connect`) probe via fetch before
+            // anyone has saved anything — chicken-and-egg. CKError
+            // surfaces this as `Did not find record type: <name>`
+            // (CKInternalErrorDomain code 2003, exposed at the public
+            // layer as `CKError.unknownItem`). Treating it as an empty
+            // result is semantically correct and lets the very first
+            // handshake `save()` auto-create the type. Tests pin both
+            // the detection helper and this fetch behaviour.
             if Self.isMissingRecordType(error) {
-                return []
+                return CloudKitFetchPage(records: [])
             }
             throw Self.mapFetchError(error)
         }
+    }
+
+    /// Per-record isolation: each `parseRecord` failure (legacy schema,
+    /// malformed fields, payload shape mismatch) lands in `quarantined`
+    /// instead of failing the whole fetch. Static so tests can exercise
+    /// the policy without standing up CKContainer; the transport relies
+    /// on `quarantined.createdAt` (when readable) to advance its cursor
+    /// past the poison record.
+    static func parseFetchResults(
+        _ matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
+        codec: any RemoteCodec
+    ) -> CloudKitFetchPage {
+        var parsed: [CloudKitEnvelopeRecord] = []
+        var quarantined: [QuarantinedRecord] = []
+        for (recordID, outcome) in matchResults {
+            switch outcome {
+            case let .success(ckRecord):
+                do {
+                    let record = try parseRecord(ckRecord, codec: codec)
+                    parsed.append(record)
+                } catch {
+                    quarantined.append(QuarantinedRecord(
+                        id: recordID.recordName,
+                        createdAt: ckRecord[CloudKitSchema.Field.createdAt] as? Date,
+                        reason: error.localizedDescription
+                    ))
+                }
+            case let .failure(error):
+                // Per-record fetch failure (e.g. asset missing, partial
+                // record). Surface so the caller can delete the entry
+                // — createdAt is unknown in this branch.
+                quarantined.append(QuarantinedRecord(
+                    id: recordID.recordName,
+                    createdAt: nil,
+                    reason: error.localizedDescription
+                ))
+            }
+        }
+        return CloudKitFetchPage(records: parsed, quarantined: quarantined)
     }
 
     /// Error-mapping policy for `fetch`'s catch:
@@ -129,6 +155,20 @@ public actor LiveCloudKitDatabaseGateway: CloudKitDatabaseGateway {
             return true
         }
         return nsError.localizedDescription.contains("Did not find record type")
+    }
+
+    /// Detects "schema is locked because the container is talking to the
+    /// Production environment". Production CloudKit schemas can ONLY be
+    /// modified through the CloudKit Dashboard (Apple's design); any
+    /// `save(record)` that would auto-create a new record type fails
+    /// with a message containing the literal phrase
+    /// `"production schema"`. Used by the subscription gateway's
+    /// schema-bootstrap path to convert this specific failure into a
+    /// typed, actionable error instead of leaking the internal
+    /// placeholder record name up to the operator.
+    static func isProductionSchemaImmutable(_ error: any Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.localizedDescription.contains("production schema")
     }
 
     public func delete(id: String) async throws {

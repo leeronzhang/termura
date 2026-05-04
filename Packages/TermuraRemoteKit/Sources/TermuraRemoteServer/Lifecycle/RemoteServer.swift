@@ -58,3 +58,12 @@ public actor RemoteServer {
 public enum RemoteServerError: Error, Sendable, Equatable {
     case invalidStateTransition(from: RemoteServer.State, requested: RemoteServer.State)
 }
+
+extension RemoteServerError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case let .invalidStateTransition(from, requested):
+            "Remote server cannot transition from \(from) to \(requested)."
+        }
+    }
+}

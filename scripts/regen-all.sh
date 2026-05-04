@@ -3,7 +3,7 @@
 # this codebase touches, in dependency order. Use this instead of running
 # `xcodegen generate` directly anywhere; missing one of the three pbxproj
 # updates is the most common cause of "Cannot find <symbol> in scope"
-# errors in this open-core split (public termura/ + private termura-harness/).
+# errors in this open-core split (public repo + sibling private repo).
 #
 # Modes:
 #   regen-all.sh           regenerate everything, exit 0 on success
@@ -15,13 +15,13 @@
 #                          error 30 seconds later.
 #
 # Project map (each row = one yml → one pbxproj):
-#   PUBLIC  project.yml                        → Termura.xcodeproj
-#   PRIVATE ../termura-harness/project-mac.yml → ../termura-harness/Termura-Mac.xcodeproj
-#   PRIVATE ../termura-harness/iOS/project-ios.yml → ../termura-harness/iOS/TermuraRemote.xcodeproj
+#   PUBLIC  project.yml                          → Termura.xcodeproj
+#   PRIVATE <private repo>/project-mac.yml       → <private repo>/Termura-Mac.xcodeproj
+#   PRIVATE <private repo>/iOS/project-ios.yml   → <private repo>/iOS/TermuraRemote.xcodeproj
 #
-# Private rows are skipped silently when termura-harness/ isn't present
-# (Free build / clean clone), so this script is safe to run from any
-# working tree.
+# Private rows are skipped silently when the sibling private repo isn't
+# present (Free build / clean clone), so this script is safe to run from
+# any working tree.
 
 set -euo pipefail
 
@@ -129,6 +129,22 @@ if [ "$MODE" = "--check" ]; then
 fi
 
 # Default mode: regenerate every project, in order.
+#
+# Step 1 — reverse-sync version edits from pbxproj into Versions.xcconfig.
+# Xcode UI writes "Version" / "Build" into pbxproj target overrides; without
+# this step xcodegen would discard them on the regen below. Skipped silently
+# when no pbxproj has any override (the normal case). See
+# scripts/sync-version-from-xcode.sh for the mapping.
+#
+# We export TERMURA_HARNESS_ROOT so the sync script can reach the private
+# pbxprojs without naming the sibling path itself — keeping the open-core
+# leak baseline intact (CLAUDE.md §12.3).
+echo "regen-all: reverse-syncing Xcode UI version edits → Versions.xcconfig…"
+export TERMURA_HARNESS_ROOT="${HARNESS_ROOT}"
+bash "$REPO_ROOT/scripts/sync-version-from-xcode.sh"
+
+# Step 2 — regenerate every Xcode project, in dependency order.
+echo ""
 echo "regen-all: regenerating $(echo "${#TARGETS[@]}") project(s)…"
 for row in "${TARGETS[@]}"; do
     IFS='|' read -r dir yml pbx <<< "$row"

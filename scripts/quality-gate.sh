@@ -32,9 +32,10 @@ cd "$REPO_ROOT"
 # caller explicitly asked for it (or invoked us via the harness wrapper), we
 # scan both repos under the same gate. Private path resolution is relative to
 # the public repo's cwd so a single config tree drives both. Public-only checks
-# (xcstrings catalog, project.yml ↔ pbxproj sync, layer deps tied to Termura
-# Session/Output/Input) are not duplicated for private — those concepts don't
-# exist there.
+# (xcstrings catalog, layer deps tied to Termura Session/Output/Input) are not
+# duplicated for private — those concepts don't exist there. Versions.xcconfig
+# ↔ pbxproj sync IS shared across both, since iOS and Mac each have their own
+# xcconfig owned by check-version-sync.sh.
 HARNESS_ROOT=""
 if [[ $INCLUDE_PRIVATE -eq 1 ]]; then
     if [[ ! -d "$REPO_ROOT/../termura-harness" ]]; then
@@ -120,10 +121,6 @@ run_gate_check() {
 
     case "$status" in
         0)
-            return 0
-            ;;
-        3)
-            record_warning
             return 0
             ;;
         *)
@@ -326,8 +323,21 @@ if [[ -n "$HARNESS_ROOT" ]]; then
     done
 fi
 
+run_gate_check "Error LocalizedError conformance check" bash scripts/check-error-localization.sh
+if [[ -n "$HARNESS_ROOT" ]]; then
+    if [[ ${#PRIVATE_SOURCE_ROOTS[@]} -gt 0 ]]; then
+        run_gate_check "Error LocalizedError conformance check (harness)" \
+            bash scripts/check-error-localization.sh "${PRIVATE_SOURCE_ROOTS[@]}"
+    fi
+fi
+
 run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
-run_gate_check "Version sync check" bash scripts/check-version-sync.sh
+# Export sibling repo root so check-version-sync.sh can locate the private
+# Mac + iOS pbxprojs without literal path strings (open-core leak baseline,
+# CLAUDE.md §12.3). Empty TERMURA_HARNESS_ROOT → public-only check.
+TERMURA_HARNESS_ROOT="$HARNESS_ROOT" run_gate_check "Version sync check" bash scripts/check-version-sync.sh
+run_gate_check "Open-core baseline drift check" bash scripts/check-baseline-drift.sh
+run_gate_check "Open-core baseline snapshots check" bash scripts/check-baseline-snapshots.sh
 
 echo "-> Forbidden Swift pattern checks..."
 # Pre-build the list of paths the inline Python should scan. We pass them via
@@ -441,8 +451,8 @@ echo "--------------------------------------"
 if [[ "$MODE" == "staged" ]]; then
     run_gate_check "Legacy Mock placement audit" bash scripts/mock-guard-audit.sh --staged Sources/Termura
     run_gate_check "File-size budget check" bash scripts/check-file-size.sh --staged Sources/Termura
-    run_gate_check "View/ViewModel global access advisory" bash scripts/check-view-global-access.sh --staged
-    run_gate_check "Background task ownership advisory" bash scripts/check-task-ownership.sh --staged Sources/Termura
+    run_gate_check "View/ViewModel global access check" bash scripts/check-view-global-access.sh --staged
+    run_gate_check "Background task ownership check" bash scripts/check-task-ownership.sh --staged Sources/Termura
 else
     run_gate_check "Legacy Mock placement audit (Sources/Termura)" \
         bash scripts/mock-guard-audit.sh Sources/Termura
@@ -460,26 +470,39 @@ else
                 bash scripts/check-file-size.sh "$root"
         done
     fi
-    run_gate_check "View/ViewModel global access advisory" \
+    run_gate_check "View/ViewModel global access check" \
         bash scripts/check-view-global-access.sh
     if [[ -n "$HARNESS_ROOT" ]]; then
         for root in "${PRIVATE_VIEW_ROOTS[@]}"; do
-            run_gate_check "View/ViewModel global access advisory (${root#"$HARNESS_ROOT/"})" \
+            run_gate_check "View/ViewModel global access check (${root#"$HARNESS_ROOT/"})" \
                 bash scripts/check-view-global-access.sh "$root"
         done
     fi
-    run_gate_check "Background task ownership advisory (Sources/Termura)" \
+    run_gate_check "Background task ownership check (Sources/Termura)" \
         bash scripts/check-task-ownership.sh Sources/Termura
     if [[ -n "$HARNESS_ROOT" ]]; then
         for root in "${PRIVATE_TERMURA_LIKE_ROOTS[@]}"; do
-            run_gate_check "Background task ownership advisory (${root#"$HARNESS_ROOT/"})" \
+            run_gate_check "Background task ownership check (${root#"$HARNESS_ROOT/"})" \
                 bash scripts/check-task-ownership.sh "$root"
         done
     fi
 fi
 
+run_gate_check "Entitlements hygiene gate" \
+    env HARNESS_ROOT="$HARNESS_ROOT" bash scripts/check-entitlements-hygiene.sh
+
+if [[ -n "$HARNESS_ROOT" ]]; then
+    run_gate_check "iOS App Store permissions / privacy gate" \
+        env IOS_HARNESS_ROOT="$HARNESS_ROOT" bash scripts/check-ios-permissions.sh
+fi
+
+if [[ -n "$HARNESS_ROOT" && -d "$HARNESS_ROOT/iOS/TermuraRemote" ]]; then
+    run_gate_check "Mirrored remote state freshness (CLAUDE.md §3.6)" \
+        bash scripts/check-mirrored-state-freshness.sh "$HARNESS_ROOT/iOS/TermuraRemote"
+fi
+
 echo "-> Harness private file leak check..."
-HARNESS_WHITELIST='HarnessModels.swift|RuleFileRepositoryProtocol.swift|HarnessViewModel\+Stub.swift|ExperienceCodifier\+Stub.swift|RemoteIntegration\+Stub.swift'
+HARNESS_WHITELIST='HarnessModels.swift|RuleFileRepositoryProtocol.swift|HarnessViewModel\+Stub.swift|ExperienceCodifier\+Stub.swift|RemoteIntegration\+Stub.swift|HarnessBootstrap.swift|AgentEventSource.swift|RemoteTransportFailure.swift'
 if [[ "$MODE" == "staged" ]]; then
     HARNESS_CANDIDATES="$(git diff --cached --name-only --diff-filter=ACMR | grep '^Sources/Termura/Harness/' || true)"
 else

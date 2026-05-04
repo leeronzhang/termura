@@ -47,6 +47,17 @@ public enum CodecError: Error, Sendable, Equatable {
     case unsupportedKind(String)
 }
 
+extension CodecError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case let .payloadTooLarge(actual, limit):
+            "Wire payload \(actual) bytes exceeds \(limit)-byte limit."
+        case let .unsupportedKind(kind):
+            "Unsupported wire envelope kind: \(kind)."
+        }
+    }
+}
+
 enum ISO8601Codec {
     static func string(from date: Date) -> String {
         let formatter = ISO8601DateFormatter()

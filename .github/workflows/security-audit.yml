@@ -1,0 +1,62 @@
+name: Security Audit
+
+on:
+  schedule:
+    - cron: '0 2 1 * *'   # 每月 1 日 02:00 UTC
+  pull_request:
+    paths:
+      - '**/*.swift'
+      - 'project.yml'
+      - '**/Package.resolved'
+  workflow_dispatch:
+
+jobs:
+  secret-scan:
+    name: Secret Scanning
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-audit:
+    name: Dependency Vulnerability Audit
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OSV Scanner
+        run: |
+          RESOLVED="Termura.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+          if [ -f "$RESOLVED" ]; then
+            curl -sL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_darwin_arm64 \
+              -o /tmp/osv-scanner && chmod +x /tmp/osv-scanner
+            /tmp/osv-scanner --lockfile "swift:$RESOLVED"
+          else
+            echo "Package.resolved 未找到"
+          fi
+
+  hardcoded-secrets:
+    name: Hardcoded Secret Patterns
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for API keys / tokens in Swift source
+        run: |
+          FOUND=0
+          # API key patterns
+          if grep -rn --include="*.swift" \
+            -e 'apiKey\s*=\s*"[A-Za-z0-9_\-]\{16,\}"' \
+            -e 'secret\s*=\s*"[A-Za-z0-9_\-]\{16,\}"' \
+            -e 'password\s*=\s*"[^"]\{8,\}"' \
+            Sources/; then
+            echo "⛔ 检测到疑似硬编码密钥"
+            FOUND=1
+          fi
+          exit $FOUND

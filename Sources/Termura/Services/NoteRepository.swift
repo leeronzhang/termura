@@ -85,7 +85,12 @@ actor NoteRepository: NoteRepositoryProtocol {
                 .filter(sql: "archived_at IS NULL")
                 .order(sql: "is_snippet DESC, updated_at DESC")
                 .fetchAll(database)
-            return try rows.map { try $0.toNote() }
+            return rows.compactIsolatedMap(
+                logger: logger,
+                recordKind: "note",
+                rowID: { $0.id },
+                transform: { try $0.toNote() }
+            )
         }
     }
 
@@ -122,7 +127,12 @@ actor NoteRepository: NoteRepositoryProtocol {
                 """,
                 arguments: [ftsQuery, AppConfig.Search.maxResults]
             )
-            return try rows.map { try $0.toNote() }
+            return rows.compactIsolatedMap(
+                logger: logger,
+                recordKind: "note",
+                rowID: { $0.id },
+                transform: { try $0.toNote() }
+            )
         }
     }
 }

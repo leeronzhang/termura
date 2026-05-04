@@ -9,7 +9,28 @@ public struct ProtocolVersion: Sendable, Codable, Hashable, Comparable, CustomSt
         self.minor = minor
     }
 
-    public static let current = ProtocolVersion(major: 1, minor: 0)
+    /// 1.0 → 1.1: PTY byte-stream pipeline (`.ptyStreamSubscribe /
+    /// .ptyStreamUnsubscribe / .ptyStreamChunk / .ptyStreamCheckpoint`)
+    /// gated by `PeerCapabilities.ptyStream`.
+    ///
+    /// 1.1 → 1.2: `.ptyResize` envelope so iOS clients can forward
+    /// their local reflow to the Mac PTY. Gated by
+    /// `PeerCapabilities.ptyResize`; older Mac peers continue to work
+    /// because iOS only sends the envelope when the capability is
+    /// derived from the peer's announced version.
+    ///
+    /// 1.2 → 1.3: structured agent-conversation events
+    /// (`.agentEventSubscribe / .agentEventUnsubscribe / .agentEvent
+    /// / .agentEventCheckpoint`) so iOS renders Claude Code dialogue
+    /// with native SwiftUI components instead of a vt terminal. Mac
+    /// derives events from Claude Code's transcript JSONL. Gated by
+    /// `PeerCapabilities.agentEvents`; older peers stay on the PTY
+    /// stream path which remains supported as a Debug fallback.
+    ///
+    /// `minimumSupported` stays at 1.0 so 1.0 peers continue to
+    /// connect — they just never see newer envelope kinds because
+    /// capability gates are additive (`version >= X`).
+    public static let current = ProtocolVersion(major: 1, minor: 3)
 
     public static let minimumSupported = ProtocolVersion(major: 1, minor: 0)
 

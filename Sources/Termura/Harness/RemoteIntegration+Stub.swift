@@ -1,5 +1,5 @@
 // Public protocol surface for the iOS remote-control feature. Always compiled.
-// Real implementation lives in `termura-harness/Sources/Remote/` and is gated by
+// Real implementation lives in the paid harness module and is gated by
 // HARNESS_ENABLED. Public callers go through `RemoteIntegrationLauncher` (defined
 // below); when HARNESS_ENABLED is absent (Free build), the launcher returns
 // `NullRemoteIntegration`, so call sites compile and run without changes.
@@ -37,6 +37,8 @@ protocol RemoteIntegration: Sendable {
     /// Recent audit entries, newest first, capped at the store's window
     /// (currently 500 entries). Returns `[]` when no harness.
     func auditLog() async throws -> [RemoteAuditEntry]
+    /// D-1 — see `RemoteTransportFailure.swift`; default empty.
+    func transportFailures() -> AsyncStream<RemoteTransportFailure>
     var isRunning: Bool { get async }
 }
 
@@ -60,17 +62,71 @@ protocol RemoteSessionsAdapter: Sendable {
     /// Default implementation returns `nil` so adapters without a live
     /// source (Free build, tests) compile without changes.
     func captureScreen(sessionId: UUID) async -> ScreenFramePayload?
+
+    /// Subscribe to a session's raw PTY byte stream so the harness
+    /// router's pty-stream pump can ship `.ptyStreamChunk` envelopes to
+    /// iOS. The returned `Subscription.stream` yields `Data` chunks as
+    /// the IO callback receives them; the router's pump coalesces them
+    /// per `PtyStreamPolicy` before shipping.
+    ///
+    /// Returns `nil` for unknown sessions, sessions without a live
+    /// engine, or builds without a live source (Free build, tests).
+    /// Default implementation returns `nil`.
+    func subscribePty(sessionId: UUID) async -> PtyByteTap.Subscription?
+
+    /// Cancel a previously-issued pty-byte subscription. Idempotent;
+    /// unknown ids are silently ignored. The router calls this on
+    /// `.ptyStreamUnsubscribe`, on `connectionClosed`, and on duplicate-
+    /// subscribe replacement. Default is a no-op.
+    func unsubscribePty(sessionId: UUID, subscriptionId: UUID) async
+
+    /// Build a `PtyStreamCheckpoint` keyframe for the current viewport
+    /// of `sessionId`. The router calls this once at subscribe-time
+    /// (cold-start basis) and again on its periodic 30 s / 256-chunk
+    /// resync cadence. Returns `nil` for unknown sessions or transient
+    /// extraction failures. Default implementation returns `nil`.
+    func currentCheckpoint(sessionId: UUID, seq: UInt64) async -> PtyStreamCheckpoint?
+
+    /// Forward an iOS-driven local reflow to the Mac PTY so the
+    /// upstream shell / REPL re-emits output at the new column count
+    /// and the iOS canvas stops re-folding bytes that Mac auto-wrapped
+    /// at a different width.
+    ///
+    /// Returns `true` when the Mac engine accepted and resized;
+    /// `false` when rejected (Mac user is active per the A2 guard,
+    /// session has no live engine, no active project, or builds
+    /// without a live source). The router uses the bool only for
+    /// observability; iOS treats the call as fire-and-forget.
+    /// Default returns `false` so Free build / tests safely no-op.
+    func resizePty(sessionId: UUID, cols: Int, rows: Int) async -> Bool
+
+    /// Wave 8 — subscribe to structured agent-conversation events
+    /// (Claude Code transcript JSONL). Returns nil for sessions with
+    /// no resolvable transcript or builds without a live source.
+    /// `sinceEventId` is the resume cursor.
+    func subscribeAgentEvents(
+        sessionId: UUID,
+        sinceEventId: UUID?
+    ) async -> AgentEventSubscription?
+
+    /// Cancel an agent-event subscription. Idempotent.
+    func unsubscribeAgentEvents(sessionId: UUID, subscriptionId: UUID) async
 }
 
 extension RemoteSessionsAdapter {
-    func sessionListChanges() -> AsyncStream<Void> {
-        AsyncStream { $0.finish() }
-    }
-
-    func captureScreen(sessionId _: UUID) async -> ScreenFramePayload? {
-        nil
-    }
+    func sessionListChanges() -> AsyncStream<Void> { AsyncStream { $0.finish() } }
+    func captureScreen(sessionId _: UUID) async -> ScreenFramePayload? { nil }
+    func subscribePty(sessionId _: UUID) async -> PtyByteTap.Subscription? { nil }
+    func unsubscribePty(sessionId _: UUID, subscriptionId _: UUID) async {}
+    func currentCheckpoint(sessionId _: UUID, seq _: UInt64) async -> PtyStreamCheckpoint? { nil }
+    func resizePty(sessionId _: UUID, cols _: Int, rows _: Int) async -> Bool { false }
+    func subscribeAgentEvents(sessionId _: UUID, sinceEventId _: UUID?) async -> AgentEventSubscription? { nil }
+    func unsubscribeAgentEvents(sessionId _: UUID, subscriptionId _: UUID) async {}
 }
+
+// `AgentEventSubscription` + `AgentEventSource` live in
+// `AgentEventSource.swift` to keep this file under the file_length
+// budget.
 
 struct CommandRunResult: Sendable, Equatable {
     let stdout: String
@@ -97,49 +153,45 @@ enum RemoteAdapterError: Error, Sendable, Equatable {
     case sessionNotFound
     case noActiveProject
     case integrationDisabled
-    /// PR9 — `revokeAllPairedDevices()` ran to completion but at least
-    /// one device's persistence write failed. Successful revocations
-    /// are kept (no rollback); the failed ids are surfaced so the UI
-    /// can show "X of Y could not be revoked". Translated from the
-    /// kit-internal `PairingError.revokeAllFailed` at the harness
-    /// boundary so the controller stays free of `TermuraRemoteServer`
-    /// error surface.
+    /// PR9 — `revokeAll` partial failure: surviving successes are kept
+    /// (no rollback), failed ids surface so the UI can show "X of Y could
+    /// not be revoked". Translated from kit-internal `PairingError.revokeAllFailed`.
     case partialRevokeAllFailed(failed: [UUID])
+    case macSurfaceUnavailable
 }
 
+extension RemoteAdapterError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .sessionNotFound:
+            "Session not found."
+        case .noActiveProject:
+            "Open a project before performing this remote action."
+        case .integrationDisabled:
+            "Remote integration is not available in this build."
+        case let .partialRevokeAllFailed(failed):
+            "\(failed.count) device(s) could not be revoked."
+        case .macSurfaceUnavailable:
+            "Mac terminal isn't visible. Bring the Termura window to the front and retry."
+        }
+    }
+}
+
+/// Free build: every mutating op throws `.integrationDisabled`;
+/// every read returns the empty answer.
+/// `revokeAll`/`auditLog` parallel `listPairedDevices()` (empty);
+/// `resetPairingState` throws explicitly so a caller asking to "wipe
+/// pairings" without a harness gets the same signal as `start()`.
 struct NullRemoteIntegration: RemoteIntegration {
-    func start() async throws {
-        throw RemoteAdapterError.integrationDisabled
-    }
-
+    func start() async throws { throw RemoteAdapterError.integrationDisabled }
     func stop() async {}
-
-    func issueInvitation() async throws -> PairingInvitation {
-        throw RemoteAdapterError.integrationDisabled
-    }
-
+    func issueInvitation() async throws -> PairingInvitation { throw RemoteAdapterError.integrationDisabled }
     func notifyPushReceived() async {}
-
     func listPairedDevices() async throws -> [PairedDeviceSummary] { [] }
-
-    func revokePairedDevice(id _: UUID) async throws {
-        throw RemoteAdapterError.integrationDisabled
-    }
-
-    /// Free build: nothing to revoke (no pairings exist), so return [].
-    /// Symmetric with `listPairedDevices()` returning [].
+    func revokePairedDevice(id _: UUID) async throws { throw RemoteAdapterError.integrationDisabled }
     func revokeAllPairedDevices() async throws -> [UUID] { [] }
-
-    /// Free build: there is no pairing state to clear, but a caller asking
-    /// "wipe pairings" without a harness present is almost certainly a
-    /// configuration error — surface that explicitly rather than silently
-    /// no-op'ing, matching the contract of `start()` / `issueInvitation()`.
-    func resetPairingState() async throws {
-        throw RemoteAdapterError.integrationDisabled
-    }
-
+    func resetPairingState() async throws { throw RemoteAdapterError.integrationDisabled }
     func auditLog() async throws -> [RemoteAuditEntry] { [] }
-
     var isRunning: Bool { get async { false } }
 }
 
@@ -166,35 +218,33 @@ protocol RemoteAgentBridgeLifecycle: Sendable {
     func resetAgentState() async throws
 }
 
+/// Free build: no agent process to reset; resetAgentState is a no-op
+/// so resetPairings happy path stays clean when harness isn't wired.
 struct NullRemoteAgentBridgeLifecycle: RemoteAgentBridgeLifecycle {
     func start() async {}
     func stop() async {}
-    /// Free build has no agent process to reset; treat as no-op so the
-    /// resetPairings happy path stays clean when the harness isn't wired.
     func resetAgentState() async throws {}
 }
 
-/// Public façade callers go through. In the harness build it delegates to
-/// the private repo's concrete factory (whose name is intentionally kept
-/// off the public surface — see CLAUDE.md §12.3 leak list); in the Free
-/// build it returns the Null lifecycle types defined above. Keeping the
-/// dispatch here means non-stub public files (e.g. `AppDelegate.swift`)
-/// never have to reference a private impl symbol.
+/// Public façade callers go through. After Wave 1 it dispatches via
+/// closures registered in `HarnessBootstrap` rather than `#if`-routed
+/// to a private-impl type name. The harness build wires real factories
+/// inside its `install()`; the Free build leaves the closures `nil` so
+/// the Null fallbacks below take over. Non-stub public files (e.g.
+/// `AppDelegate.swift`) never reference a private-impl symbol.
 @MainActor
 enum RemoteIntegrationLauncher {
     static func make(adapter: any RemoteSessionsAdapter) -> any RemoteIntegration {
-        #if HARNESS_ENABLED
-        RemoteIntegrationFactory.make(adapter: adapter)
-        #else
-        NullRemoteIntegration()
-        #endif
+        if let factory = HarnessBootstrap.currentIntegrationFactory() {
+            return factory(adapter)
+        }
+        return NullRemoteIntegration()
     }
 
     static func makeAgentBridge(integration: any RemoteIntegration) -> any RemoteAgentBridgeLifecycle {
-        #if HARNESS_ENABLED
-        RemoteIntegrationFactory.makeAgentBridge(integration: integration)
-        #else
-        NullRemoteAgentBridgeLifecycle()
-        #endif
+        if let factory = HarnessBootstrap.currentAgentBridgeFactory() {
+            return factory(integration)
+        }
+        return NullRemoteAgentBridgeLifecycle()
     }
 }

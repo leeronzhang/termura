@@ -1,30 +1,14 @@
-// Bridges the actor-isolated `RemoteIntegration` protocol to the SwiftUI
-// settings layer. The controller exposes synchronous-readable, observable
-// state — `isEnabled`, `latestInvitationJSON`, `lastError` — so the
-// settings tab can drive a Toggle + invitation pasteboard without leaking
-// actor concurrency into the view.
+// Bridges the actor-isolated `RemoteIntegration` to the SwiftUI
+// settings layer. Exposes synchronous-readable observable state
+// (`isEnabled`, `latestInvitationJSON`, `lastError`) so the toggle
+// and invitation pasteboard never leak actor hops into the view.
 //
-// PR10a addition: enabling the toggle now also installs the per-user
-// LaunchAgent plist via `LaunchAgentInstaller`, and disabling removes it,
-// so `~/Library/LaunchAgents/com.termura.remote-agent.plist` matches the
-// in-app state on every transition.
-//
-// PR9 Step 0: dependency-surface migration. The init now requires the
-// agent bridge lifecycle handle and a `UserDefaultsStoring` so future
-// PR9 steps can persist the on/off choice and tear the bridge down on
-// disable. Step 0 only widens the surface — semantics of `enable` /
-// `disable` / `generateInvitation` / `revokeDevice` are unchanged.
-//
-// PR10 Step 2: helper path is no longer a static constant. The
-// controller now combines `RemoteAgentMetadata` (label / mach
-// services / runAtLoad) with `RemoteHelperPathResolving` to construct
-// a runtime `PlistConfig` whose `executablePath` reflects the actually
-// running `Termura.app` location. `enable()` validates the helper
-// (file exists + executable bit) before bootstrapping launchd; if the
-// validation fails, the integration is stopped and the toggle stays
-// disabled. The `resetPairings` install step uses the same runtime
-// config but skips the validation gate to preserve PR9's "best-effort
-// teardown" semantics.
+// `enable()` also installs the per-user LaunchAgent plist (validated
+// via `RemoteHelperPathResolving` — file exists + executable) so
+// `~/Library/LaunchAgents/com.termura.remote-agent.plist` matches
+// the in-app state on every transition; `disable()` removes it. The
+// `resetPairings` install step skips the validation gate to preserve
+// best-effort teardown semantics.
 
 import Foundation
 import OSLog
@@ -37,10 +21,14 @@ private let logger = Logger(subsystem: "com.termura.app", category: "RemoteContr
 /// `.helperHealth`; everything else is owned by other controller
 /// surfaces (integration / pairing / revoke / reset /
 /// generateInvitation) and must not be silently mutated by the
-/// re-alignment pass.
+/// re-alignment pass. `.transport` (D-1) covers out-of-band
+/// failures observed by the drain Task on
+/// `integration.transportFailures()`; see
+/// `RemoteControlController+TransportFailures.swift`.
 enum RemoteControlErrorOrigin: Sendable, Equatable {
     case helperHealth
     case other
+    case transport
 }
 
 @Observable
@@ -65,6 +53,10 @@ final class RemoteControlController {
     private(set) var lastErrorOrigin: RemoteControlErrorOrigin?
     var pairedDevices: [PairedDeviceSummary] = []
     var auditEntries: [RemoteAuditEntry] = []
+
+    /// D-1 — owned by `+TransportFailures.swift`; see that file for
+    /// lifecycle. Non-nil only while the controller is enabled.
+    var transportFailureDrainTask: Task<Void, Never>?
 
     let integration: any RemoteIntegration
     let agentBridge: any RemoteAgentBridgeLifecycle
@@ -131,6 +123,7 @@ final class RemoteControlController {
             recordFingerprintAfterInstall()
             setEnabledFlag(true)
             clearLastError()
+            startTransportFailureDrain()
             logger.info("Remote control enabled and LaunchAgent installed")
         } catch {
             setHelperError("Server started but plist install failed: \(error.localizedDescription)")
@@ -199,6 +192,16 @@ final class RemoteControlController {
     func setOtherError(_ message: String) {
         lastError = message
         lastErrorOrigin = .other
+    }
+
+    /// D-1 — records an out-of-band transport failure observed by the
+    /// drain Task on `integration.transportFailures()`. Must live here
+    /// (not in `+TransportFailures.swift`) because `lastErrorOrigin`
+    /// is `private(set)` and Swift's file-private setter access blocks
+    /// cross-file extensions from writing it.
+    func setTransportError(_ message: String) {
+        lastError = message
+        lastErrorOrigin = .transport
     }
 
     /// Clears both the message and the origin tag together so the two

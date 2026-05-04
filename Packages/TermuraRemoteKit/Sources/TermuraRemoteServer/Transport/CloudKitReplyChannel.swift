@@ -1,8 +1,19 @@
+import CryptoKit
 import Foundation
 import OSLog
 import TermuraRemoteProtocol
 
 private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKitReplyChannel")
+
+/// D-5 diagnostic — short fingerprint matching the one in
+/// `PairingService+PairKey.swift` so a Mac-side encrypt log line
+/// can be cross-referenced with the iOS-side decrypt log line and
+/// the pair-time save log line.
+private func pairKeyFingerprint(_ secret: SymmetricKey) -> String {
+    let raw = secret.withUnsafeBytes { Data($0) }
+    let digest = SHA256.hash(data: raw)
+    return digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+}
 
 /// Virtual reply channel for the CloudKit transport. Each remote device gets
 /// exactly one of these on the Mac side; the `channelId` is set to the peer's
@@ -31,6 +42,11 @@ actor CloudKitReplyChannel: ReplyChannel {
     private let pairKeyStore: (any PairKeyStore)?
     private let codec: any RemoteCodec
     private let clock: @Sendable () -> Date
+    /// Out-of-band failure sink owned by the parent `CloudKitTransport`.
+    /// Called *before* `send` rethrows so the host (Mac Settings UI)
+    /// observes the failure even when the router catches the throw and
+    /// only logs it.
+    private let eventSink: @Sendable (ServerTransportEvent) -> Void
     private var isOpen = true
     private var activePairingId: UUID?
 
@@ -40,7 +56,8 @@ actor CloudKitReplyChannel: ReplyChannel {
         gateway: any CloudKitDatabaseGateway,
         pairKeyStore: (any PairKeyStore)?,
         codec: any RemoteCodec,
-        clock: @escaping @Sendable () -> Date
+        clock: @escaping @Sendable () -> Date,
+        eventSink: @escaping @Sendable (ServerTransportEvent) -> Void = { _ in }
     ) {
         channelId = peerDeviceId
         self.transportDeviceId = transportDeviceId
@@ -49,6 +66,7 @@ actor CloudKitReplyChannel: ReplyChannel {
         self.pairKeyStore = pairKeyStore
         self.codec = codec
         self.clock = clock
+        self.eventSink = eventSink
     }
 
     /// Called by the router after `PairingCompleteAck` is queued so
@@ -62,6 +80,13 @@ actor CloudKitReplyChannel: ReplyChannel {
         guard isOpen else { throw TransportError.notRunning }
         let payload: CloudKitEnvelopeRecord.Payload
         if let pairKey = await resolvePairKey() {
+            // D-5 diagnostic — log encrypt-time fingerprint so a Mac
+            // ↔ iOS mismatch can be confirmed across processes.
+            logger.info("""
+            Encrypting reply pairingId=\(pairKey.pairingId, privacy: .public) \
+            fp=\(pairKeyFingerprint(pairKey.secret), privacy: .public) \
+            kind=\(envelope.kind.rawValue, privacy: .public)
+            """)
             do {
                 let blob = try CloudEnvelopeCrypto.seal(
                     envelope: envelope,
@@ -70,9 +95,9 @@ actor CloudKitReplyChannel: ReplyChannel {
                 )
                 payload = .cipher(blob)
             } catch {
-                throw TransportError.sendFailure(
-                    reason: "seal failed: \(error.localizedDescription)"
-                )
+                let reason = "seal failed: \(error.localizedDescription)"
+                emitSendFailure(reason: reason)
+                throw TransportError.sendFailure(reason: reason)
             }
         } else {
             // Pair-handshake bootstrap: no key yet, fall through to
@@ -90,8 +115,18 @@ actor CloudKitReplyChannel: ReplyChannel {
         do {
             try await gateway.save(record)
         } catch {
-            throw TransportError.sendFailure(reason: error.localizedDescription)
+            let reason = error.localizedDescription
+            emitSendFailure(reason: reason)
+            throw TransportError.sendFailure(reason: reason)
         }
+    }
+
+    private func emitSendFailure(reason: String) {
+        eventSink(.replyChannelSendFailed(
+            peerDeviceId: peerDeviceId,
+            reason: reason,
+            occurredAt: clock()
+        ))
     }
 
     func close() async {

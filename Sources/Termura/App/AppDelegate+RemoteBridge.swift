@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TermuraRemoteProtocol
 
@@ -64,16 +65,35 @@ extension AppDelegate {
         coordinator: ProjectCoordinator,
         changeStream: AsyncStream<Void>
     ) -> LiveRemoteSessionsAdapter {
-        LiveRemoteSessionsAdapter(
+        installAgentEventSourceFor(coordinator: coordinator)
+        return LiveRemoteSessionsAdapter(
             listProvider: { [weak coordinator] in
                 Self.gatherActiveSessions(coordinator: coordinator)
             },
-            commandRunner: { [weak coordinator] line, sessionId in
-                try await Self.runRemoteCommand(coordinator: coordinator, line: line, sessionId: sessionId)
+            commandRunner: { [weak coordinator] line, sid in
+                try await Self.runRemoteCommand(coordinator: coordinator, line: line, sessionId: sid)
             },
             changeStream: changeStream,
-            screenCapturer: { [weak coordinator] sessionId in
-                Self.captureRemoteScreen(coordinator: coordinator, sessionId: sessionId)
+            screenCapturer: { [weak coordinator] sid in
+                Self.captureRemoteScreen(coordinator: coordinator, sessionId: sid)
+            },
+            ptySubscriber: { [weak coordinator] sid in
+                await Self.subscribePtyStream(coordinator: coordinator, sessionId: sid)
+            },
+            ptyUnsubscriber: { [weak coordinator] sid, subId in
+                await Self.unsubscribePtyStream(coordinator: coordinator, sessionId: sid, subscriptionId: subId)
+            },
+            checkpointProvider: { [weak coordinator] sid, seq in
+                Self.currentPtyCheckpoint(coordinator: coordinator, sessionId: sid, seq: seq)
+            },
+            ptyResizer: { [weak coordinator] sid, cols, rows in
+                await Self.resizeRemotePty(coordinator: coordinator, sessionId: sid, cols: cols, rows: rows)
+            },
+            agentEventSubscriber: { [weak coordinator] sid, sinceEventId in
+                await Self.subscribeAgentEvents(coordinator: coordinator, sessionId: sid, sinceEventId: sinceEventId)
+            },
+            agentEventUnsubscriber: { [weak coordinator] sid, subId in
+                await Self.unsubscribeAgentEvents(coordinator: coordinator, sessionId: sid, subscriptionId: subId)
             }
         )
     }
@@ -147,6 +167,14 @@ extension AppDelegate {
         )
     }
 
+    // PTY helpers (subscribePtyStream / unsubscribePtyStream /
+    // currentPtyCheckpoint / resizeRemotePty) live in
+    // `AppDelegate+RemoteBridge+Pty.swift`. Wave 8 agent helpers
+    // (subscribeAgentEvents / unsubscribeAgentEvents /
+    // installAgentEventSourceFor) live in
+    // `AppDelegate+RemoteBridge+Agent.swift`. Both moves keep this
+    // file under the §6.1 250-line soft budget.
+
     @MainActor
     static func runRemoteCommand(
         coordinator: ProjectCoordinator?,
@@ -170,16 +198,20 @@ extension AppDelegate {
             }
             // No chunk completed inside the window — typical for REPLs
             // (Claude Code, IRB) and bare shells without OSC 133;D
-            // integration. iOS sees the actual terminal content via the
-            // live `screenFrame` push (Phase C); this fallback string is
-            // a hint surfaced in the cmdAck stdout for clients without
-            // live-screen rendering.
-            let fallback = "Command dispatched. See the Mac terminal screen for live output."
-            return CommandRunResult(stdout: fallback, exitCode: outcome.exitCode)
+            // integration. Phase C+ clients render the live PTY content
+            // via `screenFrame` push or the W4+ streaming canvas, so emit
+            // an empty stdout: the older "Command dispatched. See the
+            // Mac terminal screen for live output." hint surfaced as a
+            // cmdAck snapshot underneath the iOS live screen and read
+            // as a confusing fallback alongside content that was clearly
+            // already streaming.
+            return CommandRunResult(stdout: "", exitCode: outcome.exitCode)
         } catch RemoteCommandRunner.Failure.sessionNotFound {
             throw RemoteAdapterError.sessionNotFound
         } catch RemoteCommandRunner.Failure.noActiveProject {
             throw RemoteAdapterError.noActiveProject
+        } catch RemoteCommandRunner.Failure.surfaceUnavailable {
+            throw RemoteAdapterError.macSurfaceUnavailable
         }
     }
 }

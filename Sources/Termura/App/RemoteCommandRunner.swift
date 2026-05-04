@@ -39,6 +39,12 @@ enum RemoteCommandRunner {
         case sessionNotFound
         case noActiveProject
         case engineSendFailed
+        /// PTY process is alive (`engine.isRunning`) but the ghostty surface
+        /// isn't allocated, so `engine.send` would silently drop the bytes.
+        /// Surfaced as a typed signal back to iOS instead of a 30s timeout —
+        /// the user can then bring the Mac terminal window to the front and
+        /// retry.
+        case surfaceUnavailable
     }
 
     struct Result {
@@ -69,6 +75,14 @@ enum RemoteCommandRunner {
         // fallback for a session that already died on the Mac.
         guard engine.isRunning else {
             throw Failure.sessionNotFound
+        }
+        // Without a live ghostty surface, `engine.send` silently drops the
+        // bytes (see `LibghosttyEngine.send`'s surface guard). Catching it
+        // here turns the 30s mystery-timeout into an instant typed error
+        // the iOS user can act on (bring the Mac window forward).
+        guard engine.hasSurface else {
+            logger.warning("Remote command rejected: surface unavailable for session \(sessionId.rawValue)")
+            throw Failure.surfaceUnavailable
         }
 
         let stream = subscribe(to: commandRouter, sessionId: sessionId)

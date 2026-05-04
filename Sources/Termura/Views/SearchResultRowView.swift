@@ -6,8 +6,8 @@ enum SearchResult: Identifiable {
 
     var id: String {
         switch self {
-        case let .session(s): "session-\(s.id.rawValue)"
-        case let .note(n): "note-\(n.id.rawValue)"
+        case let .session(session): "session-\(session.id.rawValue)"
+        case let .note(note): "note-\(note.id.rawValue)"
         }
     }
 }
@@ -53,17 +53,17 @@ struct SearchResultRowView: View {
 
     private var title: String {
         switch result {
-        case let .session(s): s.title
-        case let .note(n): n.title.isEmpty ? "Untitled Note" : n.title
+        case let .session(session): session.title
+        case let .note(note): note.title.isEmpty ? "Untitled Note" : note.title
         }
     }
 
     private var subtitle: String {
         switch result {
-        case let .session(s):
-            return s.workingDirectory ?? "No directory"
-        case let .note(n):
-            let preview = n.body.prefix(AppConfig.Search.previewLength)
+        case let .session(session):
+            return session.workingDirectory ?? "No directory"
+        case let .note(note):
+            let preview = note.body.prefix(AppConfig.Search.previewLength)
             return preview.isEmpty ? "Empty note" : String(preview)
         }
     }

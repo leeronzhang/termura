@@ -27,8 +27,8 @@ final class DebugSessionStore: SessionStoreProtocol {
     init(sessions: [SessionRecord] = [], activeID: SessionID? = nil) {
         self.sessions = sessions
         activeSessionID = activeID ?? sessions.first?.id
-        for (i, s) in sessions.enumerated() {
-            sessionIndex[s.id] = i
+        for (index, session) in sessions.enumerated() {
+            sessionIndex[session.id] = index
         }
         // didSet does not fire during init; populate derived state explicitly.
         rebuildDerivedState()

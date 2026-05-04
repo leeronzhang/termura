@@ -217,7 +217,12 @@ struct ShellIntegrationSettingsView: View {
 
 #if DEBUG
 #Preview("Settings") {
-    SettingsView(
+    // Ephemeral defaults suite avoids touching the user's real prefs
+    // from preview-only code (§3.2 — view files must not access
+    // global state; an isolated preview suite keeps preview state
+    // contained without persisting anything observable).
+    let previewDefaults = UserDefaults(suiteName: "com.termura.preview.settings") ?? .init()
+    return SettingsView(
         themeManager: ThemeManager(),
         fontSettings: FontSettings(),
         themeImportService: DebugThemeImportService(),
@@ -225,7 +230,7 @@ struct ShellIntegrationSettingsView: View {
         remoteControlController: RemoteControlController(
             integration: NullRemoteIntegration(),
             agentBridge: NullRemoteAgentBridgeLifecycle(),
-            userDefaults: UserDefaults.standard
+            userDefaults: previewDefaults
         )
     )
 }

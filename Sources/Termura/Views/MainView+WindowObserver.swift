@@ -23,12 +23,12 @@ struct FullScreenObservingModifier: ViewModifier {
                 hostingWindow = window
                 isFullScreen = window.styleMask.contains(.fullScreen)
             })
-            .onReceive(enterPublisher) { n in
-                guard (n.object as? NSWindow) === hostingWindow else { return }
+            .onReceive(enterPublisher) { notification in
+                guard (notification.object as? NSWindow) === hostingWindow else { return }
                 isFullScreen = true
             }
-            .onReceive(exitPublisher) { n in
-                guard (n.object as? NSWindow) === hostingWindow else { return }
+            .onReceive(exitPublisher) { notification in
+                guard (notification.object as? NSWindow) === hostingWindow else { return }
                 isFullScreen = false
             }
     }

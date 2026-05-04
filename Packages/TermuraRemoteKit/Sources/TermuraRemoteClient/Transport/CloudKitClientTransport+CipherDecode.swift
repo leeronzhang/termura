@@ -1,8 +1,18 @@
+import CryptoKit
 import Foundation
 import OSLog
 import TermuraRemoteProtocol
 
 private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKitClientTransport+CipherDecode")
+
+/// D-5 diagnostic — short fingerprint matching the Mac-side helper
+/// so a decrypt-failure log line can be cross-referenced with the
+/// Mac encrypt log line and the pair-time save log lines.
+private func pairKeyFingerprint(_ secret: SymmetricKey) -> String {
+    let raw = secret.withUnsafeBytes { Data($0) }
+    let digest = SHA256.hash(data: raw)
+    return digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+}
 
 // Cipher-blob decoding lives in its own file so the main
 // CloudKitClientTransport stays under the file_length budget. Mirrors
@@ -39,7 +49,16 @@ extension CloudKitClientTransport {
             let envelope = try CloudEnvelopeCrypto.open(blob, with: pairKey, codec: codec)
             return .success(envelope)
         } catch {
-            logger.warning("CloudEnvelopeCrypto.open failed: \(error.localizedDescription)")
+            // D-5 diagnostic — print the iOS-side fingerprint so it
+            // can be compared against the Mac encrypt-time fingerprint
+            // and the pair-time save fingerprint to localise the
+            // mismatch (Mac state lost / iOS state stale / records
+            // encrypted under a different key id, etc.).
+            logger.warning("""
+            CloudEnvelopeCrypto.open failed: \(error.localizedDescription, privacy: .public) \
+            keyId=\(blob.keyId, privacy: .public) \
+            iosFp=\(pairKeyFingerprint(pairKey.secret), privacy: .public)
+            """)
             return .terminalDrop
         }
     }

@@ -16,6 +16,15 @@ public enum ICloudAccountError: Error, Sendable, Equatable {
     case checkFailed(reason: String)
 }
 
+extension ICloudAccountError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case let .checkFailed(reason):
+            "iCloud account check failed: \(reason)"
+        }
+    }
+}
+
 public protocol ICloudAccountChecker: Sendable {
     func currentStatus() async throws -> ICloudAccountStatus
 }

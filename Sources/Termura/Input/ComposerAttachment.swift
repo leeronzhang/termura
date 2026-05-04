@@ -44,6 +44,15 @@ enum AttachmentSaveError: Error {
     case imageConversionFailed
 }
 
+extension AttachmentSaveError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .imageConversionFailed:
+            "Couldn't convert the image data into a savable format."
+        }
+    }
+}
+
 /// Saves an NSImage to the shared tmp directory and returns its URL.
 /// Reuses AppConfig.DragDrop constants so all temp images land in the same directory.
 func saveTemporaryAttachmentImage(

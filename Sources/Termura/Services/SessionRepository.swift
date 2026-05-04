@@ -9,6 +9,11 @@ actor SessionRepository: SessionRepositoryProtocol {
     let db: any DatabaseServiceProtocol
     private let clock: any AppClock
 
+    /// Static so the per-row isolation helper can capture it inside the
+    /// `db.read { ... }` Sendable closure without trying to retain the
+    /// actor itself.
+    static let fetchLogger = Logger(subsystem: "com.termura.app", category: "SessionRepository")
+
     init(db: any DatabaseServiceProtocol, clock: any AppClock = LiveClock()) {
         self.db = db
         self.clock = clock
@@ -26,11 +31,16 @@ actor SessionRepository: SessionRepositoryProtocol {
             // TitleSanitizer (Session/) is a pure-function utility — calling it from the
             // repository layer is a deliberate pragmatic exception to the usual dependency
             // direction rule; no domain side-effects are involved.
-            return try rows.map { row in
-                var record = try row.toRecord()
-                record.title = TitleSanitizer.stripAgentPrefixes(record.title)
-                return record
-            }
+            return rows.compactIsolatedMap(
+                logger: SessionRepository.fetchLogger,
+                recordKind: "session",
+                rowID: { $0.id },
+                transform: { row in
+                    var record = try row.toRecord()
+                    record.title = TitleSanitizer.stripAgentPrefixes(record.title)
+                    return record
+                }
+            )
         }
     }
 
@@ -85,7 +95,12 @@ actor SessionRepository: SessionRepositoryProtocol {
                 """,
                 arguments: [ftsQuery, AppConfig.Search.maxResults]
             )
-            return try rows.map { try $0.toRecord() }
+            return rows.compactIsolatedMap(
+                logger: SessionRepository.fetchLogger,
+                recordKind: "session",
+                rowID: { $0.id },
+                transform: { try $0.toRecord() }
+            )
         }
     }
 

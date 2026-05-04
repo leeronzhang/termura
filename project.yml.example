@@ -12,7 +12,7 @@
 # `project.yml` itself is gitignored (and untracked since PR9.x) so each
 # developer's signing identity stays local. The public open-core build
 # never bundles the LaunchAgent helper — that is the harness build's job
-# (see termura-harness/project-mac.yml). This template is intentionally
+# (see the private harness project file). This template is intentionally
 # harness-naive and produces a Free-buildable Termura.app on its own.
 
 name: Termura
@@ -29,6 +29,16 @@ configs:
   Release: release
   Free: release
 
+# Versions.xcconfig is the single source of truth for MARKETING_VERSION /
+# CURRENT_PROJECT_VERSION. Edit them in Xcode UI (General → Identity →
+# Version / Build) and run `bash scripts/regen-all.sh` — the regen script
+# reverse-syncs Xcode UI edits back into Versions.xcconfig before
+# regenerating, so the value survives the next xcodegen run.
+configFiles:
+  Debug: Versions.xcconfig
+  Release: Versions.xcconfig
+  Free: Versions.xcconfig
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -36,12 +46,6 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: "REPLACE_WITH_YOUR_TEAM_ID"
-    # Version flow: edit in Xcode UI (General -> Identity -> Version / Build),
-    # then run `bash scripts/sync-version-from-xcode.sh` to mirror the value
-    # back here. Resources/Info.plist references both via $(MARKETING_VERSION)
-    # / $(CURRENT_PROJECT_VERSION).
-    MARKETING_VERSION: "0.2.1"
-    CURRENT_PROJECT_VERSION: "2"
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES

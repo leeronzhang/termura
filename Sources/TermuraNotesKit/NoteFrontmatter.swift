@@ -155,26 +155,26 @@ public enum NoteFrontmatter {
     /// Used for both `tags:` and `references:` fields.
     private static func parseStringArray(_ raw: String?) -> [String] {
         guard let raw, !raw.isEmpty else { return [] }
-        var s = raw
-        if s.hasPrefix("[") { s = String(s.dropFirst()) }
-        if s.hasSuffix("]") { s = String(s.dropLast()) }
-        return s.split(separator: ",")
+        var trimmed = raw
+        if trimmed.hasPrefix("[") { trimmed = String(trimmed.dropFirst()) }
+        if trimmed.hasSuffix("]") { trimmed = String(trimmed.dropLast()) }
+        return trimmed.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .map { unquote($0) }
             .filter { !$0.isEmpty }
     }
 
-    private static func unquote(_ s: String) -> String {
-        guard s.hasPrefix("\"") && s.hasSuffix("\"") && s.count >= 2 else { return s }
-        let inner = String(s.dropFirst().dropLast())
+    private static func unquote(_ string: String) -> String {
+        guard string.hasPrefix("\"") && string.hasSuffix("\"") && string.count >= 2 else { return string }
+        let inner = String(string.dropFirst().dropLast())
         return inner.replacingOccurrences(of: "\\\"", with: "\"")
     }
 
-    private static func escapeYAMLString(_ s: String) -> String {
-        if s.contains(":") || s.contains("#") || s.contains("\"") || s.contains("\n") {
-            let escaped = s.replacingOccurrences(of: "\"", with: "\\\"")
+    private static func escapeYAMLString(_ string: String) -> String {
+        if string.contains(":") || string.contains("#") || string.contains("\"") || string.contains("\n") {
+            let escaped = string.replacingOccurrences(of: "\"", with: "\\\"")
             return "\"\(escaped)\""
         }
-        return s
+        return string
     }
 }

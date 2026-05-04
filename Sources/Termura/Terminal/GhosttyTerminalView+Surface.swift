@@ -53,13 +53,13 @@ extension GhosttyTerminalView {
     /// Release the ghostty surface and event monitor. Idempotent — safe to call
     /// from both processDidExit (natural exit) and LibghosttyEngine.terminate (forced).
     func destroySurface() {
-        if let s = surface {
-            ghostty_surface_free(s)
-            surface = nil
+        if let surface {
+            ghostty_surface_free(surface)
+            self.surface = nil
         }
-        if let em = eventMonitor {
-            NSEvent.removeMonitor(em)
-            eventMonitor = nil
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+            self.eventMonitor = nil
         }
         trackingAreas.forEach { removeTrackingArea($0) }
         logger.debug("ghostty surface destroyed")

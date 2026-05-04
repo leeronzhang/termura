@@ -95,7 +95,7 @@ struct RemoteControlSettingsView: View {
         } header: {
             Text("Pairing")
         } footer: {
-            Text("Open Termura Remote on your iPhone and paste this JSON to pair. "
+            Text("Open Termura Remote on your iPhone, then either scan the QR code or paste the JSON to pair. "
                 + "Each invitation can only be used once and expires after 5 minutes.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -138,76 +138,6 @@ struct RemoteControlSettingsView: View {
         }
     }
 
-    // MARK: - Rows
-
-    private func deviceRow(_ device: PairedDeviceSummary) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(device.nickname).font(.body)
-                    if !device.isActive {
-                        Text("revoked")
-                            .font(.caption2.bold())
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.red.opacity(0.2))
-                            .foregroundStyle(.red)
-                            .cornerRadius(4)
-                    }
-                }
-                Text("Paired \(device.pairedAt.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if device.isActive {
-                Button("Revoke", role: .destructive) {
-                    pendingRevokeId = device.id
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(controller.isWorking)
-            }
-        }
-    }
-
-    private func auditRow(_ entry: RemoteAuditEntry) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(entry.line)
-                    .font(.system(.callout, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer()
-                outcomeBadge(entry.outcome)
-            }
-            Text(entry.timestamp.formatted(date: .abbreviated, time: .standard))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder
-    private func outcomeBadge(_ outcome: RemoteAuditOutcome) -> some View {
-        switch outcome {
-        case .dispatched:
-            Label("dispatched", systemImage: "checkmark.circle.fill")
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.green)
-                .help("Dispatched")
-        case .awaitingConfirmation:
-            Label("awaiting", systemImage: "hourglass")
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.orange)
-                .help("Awaiting confirmation")
-        case let .rejected(reason):
-            Label(reason, systemImage: "xmark.octagon.fill")
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.red)
-                .help("Rejected: \(reason)")
-        }
-    }
-
     // MARK: - Bindings
 
     private var enableBinding: Binding<Bool> {
@@ -236,16 +166,22 @@ struct RemoteControlSettingsView: View {
 
     private func invitationBlock(json: String) -> some View {
         VStack(alignment: .leading, spacing: AppUI.Spacing.sm) {
-            ScrollView {
-                Text(json)
-                    .font(.system(.footnote, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: AppUI.Spacing.md) {
+                PairingQRCodeView(payload: json, side: 160)
                     .padding(AppUI.Spacing.sm)
+                    .background(Color.white)
+                    .cornerRadius(6)
+                ScrollView {
+                    Text(json)
+                        .font(.system(.footnote, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(AppUI.Spacing.sm)
+                }
+                .frame(minHeight: 160, maxHeight: 200)
+                .background(Color(nsColor: .textBackgroundColor))
+                .cornerRadius(6)
             }
-            .frame(minHeight: 80, maxHeight: 160)
-            .background(Color(nsColor: .textBackgroundColor))
-            .cornerRadius(6)
             Button("Copy to clipboard") { copyToClipboard(json) }
                 .buttonStyle(.bordered)
         }

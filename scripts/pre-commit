@@ -8,27 +8,44 @@ set -euo pipefail
 
 # ---------- Open-Core boundary check (CLAUDE.md §12.3) ----------
 #
-# Any tracked file in the public termura repo MUST NOT leak references to
-# the private termura-harness sibling. Detected literals:
-#   - "termura-harness/" or "../termura-harness/"
-#   - private impl type names that only live in the private repo
+# Any tracked file in the public repo MUST NOT carry the literal sibling-
+# repo path. The detector is intentionally PATH-ONLY:
 #
-# Allowed callers carry the literal in commentary or config; they're listed
-# in WHITELIST_REGEX. Anything else trips the hook.
-
-LEAK_PATTERN='(termura-harness/|RemoteServerHarness|RemoteEnvelopeRouter|RemoteAgentBridgeAssembly|RemoteAgentXPCClient|AppMailboxXPCBridge|AgentInjectedCloudKitIngress|TrustedSourceGate|RemoteAgentAutoConnector|AgentVirtualReplyChannel|RemoteIntegrationFactory)'
-# Meta config / cross-repo orchestrator scripts and docs are allowed to mention
-# the private repo path because their job is precisely to know about it.
-# Code under Sources/ / Packages/ is not — that's where leaks would slip into
-# release artefacts.
-WHITELIST_REGEX='^(\.gitignore|CLAUDE\.md|README\.md|project\.yml\.example|scripts/pre-commit|scripts/pre-commit-private|scripts/quality-gate\.sh|scripts/regen-all\.sh|scripts/check-open-core\.sh|memory/|Sources/Termura/Harness/.*\+Stub\.swift|Sources/Termura/Harness/HarnessViewModel\+Stub\.swift|Sources/Termura/Harness/HarnessModels\.swift|Sources/Termura/Harness/RuleFileRepositoryProtocol\.swift|Tests/TermuraTests/Harness/.*\.swift|Packages/.*\.swift)$'
+#   - Path leaks (`termura-harness/`) have NO legitimate use in tracked
+#     source code outside this script and `regen-all.sh` (both
+#     self-excluded below).
+#
+#   - Type-name protection is delegated to code review (CODEOWNERS +
+#     required reviewer). Façade routing across the `#if HARNESS_ENABLED`
+#     boundary in `Sources/Termura/Harness/RemoteIntegration+Stub.swift`
+#     physically must name a private-impl symbol; a grep would either
+#     reject every legitimate stub edit, or be silently bypassed by a
+#     rename. Review catches the semantics; grep does not.
+#
+# DO NOT extend this regex with type names. If a new leak class
+# appears (e.g. a new tracked file mistakenly hardcodes the sibling
+# repo path), fix the file — don't extend the pattern.
+LEAK_PATTERN='termura-harness'
+# Self-exclude the four scanner / cross-repo orchestrator scripts that
+# physically MUST embed the leak literal because that IS their job:
+#   - scripts/pre-commit              — scanner can't grep its own pattern
+#   - scripts/regen-all.sh            — cross-repo xcodegen orchestrator
+#                                        must `cd` into the sibling repo
+#   - scripts/quality-gate.sh         — `--include-private` mode must `cd`
+#                                        into the sibling repo
+#   - scripts/check-baseline-drift.sh — verifies LEAK_PATTERN literal value;
+#                                        must contain the literal to compare
+# This is a physical-self-reference exclusion, not a policy whitelist:
+# any attempt to extend SELF_EXCLUDE_FILES with a 5th entry must be
+# rejected at review (see CLAUDE.md §12.3).
+SELF_EXCLUDE_FILES='^(scripts/pre-commit|scripts/regen-all\.sh|scripts/quality-gate\.sh|scripts/check-baseline-drift\.sh)$'
 
 STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR)"
 LEAKS=""
 while IFS= read -r file; do
     [ -z "$file" ] && continue
     [ ! -f "$file" ] && continue
-    if echo "$file" | grep -qE "$WHITELIST_REGEX"; then
+    if echo "$file" | grep -qE "$SELF_EXCLUDE_FILES"; then
         continue
     fi
     if grep -qE "$LEAK_PATTERN" "$file" 2>/dev/null; then
@@ -38,15 +55,17 @@ while IFS= read -r file; do
 done <<< "$STAGED_FILES"
 
 if [ -n "$LEAKS" ]; then
-    echo "✘ Open-Core boundary violation: private path/type names found in tracked-eligible file(s):"
+    echo "✘ Open-Core boundary violation: private repo path found in tracked file(s):"
     printf '%b\n' "$LEAKS"
     echo ""
     echo "Resolve one of:"
-    echo "  1. Move the file to termura-harness/ (private repo)"
-    echo "  2. Rename the symbol to avoid the private impl name"
-    echo "  3. Add the file to WHITELIST_REGEX in scripts/pre-commit (only for meta files)"
+    echo "  1. Move the file to the private repo"
+    echo "  2. Rewrite the literal — neutral wording works for prose,"
+    echo "     env var indirection works for scripts"
     echo ""
-    echo "See CLAUDE.md §12 'Open-Core Boundary' for the full rule."
+    echo "Do NOT add the file to SELF_EXCLUDE_FILES — that list is"
+    echo "reserved for the two scanner scripts that must self-reference."
+    echo "See CLAUDE.md §12.3 'Open-Core Boundary' for the full rule."
     exit 1
 fi
 
@@ -66,6 +85,14 @@ if [ -n "$FORBIDDEN_FORCED" ]; then
     echo "stay gitignored — never use 'git add -f' on them."
     exit 1
 fi
+
+# ---------- Open-core baseline drift check ----------
+#
+# Locks in the post-whitelist-removal state so future PRs can't silently
+# re-add WHITELIST_REGEX, broaden LEAK_PATTERN with type names, or extend
+# SELF_EXCLUDE_FILES with a 4th entry. See scripts/check-baseline-drift.sh
+# header for the three invariants.
+bash scripts/check-baseline-drift.sh
 
 # ---------- Quality gate ----------
 bash scripts/quality-gate.sh --staged

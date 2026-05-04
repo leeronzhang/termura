@@ -17,7 +17,7 @@ private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKit
 /// transient outcomes leave the record in the mailbox for a future
 /// unlocked run.
 ///
-/// OWNER: caller (typically `RemoteServerHarness`)
+/// OWNER: caller (typically the host's server assembly)
 /// CANCEL: `stop()` cancels the poll Task and clears handler/channels
 /// TEARDOWN: drop reference; actor cleanup runs on stop
 public actor CloudKitTransport: RemoteTransport {
@@ -30,52 +30,103 @@ public actor CloudKitTransport: RemoteTransport {
         /// Cap on the exponential backoff delay applied between poll
         /// attempts after consecutive failures.
         public let backoffCap: Duration
+        /// D-3 — after this many consecutive failures we stop polling
+        /// entirely (`isCircuitOpen = true`) instead of plateauing at
+        /// `backoffCap` forever. Higher than the agent-XPC autoConnector
+        /// threshold (8) because CloudKit failures are usually transient
+        /// network issues, not configuration mistakes; we'd rather
+        /// tolerate longer outages than aggressively halt against a
+        /// momentary Wi-Fi drop. Recovery is via `stop()` + `start()`
+        /// (toggle off/on in Settings UI) which resets the breaker.
+        public let circuitBreakerThreshold: Int
 
         public init(
             pollInterval: Duration = .seconds(60),
             healthFailureThreshold: Int = 5,
-            backoffCap: Duration = .seconds(600)
+            backoffCap: Duration = .seconds(600),
+            circuitBreakerThreshold: Int = 16
         ) {
             self.pollInterval = pollInterval
             self.healthFailureThreshold = healthFailureThreshold
             self.backoffCap = backoffCap
+            self.circuitBreakerThreshold = circuitBreakerThreshold
         }
     }
 
     /// Poll-loop health summary. `unhealthy` flips on after
     /// `healthFailureThreshold` consecutive failures and clears the moment a
-    /// poll succeeds; consumers (the harness, Settings UI) read it to surface
-    /// "CloudKit unreachable" without polling the actor every tick.
+    /// poll succeeds; `isCircuitOpen` (D-3) flips after
+    /// `circuitBreakerThreshold` failures and stays set until `stop()` /
+    /// `start()` resets the actor — at which point the polling loop has
+    /// already exited so a stuck CloudKit outage stops draining battery
+    /// + cellular data.
     public struct PollHealth: Sendable, Equatable {
         public let isHealthy: Bool
         public let consecutiveFailures: Int
         public let lastFailureReason: String?
+        public let isCircuitOpen: Bool
 
-        public init(isHealthy: Bool, consecutiveFailures: Int, lastFailureReason: String? = nil) {
+        public init(
+            isHealthy: Bool,
+            consecutiveFailures: Int,
+            lastFailureReason: String? = nil,
+            isCircuitOpen: Bool = false
+        ) {
             self.isHealthy = isHealthy
             self.consecutiveFailures = consecutiveFailures
             self.lastFailureReason = lastFailureReason
+            self.isCircuitOpen = isCircuitOpen
         }
 
         public static let healthy = PollHealth(isHealthy: true, consecutiveFailures: 0)
     }
 
     public nonisolated let name: String
-    private let deviceId: UUID
-    private let gateway: any CloudKitDatabaseGateway
+    /// Out-of-band failure stream. Surfaced through the `RemoteTransport`
+    /// protocol so the host (Mac `RemoteServerHarness` →
+    /// `RemoteControlController` → Settings UI) can show *why* a reply
+    /// pipeline went silent — without this, `CloudKitReplyChannel.send`
+    /// errors only landed in the router's catch-and-log and the user
+    /// saw a frozen iPhone with no actionable hint.
+    public nonisolated let events: AsyncStream<ServerTransportEvent>
+    private let eventsContinuation: AsyncStream<ServerTransportEvent>.Continuation
+    /// Module-internal so the same-module `+Polling` extension can pass
+    /// `targetDeviceId` straight to the gateway without an extra hop.
+    let deviceId: UUID
+    /// Module-internal so the same-module `+Polling` / `+Quarantine`
+    /// extensions can fetch + delete without widening the public surface.
+    let gateway: any CloudKitDatabaseGateway
     /// Module-internal so the same-module `+CipherDecode` extension can
     /// reach the store without widening the public actor surface.
     let pairKeyStore: (any PairKeyStore)?
     /// Module-internal for the same reason as `pairKeyStore` above.
     let codec: any RemoteCodec
-    private let configuration: Configuration
+    /// Module-internal so the same-module `+Polling` extension can read
+    /// the backoff parameters when scheduling the next tick.
+    let configuration: Configuration
     private let clock: @Sendable () -> Date
     private var pollingTask: Task<Void, Never>?
-    private var handler: (any EnvelopeHandler)?
-    private var lastSeen: Date = .distantPast
+    /// Module-internal so the same-module `+Polling` extension can
+    /// route poll-fetched records to the active handler. The poll loop
+    /// short-circuits when this is nil (e.g. after `stop`).
+    var handler: (any EnvelopeHandler)?
+    /// Module-internal so the same-module `+Polling` extension can
+    /// advance the cursor as it consumes records / quarantines poison.
+    var lastSeen: Date = .distantPast
     private var channels: [UUID: CloudKitReplyChannel] = [:]
-    private var consecutivePollFailures = 0
-    private var lastPollFailureReason: String?
+    /// Module-internal so the same-module `+Polling` extension can
+    /// update health bookkeeping without going through public hops.
+    var consecutivePollFailures = 0
+    var lastPollFailureReason: String?
+    /// D-3 — flipped by `+Polling.recordPollFailure` once the
+    /// consecutive-failure count crosses
+    /// `configuration.circuitBreakerThreshold`. The poll loop checks
+    /// this at the top of each iteration and returns early when set,
+    /// so a sustained outage stops hammering the gateway entirely
+    /// instead of plateauing at `backoffCap` forever. Cleared by
+    /// `stop()` so toggle-off-on in Settings UI is the natural
+    /// recovery path.
+    var isCircuitOpen = false
 
     public init(
         name: String,
@@ -93,6 +144,16 @@ public actor CloudKitTransport: RemoteTransport {
         self.codec = codec
         self.configuration = configuration
         self.clock = clock
+        let made = AsyncStream.makeStream(of: ServerTransportEvent.self)
+        events = made.stream
+        eventsContinuation = made.continuation
+    }
+
+    deinit {
+        // Subscribers iterating `for await` fall out of their loop
+        // when the actor is released; mirrors `WebSocketClientTransport`'s
+        // teardown so consumers do not need to special-case CloudKit.
+        eventsContinuation.finish()
     }
 
     /// Switches the per-peer reply channel from plaintext-bootstrap mode
@@ -112,26 +173,27 @@ public actor CloudKitTransport: RemoteTransport {
         PollHealth(
             isHealthy: consecutivePollFailures < configuration.healthFailureThreshold,
             consecutiveFailures: consecutivePollFailures,
-            lastFailureReason: lastPollFailureReason
+            lastFailureReason: lastPollFailureReason,
+            isCircuitOpen: isCircuitOpen
         )
     }
 
     public func start(handler: any EnvelopeHandler) async throws {
         guard pollingTask == nil else { throw TransportError.alreadyRunning }
         self.handler = handler
-        // Establish the cursor at the latest existing record so we don't replay
-        // an iPhone's pre-pair traffic on every Mac restart.
+        let initial: CloudKitFetchPage
         do {
-            let initial = try await gateway.fetch(targetDeviceId: deviceId, since: .distantPast)
-            if let max = initial.map(\.createdAt).max() {
-                lastSeen = max
-            } else {
-                lastSeen = clock()
-            }
+            initial = try await gateway.fetch(targetDeviceId: deviceId, since: .distantPast)
         } catch {
             self.handler = nil
             throw TransportError.bindFailure(reason: error.localizedDescription)
         }
+        // Consume any backlog the inbox already holds (offline iPhone /
+        // server restart) instead of advancing the cursor past it. Each
+        // dispatched record gets `delete`d, so subsequent restarts won't
+        // see it again; quarantined entries are removed + cursor is
+        // advanced past them by the same path the poll loop uses.
+        await consume(page: initial, handler: handler)
         pollingTask = Task { [weak self] in
             await self?.runPollLoop()
         }
@@ -145,6 +207,12 @@ public actor CloudKitTransport: RemoteTransport {
             await channel.close()
         }
         channels.removeAll()
+        // D-3 — clean slate so the next `start()` re-arms the breaker
+        // from zero. Toggle-off-on in Settings is the user's recovery
+        // path after the breaker opens against a sustained outage.
+        consecutivePollFailures = 0
+        lastPollFailureReason = nil
+        isCircuitOpen = false
     }
 
     /// Triggered by silent push (APNs) — bypasses the poll interval.
@@ -152,89 +220,7 @@ public actor CloudKitTransport: RemoteTransport {
         await pollOnce()
     }
 
-    private func runPollLoop() async {
-        while !Task.isCancelled {
-            await pollOnce()
-            do {
-                try await Task.sleep(for: nextPollDelay())
-            } catch {
-                return
-            }
-        }
-    }
-
-    /// Computes the wait between this poll and the next. After a clean
-    /// poll, `consecutivePollFailures == 0` and we sleep the configured
-    /// interval. After failures we sleep `pollInterval × 2^(failures-1)`
-    /// up to `backoffCap`, so a sustained CloudKit outage doesn't keep
-    /// hammering the gateway every minute.
-    private func nextPollDelay() -> Duration {
-        guard consecutivePollFailures > 0 else { return configuration.pollInterval }
-        let baseSeconds = Self.durationInSeconds(configuration.pollInterval)
-        let multiplier = pow(2.0, Double(min(consecutivePollFailures - 1, 16)))
-        let candidateSeconds = baseSeconds * multiplier
-        let capSeconds = Self.durationInSeconds(configuration.backoffCap)
-        let bounded = min(candidateSeconds, capSeconds)
-        return .seconds(bounded)
-    }
-
-    private static func durationInSeconds(_ duration: Duration) -> Double {
-        let comp = duration.components
-        return Double(comp.seconds) + Double(comp.attoseconds) / 1.0e18
-    }
-
-    private func pollOnce() async {
-        guard let handler else { return }
-        let records: [CloudKitEnvelopeRecord]
-        do {
-            records = try await gateway.fetch(targetDeviceId: deviceId, since: lastSeen)
-        } catch let CloudKitGatewayError.unsupportedSchema(version) {
-            // PR7 — v1 records (pre-encryption) are intentionally rejected
-            // on read. The transport skips the entire batch with a warning.
-            // Schema mismatch is not a transport health concern (the
-            // gateway is healthy; the data is stale), so we don't bump
-            // the failure counter.
-            logger.warning("Skipping fetch batch with unsupported schemaVersion=\(version)")
-            recordPollSuccess()
-            return
-        } catch {
-            recordPollFailure(reason: error.localizedDescription)
-            return
-        }
-        for record in records {
-            await dispatch(record: record, handler: handler)
-            if record.createdAt > lastSeen {
-                lastSeen = record.createdAt
-            }
-        }
-        recordPollSuccess()
-    }
-
-    private func recordPollSuccess() {
-        // Bind locally so the OSLog autoclosure interpolation does not
-        // implicitly capture `self`; SwiftFormat's redundantSelf rule
-        // strips explicit `self.` here, so the local is the only form
-        // that satisfies both the compiler and the formatter.
-        let failures = consecutivePollFailures
-        if failures > 0 {
-            logger.info("CloudKit poll recovered after \(failures) failures")
-        }
-        consecutivePollFailures = 0
-        lastPollFailureReason = nil
-    }
-
-    private func recordPollFailure(reason: String) {
-        consecutivePollFailures += 1
-        lastPollFailureReason = reason
-        let failures = consecutivePollFailures
-        if failures >= configuration.healthFailureThreshold {
-            logger.error("Poll failed (#\(failures)): \(reason, privacy: .public)")
-        } else {
-            logger.warning("Poll failed (#\(failures)): \(reason, privacy: .public)")
-        }
-    }
-
-    private func dispatch(record: CloudKitEnvelopeRecord, handler: any EnvelopeHandler) async {
+    func dispatch(record: CloudKitEnvelopeRecord, handler: any EnvelopeHandler) async {
         let envelope: Envelope
         switch record.payload {
         case let .plaintext(value):
@@ -266,7 +252,7 @@ public actor CloudKitTransport: RemoteTransport {
         await deleteAfterDispatch(id: record.id)
     }
 
-    private func deleteAfterDispatch(id: String) async {
+    func deleteAfterDispatch(id: String) async {
         do {
             try await gateway.delete(id: id)
         } catch {
@@ -276,13 +262,18 @@ public actor CloudKitTransport: RemoteTransport {
 
     private func channelFor(sourceDeviceId: UUID) -> CloudKitReplyChannel {
         if let existing = channels[sourceDeviceId] { return existing }
+        // Capture the continuation by value (Sendable) rather than `self`,
+        // so the channel actor can yield without re-entering this actor's
+        // isolation domain on every send-failure.
+        let continuation = eventsContinuation
         let channel = CloudKitReplyChannel(
             transportDeviceId: deviceId,
             peerDeviceId: sourceDeviceId,
             gateway: gateway,
             pairKeyStore: pairKeyStore,
             codec: codec,
-            clock: clock
+            clock: clock,
+            eventSink: { event in continuation.yield(event) }
         )
         channels[sourceDeviceId] = channel
         return channel

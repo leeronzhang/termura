@@ -50,6 +50,15 @@ protocol TerminalEngine: AnyObject, Sendable {
     /// Whether the underlying PTY process is running.
     var isRunning: Bool { get }
 
+    /// Whether the engine currently holds a live ghostty / Metal surface.
+    /// `engine.send` and `engine.pressReturn` silently no-op when this is
+    /// false (their `guard let surface else { return }` short-circuit) —
+    /// the remote-control path uses this to fail fast with a typed error
+    /// instead of letting iOS time out 30s later with no clue why nothing
+    /// reached the PTY. Default impl returns `true` for engines without
+    /// a surface concept (mock, debug).
+    var hasSurface: Bool { get }
+
     /// The AppKit view backing this terminal engine, for focus and key routing.
     var terminalNSView: NSView { get }
 
@@ -101,12 +110,47 @@ protocol TerminalEngine: AnyObject, Sendable {
     /// plain-text path. iOS clients render this directly into an
     /// AttributedString for color + bold + underline fidelity.
     func readVisibleStyledScreen() -> TerminalStyledScreenSnapshot?
+
+    /// Subscribe to the engine's raw PTY byte stream. Returns a handle
+    /// whose `stream` yields `Data` chunks as the IO callback receives
+    /// them; callers must `await unsubscribeBytes(id:)` when done (or
+    /// rely on `terminate()` to call `finishAll()`).
+    ///
+    /// Returns `nil` for engines that don't expose a live byte source
+    /// (preview / debug / mock). The harness router falls back to the
+    /// snapshot pulse when this is nil.
+    func subscribeBytes() async -> PtyByteTap.Subscription?
+
+    /// Cancel a single byte-stream subscription previously returned by
+    /// `subscribeBytes()`. Idempotent; unknown ids are silently ignored
+    /// so callers don't have to track closed state.
+    func unsubscribeBytes(id: UUID) async
+
+    /// Build a `PtyStreamCheckpoint` keyframe from the engine's current
+    /// visible viewport. Used by the harness router's pump as the cold-
+    /// start basis and as the periodic resync keyframe. Returns `nil`
+    /// when the surface isn't live or extraction failed.
+    func currentCheckpoint(sessionId: UUID, seq: UInt64) -> PtyStreamCheckpoint?
 }
 
 extension TerminalEngine {
+    // Default: engines without a separate surface concept (mock / debug)
+    // are always "ready" — only `LibghosttyEngine` currently overrides
+    // to forward the underlying ghostty view's surface state.
+    var hasSurface: Bool { true }
+
     // Default implementation lets non-libghostty engines (debug, mock) opt
     // out of styled extraction without forcing a stub on every conformer.
     func readVisibleStyledScreen() -> TerminalStyledScreenSnapshot? { nil }
+
+    // Engines without a live byte source (preview / debug / mock) opt
+    // out by default; only `LibghosttyEngine` overrides. Keeps the
+    // harness router's adapter contract uniform across builds.
+    func subscribeBytes() async -> PtyByteTap.Subscription? { nil }
+
+    func unsubscribeBytes(id _: UUID) async {}
+
+    func currentCheckpoint(sessionId _: UUID, seq _: UInt64) -> PtyStreamCheckpoint? { nil }
 }
 
 /// Engine-agnostic snapshot returned by `TerminalEngine.readVisibleScreen()`.

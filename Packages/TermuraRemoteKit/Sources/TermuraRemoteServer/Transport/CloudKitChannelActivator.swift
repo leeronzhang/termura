@@ -1,12 +1,12 @@
 import Foundation
 
-/// Wave 5 — abstraction the `RemoteEnvelopeRouter` calls when it needs
-/// to flip a CloudKit reply channel from plaintext-bootstrap mode to
-/// encrypted mode after a successful pair / rejoin handshake. Pre-
-/// Wave-5 the router took a closure-typed `(UUID, UUID) async -> Void`
-/// activator that nobody could read at a glance; the protocol form
-/// gives the call site a self-documenting name and lets test doubles
-/// be injected without tripping `@Sendable` capture-list awkwardness.
+/// Wave 5 — abstraction the routing layer calls when it needs to flip
+/// a CloudKit reply channel from plaintext-bootstrap mode to encrypted
+/// mode after a successful pair / rejoin handshake. Pre-Wave-5 the
+/// router took a closure-typed `(UUID, UUID) async -> Void` activator
+/// that nobody could read at a glance; the protocol form gives the
+/// call site a self-documenting name and lets test doubles be injected
+/// without tripping `@Sendable` capture-list awkwardness.
 ///
 /// `forSourceDeviceId` is the `cloudSourceDeviceId` (public-key-derived
 /// id the iPhone uses on every CloudKit envelope it sends).

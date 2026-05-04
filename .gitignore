@@ -15,30 +15,57 @@ DerivedData/
 # Generated Xcode project
 *.xcodeproj/
 
-# Local-only workspace that bundles termura + termura-harness/iOS for parallel
-# Xcode editing. Each developer can regenerate with their own paths.
+# Local-only workspace bundle (per-machine).
+# Each developer can regenerate with their own paths.
 Termura.xcworkspace/
 
 # Tests (internal)
 Tests/
 
 # Harness directory: exclude private implementations, keep public stubs and protocols.
-# Real implementations live in the private termura-harness Swift Package.
+# Real implementations live in the private harness Swift Package (sibling repo).
 Sources/Termura/Harness/*
 !Sources/Termura/Harness/HarnessModels.swift
 !Sources/Termura/Harness/RuleFileRepositoryProtocol.swift
 !Sources/Termura/Harness/HarnessViewModel+Stub.swift
 !Sources/Termura/Harness/ExperienceCodifier+Stub.swift
 !Sources/Termura/Harness/RemoteIntegration+Stub.swift
+!Sources/Termura/Harness/HarnessBootstrap.swift
+!Sources/Termura/Harness/AgentEventSource.swift
+!Sources/Termura/Harness/RemoteTransportFailure.swift
+
+# Public-package contract tests for the wire library. The line-22 `Tests/`
+# rule was meant for the internal Termura app's tests, not the public
+# package. Re-include the package's Tests/ directory + per-test whitelist
+# so each unblocked file is reviewer-visible (bulk negation can land
+# separately once previously-shadowed tests have their lint debt cleaned
+# up; until then, intentional file-by-file unblock).
+!Packages/TermuraRemoteKit/Tests/
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/
+Packages/TermuraRemoteKit/Tests/*/*
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/TransportEventStreamTests.swift
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/CloudKitClientTransportTests.swift
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/CloudKitClientTransportCircuitBreakerTests.swift
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/CloudKitReplyChannelEventTests.swift
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/CloudKitTransportCircuitBreakerTests.swift
 
 # CI/CD and internal build tooling
-.github/
+.github/*
 !.github/workflows/
 !.github/workflows/ci.yml
+!.github/PULL_REQUEST_TEMPLATE.md
 Makefile
 # scripts/* (not scripts/) so the negations below can re-include specific files —
 # git ignores `!foo` when the parent directory itself is excluded by `scripts/`.
 scripts/*
+!scripts/baseline/
+!scripts/check-baseline-drift.sh
+!scripts/check-baseline-snapshots.sh
+!scripts/check-entitlements-hygiene.sh
+!scripts/check-error-localization.sh
+!scripts/check-ios-permissions.sh
+!scripts/check-mirrored-state-freshness.sh
 !scripts/check-signing-setup.sh
 !scripts/check-version-sync.sh
 !scripts/check-xcstrings-coverage.sh
@@ -62,6 +89,10 @@ docs/
 # Claude Code
 CLAUDE.md
 .claude/
+# Claude Code's per-project auto-memory (cross-conversation state).
+# Local-only; never tracked. The previous force-tracked entry was
+# removed in the open-core whitelist cleanup.
+memory/
 
 # Landing page (separate repo)
 landing/

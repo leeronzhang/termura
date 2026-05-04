@@ -21,46 +21,21 @@ private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKit
 /// CANCEL: `disconnect()` cancels the poll Task and resumes pending receivers
 /// TEARDOWN: drop reference; actor cleanup runs on disconnect
 public actor CloudKitClientTransport: ClientTransport {
-    public struct Configuration: Sendable {
-        public let pollInterval: Duration
-        /// Maximum consecutive poll failures before the transport flags itself
-        /// `.unhealthy`. Tuned to ~5 × 60s — long enough to ride out a Wi-Fi
-        /// roam, short enough that a sustained CloudKit outage gets visible.
-        public let healthFailureThreshold: Int
-        /// Cap on the exponential backoff delay applied between poll
-        /// attempts after consecutive failures.
-        public let backoffCap: Duration
-
-        public init(
-            pollInterval: Duration = .seconds(60),
-            healthFailureThreshold: Int = 5,
-            backoffCap: Duration = .seconds(600)
-        ) {
-            self.pollInterval = pollInterval
-            self.healthFailureThreshold = healthFailureThreshold
-            self.backoffCap = backoffCap
-        }
-    }
-
-    /// Poll-loop health summary. `unhealthy` flips on after
-    /// `healthFailureThreshold` consecutive failures and clears the moment a
-    /// poll succeeds; consumers (RemoteStore, Settings UI) read it to surface
-    /// "CloudKit unreachable" without polling the actor every tick.
-    public struct PollHealth: Sendable, Equatable {
-        public let isHealthy: Bool
-        public let consecutiveFailures: Int
-        public let lastFailureReason: String?
-
-        public init(isHealthy: Bool, consecutiveFailures: Int, lastFailureReason: String? = nil) {
-            self.isHealthy = isHealthy
-            self.consecutiveFailures = consecutiveFailures
-            self.lastFailureReason = lastFailureReason
-        }
-
-        public static let healthy = PollHealth(isHealthy: true, consecutiveFailures: 0)
-    }
+    // `Configuration` and `PollHealth` value types live in
+    // `CloudKitClientTransport+Health.swift` to keep this file under
+    // the SwiftLint file_length warning threshold (300).
 
     nonisolated let codec: any RemoteCodec
+    /// Out-of-band failure stream shared with `WebSocketClientTransport`
+    /// so the iOS reconnect controller can react to a CloudKit-side
+    /// `gateway.save` failure without polling. Pre-fix the iOS user saw
+    /// "no reply received" with no signal that the *outbound* write
+    /// itself had failed (CKError quota / unauthorized / network drop);
+    /// the next `send` would still throw, but until something tried to
+    /// send the only place the failure surfaced was the actor-internal
+    /// throw → router catch-and-log on the Mac side.
+    public nonisolated let events: AsyncStream<TransportEvent>
+    private let eventsContinuation: AsyncStream<TransportEvent>.Continuation
     /// Module-internal so the same-module `+Polling` extension can use
     /// it as the fetch target without an extra accessor.
     let localDeviceId: UUID
@@ -84,6 +59,12 @@ public actor CloudKitClientTransport: ClientTransport {
     var isConnected = false
     var consecutivePollFailures = 0
     var lastPollFailureReason: String?
+    /// D-3 — flipped by `+Polling.recordPollFailure` once the
+    /// consecutive-failure count crosses
+    /// `configuration.circuitBreakerThreshold`. Recovery on iOS is via
+    /// `disconnect()` (resets the breaker) followed by the next
+    /// reconnect cycle.
+    var isCircuitOpen = false
     /// PR7 — `pairingId` of the active relationship. Set after iOS sees
     /// `PairingCompleteAck` (RemoteStore drives it). While `nil`, `send`
     /// writes plaintext records (the bootstrap path used by the
@@ -107,6 +88,16 @@ public actor CloudKitClientTransport: ClientTransport {
         self.codec = codec
         self.configuration = configuration
         self.clock = clock
+        let made = AsyncStream.makeStream(of: TransportEvent.self)
+        events = made.stream
+        eventsContinuation = made.continuation
+    }
+
+    deinit {
+        // Mirror `WebSocketClientTransport.deinit`: subscribers iterating
+        // `for await` fall out of their loop the moment the transport is
+        // released so the iOS reconnect controller never hangs.
+        eventsContinuation.finish()
     }
 
     /// Switches `send` from plaintext-bootstrap mode to encrypted mode.
@@ -124,15 +115,16 @@ public actor CloudKitClientTransport: ClientTransport {
         PollHealth(
             isHealthy: consecutivePollFailures < configuration.healthFailureThreshold,
             consecutiveFailures: consecutivePollFailures,
-            lastFailureReason: lastPollFailureReason
+            lastFailureReason: lastPollFailureReason,
+            isCircuitOpen: isCircuitOpen
         )
     }
 
     public func connect() async throws {
         guard !isConnected else { return }
+        let initial: CloudKitFetchPage
         do {
-            let initial = try await gateway.fetch(targetDeviceId: localDeviceId, since: .distantPast)
-            lastSeen = initial.map(\.createdAt).max() ?? clock()
+            initial = try await gateway.fetch(targetDeviceId: localDeviceId, since: .distantPast)
         } catch {
             // Mirror the diagnostic surface `pollOnce` already provides
             // (`logger.error("Poll failed: …")`). Without this, a failed
@@ -146,13 +138,23 @@ public actor CloudKitClientTransport: ClientTransport {
             throw ClientTransportError.connectFailure(reason: error.localizedDescription)
         }
         isConnected = true
+        // Drain the offline-backlog before the poll loop starts so
+        // messages queued while the iPhone was offline / asleep aren't
+        // silently skipped past. Quarantined entries are deleted from
+        // CloudKit + the cursor advances past them so they don't loop
+        // forever on the next fetch.
+        await consume(page: initial)
         pollingTask = Task { [weak self] in
             await self?.runPollLoop()
         }
     }
 
     public func send(_ envelope: Envelope) async throws {
-        guard isConnected else { throw ClientTransportError.notConnected }
+        guard isConnected else {
+            let err = ClientTransportError.notConnected
+            yieldDisconnected(reason: err)
+            throw err
+        }
         let payload: CloudKitEnvelopeRecord.Payload
         if let pairKey = await resolvePairKey() {
             do {
@@ -183,8 +185,20 @@ public actor CloudKitClientTransport: ClientTransport {
         do {
             try await gateway.save(record)
         } catch {
-            throw ClientTransportError.sendFailure(reason: error.localizedDescription)
+            let err = ClientTransportError.sendFailure(reason: error.localizedDescription)
+            yieldDisconnected(reason: err)
+            throw err
         }
+    }
+
+    /// Mirrors `WebSocketClientTransport.markDeadIfFatal` — a CloudKit
+    /// `gateway.save` failure is the moral equivalent of a fatal NWError
+    /// on the WebSocket path: the outbound pipe is unusable until the
+    /// underlying issue (network / CKError quota / not-authenticated)
+    /// resolves. Yielding `.disconnected` lets the iOS reconnect
+    /// controller drive recovery uniformly across both transports.
+    private func yieldDisconnected(reason: ClientTransportError) {
+        eventsContinuation.yield(.disconnected(reason: reason))
     }
 
     private func resolvePairKey() async -> PairKey? {
@@ -218,6 +232,13 @@ public actor CloudKitClientTransport: ClientTransport {
             waiter.resume(throwing: ClientTransportError.notConnected)
         }
         queue.removeAll()
+        // D-3 — clean slate so the next `connect()` re-arms the
+        // breaker from zero. The reconnect controller's natural
+        // disconnect → reconnect cycle is the recovery path after
+        // the breaker opens against a sustained outage.
+        consecutivePollFailures = 0
+        lastPollFailureReason = nil
+        isCircuitOpen = false
     }
 
     /// Triggered by silent push delegate; forces an immediate poll instead of

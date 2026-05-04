@@ -103,17 +103,37 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
     /// The underlying ProjectContext (PTYs, sessions, DB) stays alive until app termination.
     private(set) var isHiddenByUser: Bool = false
 
+    /// True between `hideForUser()` initiating a fullscreen exit and the
+    /// `windowDidExitFullScreen` callback completing the deferred `orderOut`.
+    /// Settable from within the module so tests can drive the deferred branch
+    /// without manipulating `NSWindow.styleMask` (AppKit refuses bit-flips
+    /// outside a real fullscreen transition).
+    var isExitingFullScreenForHide: Bool = false
+
     /// User-initiated hide: window leaves the screen but the controller, context,
     /// and PTY engines remain in memory so sessions survive across reopens.
+    ///
+    /// Fullscreen path: AppKit leaks a phantom Space if `orderOut(_:)` is called
+    /// while `styleMask` contains `.fullScreen` — the Space stays in Mission Control
+    /// with no traffic-light, no content, and no way out. We therefore exit
+    /// fullscreen first and defer the `orderOut(_:)` to `windowDidExitFullScreen`.
     func hideForUser() {
         isHiddenByUser = true
         window?.isExcludedFromWindowsMenu = true
-        window?.orderOut(nil)
+        guard let window else { return }
+        if window.styleMask.contains(.fullScreen) {
+            isExitingFullScreenForHide = true
+            window.toggleFullScreen(nil)
+            // orderOut runs in windowDidExitFullScreen once AppKit finishes the exit animation.
+            return
+        }
+        window.orderOut(nil)
     }
 
     /// Bring the window back on screen. Idempotent for already-visible windows.
     func restore() {
         isHiddenByUser = false
+        isExitingFullScreenForHide = false
         window?.isExcludedFromWindowsMenu = false
         window?.makeKeyAndOrderFront(nil)
     }
@@ -145,6 +165,10 @@ final class ProjectWindowController: NSWindowController, NSWindowDelegate {
     func windowDidExitFullScreen(_ notification: Notification) {
         userDefaults.set(false, forKey: fullScreenStateKey)
         saveWindowedFrame()
+        if isExitingFullScreenForHide {
+            isExitingFullScreenForHide = false
+            window?.orderOut(nil)
+        }
     }
 
     // MARK: - Window factory

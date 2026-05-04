@@ -191,3 +191,14 @@ public enum RemoteClientError: Error, Sendable, Equatable {
     case invalidState(current: RemoteClient.State)
     case notConnected
 }
+
+extension RemoteClientError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case let .invalidState(current):
+            "Remote client is in state \(current); the requested operation requires a different state."
+        case .notConnected:
+            "Remote client is not connected."
+        }
+    }
+}
