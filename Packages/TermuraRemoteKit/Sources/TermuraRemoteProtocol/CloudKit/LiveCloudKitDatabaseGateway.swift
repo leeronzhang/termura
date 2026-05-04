@@ -157,6 +157,20 @@ public actor LiveCloudKitDatabaseGateway: CloudKitDatabaseGateway {
         return nsError.localizedDescription.contains("Did not find record type")
     }
 
+    /// Detects "schema is locked because the container is talking to the
+    /// Production environment". Production CloudKit schemas can ONLY be
+    /// modified through the CloudKit Dashboard (Apple's design); any
+    /// `save(record)` that would auto-create a new record type fails
+    /// with a message containing the literal phrase
+    /// `"production schema"`. Used by the subscription gateway's
+    /// schema-bootstrap path to convert this specific failure into a
+    /// typed, actionable error instead of leaking the internal
+    /// placeholder record name up to the operator.
+    static func isProductionSchemaImmutable(_ error: any Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.localizedDescription.contains("production schema")
+    }
+
     public func delete(id: String) async throws {
         do {
             _ = try await database.deleteRecord(withID: CKRecord.ID(recordName: id))

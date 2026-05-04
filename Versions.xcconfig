@@ -21,4 +21,4 @@
 // reverse-sync logic stays trivial (one regex, one file).
 
 MARKETING_VERSION = 0.2.3
-CURRENT_PROJECT_VERSION = 8
+CURRENT_PROJECT_VERSION = 9
