@@ -33,11 +33,12 @@ Sources/Termura/Harness/*
 !Sources/Termura/Harness/HarnessBootstrap.swift
 !Sources/Termura/Harness/AgentEventSource.swift
 
-# Public-package contract tests: the wire library's tests are part of the
-# open surface and ship alongside the source they test. The line-22 `Tests/`
-# rule was meant for the internal Termura app's tests, not the public package.
-!Packages/TermuraRemoteKit/Tests/
-!Packages/TermuraRemoteKit/Tests/**
+# Public-package contract test for the new TransportEvent surface.
+# The line-22 `Tests/` rule was meant for the internal Termura app's
+# tests, not the public package. Each public test file is unblocked
+# explicitly; bulk negation can land separately once previously-
+# shadowed tests have their lint debt cleaned up.
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/TransportEventStreamTests.swift
 
 # CI/CD and internal build tooling
 .github/*
