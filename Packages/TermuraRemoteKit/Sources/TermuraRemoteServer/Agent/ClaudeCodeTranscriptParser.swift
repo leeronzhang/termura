@@ -136,7 +136,7 @@ public struct ClaudeCodeTranscriptParser: Sendable {
         case let .thinking(text):
             text.isEmpty ? nil : .assistantThinking(text)
         case let .toolUse(name, input):
-            .assistantToolUse(name: name, inputSummary: summarize(input: input))
+            .assistantToolUse(name: name, inputSummary: summarize(name: name, input: input))
         case .toolResult:
             // assistant-typed tool_result is uncommon but possible;
             // mirror the user-side handling for symmetry.
@@ -144,25 +144,9 @@ public struct ClaudeCodeTranscriptParser: Sendable {
         }
     }
 
-    private func summarize(input: [String: TranscriptAnyJSON]?) -> String {
-        guard let input else { return "" }
-        if case let .string(value) = input["command"] { return value }
-        if case let .string(value) = input["file_path"] { return value }
-        if case let .string(value) = input["path"] { return value }
-        if case let .string(value) = input["pattern"] { return value }
-        // Fallback: compact JSON, capped so a 10 KB tool input doesn't
-        // pollute the wire. JSONEncoder failure here is non-actionable
-        // (the input was already JSON-decoded above), so fall through
-        // to "" rather than propagate.
-        let data: Data
-        do {
-            data = try JSONEncoder().encode(input)
-        } catch {
-            return ""
-        }
-        guard let text = String(data: data, encoding: .utf8) else { return "" }
-        return String(text.prefix(120))
-    }
+    /// Per-tool summary used by the iOS conversation view. Implemented in
+    /// `ClaudeCodeTranscriptParser+ToolSummary.swift` to keep this file
+    /// under the 360-line hard budget.
 
     private func isMetaWrapper(_ text: String) -> Bool {
         // Drop Claude Code's `type: "user"` CLI-scaffolding records
