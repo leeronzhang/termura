@@ -17,6 +17,13 @@ private let logger = Logger(subsystem: "com.termura.remote", category: "CloudKit
 extension CloudKitTransport {
     func runPollLoop() async {
         while !Task.isCancelled {
+            // D-3 — short-circuit when the circuit breaker has been
+            // tripped. `recordPollFailure` flips it once the consecutive-
+            // failure count crosses `circuitBreakerThreshold`; returning
+            // here lets the Task exit cleanly so a stuck CloudKit outage
+            // stops draining battery + cellular data instead of
+            // plateauing at `backoffCap` forever.
+            if isCircuitOpen { return }
             await pollOnce()
             do {
                 try await Task.sleep(for: nextPollDelay())
@@ -109,7 +116,16 @@ extension CloudKitTransport {
         consecutivePollFailures += 1
         lastPollFailureReason = reason
         let failures = consecutivePollFailures
-        if failures >= configuration.healthFailureThreshold {
+        if failures >= configuration.circuitBreakerThreshold {
+            isCircuitOpen = true
+            logger.error(
+                """
+                CloudKit circuit breaker opened after \(failures) consecutive failures; \
+                polling halted. Resume with stop() + start() after the underlying \
+                CloudKit / network issue is resolved. Last failure: \(reason, privacy: .public)
+                """
+            )
+        } else if failures >= configuration.healthFailureThreshold {
             logger.error("Poll failed (#\(failures)): \(reason, privacy: .public)")
         } else {
             logger.warning("Poll failed (#\(failures)): \(reason, privacy: .public)")

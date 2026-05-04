@@ -10,5 +10,20 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
+	<!--
+	  Required for CloudKit silent push delivery on macOS. Without it,
+	  the CKQuerySubscription Mac registers fires server-side but Apple
+	  never wakes the Mac process; every Mac-receives RTT degrades to
+	  a 60s poll-cycle wait, making cross-network pair / rejoin take
+	  60-120s observed in the field. Value MUST be "development";
+	  Xcode's archive flow re-signs distribution builds with the
+	  production value from the provisioning profile, so hardcoding
+	  "production" here breaks Debug runs and yields no benefit for
+	  Release. Enforced by scripts/check-entitlements-hygiene.sh.
+	  The Apple Developer App ID com.termura.app must have Push
+	  Notifications capability enabled for archive signing to succeed.
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
 </dict>
 </plist>

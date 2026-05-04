@@ -30,31 +30,52 @@ public actor CloudKitTransport: RemoteTransport {
         /// Cap on the exponential backoff delay applied between poll
         /// attempts after consecutive failures.
         public let backoffCap: Duration
+        /// D-3 — after this many consecutive failures we stop polling
+        /// entirely (`isCircuitOpen = true`) instead of plateauing at
+        /// `backoffCap` forever. Higher than the agent-XPC autoConnector
+        /// threshold (8) because CloudKit failures are usually transient
+        /// network issues, not configuration mistakes; we'd rather
+        /// tolerate longer outages than aggressively halt against a
+        /// momentary Wi-Fi drop. Recovery is via `stop()` + `start()`
+        /// (toggle off/on in Settings UI) which resets the breaker.
+        public let circuitBreakerThreshold: Int
 
         public init(
             pollInterval: Duration = .seconds(60),
             healthFailureThreshold: Int = 5,
-            backoffCap: Duration = .seconds(600)
+            backoffCap: Duration = .seconds(600),
+            circuitBreakerThreshold: Int = 16
         ) {
             self.pollInterval = pollInterval
             self.healthFailureThreshold = healthFailureThreshold
             self.backoffCap = backoffCap
+            self.circuitBreakerThreshold = circuitBreakerThreshold
         }
     }
 
     /// Poll-loop health summary. `unhealthy` flips on after
     /// `healthFailureThreshold` consecutive failures and clears the moment a
-    /// poll succeeds; consumers (the harness, Settings UI) read it to surface
-    /// "CloudKit unreachable" without polling the actor every tick.
+    /// poll succeeds; `isCircuitOpen` (D-3) flips after
+    /// `circuitBreakerThreshold` failures and stays set until `stop()` /
+    /// `start()` resets the actor — at which point the polling loop has
+    /// already exited so a stuck CloudKit outage stops draining battery
+    /// + cellular data.
     public struct PollHealth: Sendable, Equatable {
         public let isHealthy: Bool
         public let consecutiveFailures: Int
         public let lastFailureReason: String?
+        public let isCircuitOpen: Bool
 
-        public init(isHealthy: Bool, consecutiveFailures: Int, lastFailureReason: String? = nil) {
+        public init(
+            isHealthy: Bool,
+            consecutiveFailures: Int,
+            lastFailureReason: String? = nil,
+            isCircuitOpen: Bool = false
+        ) {
             self.isHealthy = isHealthy
             self.consecutiveFailures = consecutiveFailures
             self.lastFailureReason = lastFailureReason
+            self.isCircuitOpen = isCircuitOpen
         }
 
         public static let healthy = PollHealth(isHealthy: true, consecutiveFailures: 0)
@@ -97,6 +118,15 @@ public actor CloudKitTransport: RemoteTransport {
     /// update health bookkeeping without going through public hops.
     var consecutivePollFailures = 0
     var lastPollFailureReason: String?
+    /// D-3 — flipped by `+Polling.recordPollFailure` once the
+    /// consecutive-failure count crosses
+    /// `configuration.circuitBreakerThreshold`. The poll loop checks
+    /// this at the top of each iteration and returns early when set,
+    /// so a sustained outage stops hammering the gateway entirely
+    /// instead of plateauing at `backoffCap` forever. Cleared by
+    /// `stop()` so toggle-off-on in Settings UI is the natural
+    /// recovery path.
+    var isCircuitOpen = false
 
     public init(
         name: String,
@@ -143,7 +173,8 @@ public actor CloudKitTransport: RemoteTransport {
         PollHealth(
             isHealthy: consecutivePollFailures < configuration.healthFailureThreshold,
             consecutiveFailures: consecutivePollFailures,
-            lastFailureReason: lastPollFailureReason
+            lastFailureReason: lastPollFailureReason,
+            isCircuitOpen: isCircuitOpen
         )
     }
 
@@ -176,6 +207,12 @@ public actor CloudKitTransport: RemoteTransport {
             await channel.close()
         }
         channels.removeAll()
+        // D-3 — clean slate so the next `start()` re-arms the breaker
+        // from zero. Toggle-off-on in Settings is the user's recovery
+        // path after the breaker opens against a sustained outage.
+        consecutivePollFailures = 0
+        lastPollFailureReason = nil
+        isCircuitOpen = false
     }
 
     /// Triggered by silent push (APNs) — bypasses the poll interval.
