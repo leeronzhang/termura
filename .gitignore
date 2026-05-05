@@ -47,6 +47,7 @@ Packages/TermuraRemoteKit/Tests/*/*
 !Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/TransportEventStreamTests.swift
 !Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/CloudKitClientTransportTests.swift
 !Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/CloudKitClientTransportCircuitBreakerTests.swift
+!Packages/TermuraRemoteKit/Tests/TermuraRemoteClientTests/LANBrowserStateMappingTests.swift
 !Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/CloudKitReplyChannelEventTests.swift
 !Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/CloudKitTransportCircuitBreakerTests.swift
 
