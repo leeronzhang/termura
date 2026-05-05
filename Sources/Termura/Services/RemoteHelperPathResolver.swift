@@ -11,11 +11,21 @@
 
 import Foundation
 
-/// Relative path of the helper inside `Termura.app/`. Owned here so the
-/// private build script and the runtime resolver have a single source of
-/// truth for the layout under `Contents/Helpers/`.
+/// Relative path of the helper executable inside `Termura.app/`. Owned
+/// here so the private build script and the runtime resolver share a
+/// single source of truth.
+///
+/// The helper is wrapped in a child `.app` bundle at
+/// `Contents/Helpers/termura-remote-agent.app/` so the build phase can
+/// drop a copy of the parent's `embedded.provisionprofile` inside that
+/// child bundle. AMFI's profile lookup for a standalone Mach-O at
+/// `Contents/Helpers/<name>` does NOT walk up to the parent app's
+/// `Contents/embedded.provisionprofile` — pre-fix the helper was killed
+/// at exec time with `Code=-413 No matching profile found` because
+/// AMFI never saw the parent's profile. Wrapping into a `.app` lets
+/// the bundle's own `Contents/embedded.provisionprofile` be authoritative.
 enum RemoteHelperLayout {
-    static let executableRelativePath = "Contents/Helpers/termura-remote-agent"
+    static let executableRelativePath = "Contents/Helpers/termura-remote-agent.app/Contents/MacOS/termura-remote-agent"
 }
 
 protocol RemoteHelperPathResolving: Sendable {
