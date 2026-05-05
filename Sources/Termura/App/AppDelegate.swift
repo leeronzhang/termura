@@ -161,12 +161,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        // Secondary defense: re-suppress titlebar chrome on app activation.
-        // AppKit resets titlebarAppearsTransparent and effect views when the app
-        // regains focus; the KVO guard catches most resets, but re-applying here
-        // covers any gap between the reset and the KVO callback.
+        // Re-suppress titlebar chrome on activation: AppKit resets
+        // titlebarAppearsTransparent and effect views when the app regains focus,
+        // and KVO guards may not catch every transient. Scope to project windows
+        // only — SwiftUI Settings must keep system-default titlebar (otherwise
+        // the TabView bleeds into the titlebar and the traffic-light layout
+        // drifts off macOS standard).
         for window in NSApp.windows {
-            guard !(window is NSPanel), window.contentViewController != nil,
+            guard window.windowController is ProjectWindowController,
                   !window.styleMask.contains(.fullScreen) else { continue }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
