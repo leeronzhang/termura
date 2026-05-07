@@ -99,11 +99,20 @@
 - Font customization (family + size)
 - Dark mode support
 
+### Remote Control (Mac side)
+
+- iOS companion app pairs with Mac over LAN (Bonjour + WebSocket) and falls back to CloudKit-mailbox transport for cross-network reach
+- Built-in LaunchAgent helper keeps the bridge alive when Termura.app isn't in the foreground (installed on first pairing, opt-in)
+- Identity / paired-device records persist in macOS Keychain so iPhones survive Mac restarts
+- 256 KB-capped command-boundary snapshots (no streaming PTY); oversized output spills into CKAsset attachments
+- Per-device revocation + global "wipe all pairings" reset; agent process state can be wiped over XPC
+- The iOS app itself ships from a separate paid-IAP repository; the Mac side is fully open-source
+
 ### Privacy
 
-- Zero telemetry, zero login, fully offline
-- All data stored locally in `~/.termura/`
-- No network transmission of user data
+- Zero telemetry, zero login, fully offline by default
+- All data stored locally in `~/.termura/`; remote-control transport opt-in per device, traffic stays in your iCloud private DB or your LAN
+- No network transmission of user data outside the explicit remote-control flow
 
 ## Tech Stack
 
@@ -115,6 +124,9 @@
 | Database | [GRDB](https://github.com/groue/GRDB.swift) (SQLite + FTS5) |
 | Shortcuts | [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) |
 | Collections | [Swift Collections](https://github.com/apple/swift-collections) |
+| Remote wire protocol | `Packages/TermuraRemoteKit` (Protocol / Server / Client) — in-tree SPM |
+| XPC interfaces | `Packages/AgentXPCInterfaces` — ObjC clang module for the agent ↔ app bridge |
+| LaunchAgent helper | `Packages/LaunchAgent` — SPM executable `termura-remote-agent` |
 | Build | XcodeGen + Swift 6.0 |
 
 ## Getting Started
@@ -265,11 +277,20 @@ Contributions are welcome! Please read the project guidelines before submitting 
 - 字体自定义（字体族 + 字号）
 - 深色模式支持
 
+### 远程控制（Mac 端）
+
+- iOS 伴侣 app 通过 LAN（Bonjour + WebSocket）与 Mac 配对，跨网时回退到 CloudKit 信箱模式
+- 内置 LaunchAgent 守护进程，Termura.app 未在前台时仍保持桥接（首次配对时引导启用，可选）
+- 身份 / 已配对设备记录持久化在 macOS Keychain，Mac 重启后 iPhone 不需重新配对
+- 256 KB 上限的命令边界级输出快照（**非流式 PTY**），超限自动转 CKAsset 附件
+- 每设备撤销 + 全局"撤销所有配对"重置；Agent 进程状态可通过 XPC 远程清空
+- iOS app 本体从独立的付费 IAP 仓库发布；Mac 端代码完全开源
+
 ### 隐私
 
-- 零遥测、零登录、完全离线
-- 所有数据本地存储于 `~/.termura/`
-- 不进行任何用户数据的网络传输
+- 默认零遥测、零登录、完全离线
+- 所有数据本地存储于 `~/.termura/`；远程控制传输按设备 opt-in，流量留在你自己的 iCloud 私有库或局域网
+- 除显式启用的远程控制外，不进行任何用户数据的网络传输
 
 ## 技术栈
 
@@ -281,6 +302,9 @@ Contributions are welcome! Please read the project guidelines before submitting 
 | 数据库 | [GRDB](https://github.com/groue/GRDB.swift)（SQLite + FTS5） |
 | 快捷键 | [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) |
 | 集合类型 | [Swift Collections](https://github.com/apple/swift-collections) |
+| 远程协议 | `Packages/TermuraRemoteKit`（Protocol / Server / Client，仓内 SPM） |
+| XPC 接口 | `Packages/AgentXPCInterfaces` — Agent ↔ App 桥接的 ObjC clang module |
+| LaunchAgent | `Packages/LaunchAgent` — SPM 可执行 `termura-remote-agent` |
 | 构建 | XcodeGen + Swift 6.0 |
 
 ## 快速开始

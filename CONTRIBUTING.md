@@ -18,10 +18,14 @@ Found a bug or have a feature request? Please [open an issue](https://github.com
 The source code is available for reference and review. The project is built with:
 
 - **SwiftUI + AppKit** — UI layer
-- **SwiftTerm** — terminal emulation
-- **GRDB** — local session storage
+- **libghostty** (vendored as a submodule + xcframework) — Metal GPU-accelerated terminal emulation
+- **GRDB** — local session storage (SQLite + FTS5)
 - **Highlightr** — syntax highlighting
 - **KeyboardShortcuts** — global hotkeys
+- **TermuraRemoteKit** (in-tree SPM package) — wire protocol + LAN/CloudKit transports for the iOS Remote companion
+- **AgentXPCInterfaces** + **LaunchAgent** (in-tree SPM packages) — XPC bridge + daemon helper for cross-network remote control
+
+For the engineering policy that all PRs must conform to, see [CLAUDE.md](CLAUDE.md).
 
 ## License
 
