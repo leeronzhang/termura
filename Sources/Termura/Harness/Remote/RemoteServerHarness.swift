@@ -1,10 +1,7 @@
-// Wraps the LAN `RemoteServer` from TermuraRemoteKit and adapts it to the public
-// `RemoteIntegration` protocol consumed by `AppServices`. Lifecycle is opt-in:
-// `start()` is invoked by Settings UI (PR9), never automatically at app launch.
-//
-// Identity (Ed25519 keypair) and paired-device records are both persisted in the
-// macOS Keychain so that restarts preserve pairings — a fresh keypair on every
-// launch would invalidate every iPhone the user previously paired.
+// Wraps the LAN `RemoteServer` (TermuraRemoteKit) into the `RemoteIntegration`
+// surface. Lifecycle is opt-in: `start()` is invoked by Settings UI, never at
+// app launch. Identity (Ed25519 keypair) + paired-device records persist in
+// the macOS Keychain so restarts preserve pairings.
 
 import CryptoKit
 import Foundation
@@ -141,13 +138,17 @@ actor RemoteServerHarness: RemoteIntegration {
         }
     }
 
-    /// Lazy assembly so that `RemoteIntegrationFactory.make` can stay synchronous
-    /// (called from `AppDelegate.init` which can't be `async throws`). Keychain
-    /// I/O happens on the first `start()` or `issueInvitation()`. Module-
-    /// internal so same-module `+Lookup.swift` and `+Migration.swift` can
-    /// share the lazy-resolve pattern without re-deriving a separate path.
+    /// Lazy assembly so `RemoteIntegrationFactory.make` stays synchronous
+    /// (AppDelegate.init can't be `async throws`); Keychain I/O happens on
+    /// the first `start()` / `issueInvitation()`. Bails out before any
+    /// Keychain read when the process lacks the iCloud-services entitlement
+    /// (Debug builds) — otherwise the paired-devices prompt fires and
+    /// CKContainer traps. See `ICloudEntitlementGate.swift`.
     func assembleIfNeeded() async throws -> AssembledStack {
         if let assembled { return assembled }
+        guard processHasICloudEntitlement() else {
+            throw RemoteHarnessError.iCloudUnavailable(status: .restricted)
+        }
         let codec = JSONRemoteCodec()
         let identityStore = KeychainDeviceIdentityStore(serviceName: KeychainServices.identity)
         let identity = try await identityStore.loadOrCreate()
