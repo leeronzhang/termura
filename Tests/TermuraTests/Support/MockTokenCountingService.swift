@@ -1,0 +1,51 @@
+import Foundation
+@testable import Termura
+
+actor MockTokenCountingService: TokenCountingServiceProtocol {
+    var stubbedTokens: [SessionID: Int] = [:]
+    var stubbedBreakdowns: [SessionID: TokenEstimateBreakdown] = [:]
+    var accumulateInputCallCount = 0
+    var accumulateOutputCallCount = 0
+    var accumulateCachedCallCount = 0
+    var applyParsedStatsCallCount = 0
+    var resetCallCount = 0
+
+    func accumulateInput(for sessionID: SessionID, text: String) {
+        accumulateInputCallCount += 1
+    }
+
+    func accumulateOutput(for sessionID: SessionID, text: String) {
+        accumulateOutputCallCount += 1
+    }
+
+    func accumulateCached(for sessionID: SessionID, count: Int) {
+        accumulateCachedCallCount += 1
+    }
+
+    func applyParsedStats(for sessionID: SessionID, inputTokens: Int, outputTokens: Int, cachedTokens: Int) {
+        applyParsedStatsCallCount += 1
+        stubbedBreakdowns[sessionID] = TokenEstimateBreakdown(
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cachedTokens: cachedTokens
+        )
+    }
+
+    func estimatedTokens(for sessionID: SessionID) -> Int {
+        stubbedTokens[sessionID] ?? 0
+    }
+
+    func tokenBreakdown(for sessionID: SessionID) -> TokenEstimateBreakdown {
+        stubbedBreakdowns[sessionID] ?? .zero
+    }
+
+    func reset(for sessionID: SessionID) {
+        resetCallCount += 1
+        stubbedTokens.removeValue(forKey: sessionID)
+        stubbedBreakdowns.removeValue(forKey: sessionID)
+    }
+
+    func setStubbed(tokens: Int, for sessionID: SessionID) {
+        stubbedTokens[sessionID] = tokens
+    }
+}
