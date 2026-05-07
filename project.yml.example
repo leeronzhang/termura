@@ -298,7 +298,18 @@ targets:
             exit 0
           fi
           if [[ ! -f "$PARENT_PROFILE" ]]; then
-            echo "warning: parent app has no embedded.provisionprofile at $PARENT_PROFILE — helper will fail AMFI on launch (No matching profile found). Make sure your Developer ID provisioning profile is embedded in the .app archive."
+            # Ad-hoc-signed Debug builds (CODE_SIGN_IDENTITY=-) intentionally
+            # have no provisioning profile. The helper would fail AMFI on
+            # launch, but AppDelegate's iCloud-entitlement runtime gate
+            # already skips RemoteAgentBridge.start in Debug, so the helper
+            # never actually exec()s in that path — keep the build log
+            # quiet there. Real-identity builds without a profile are still
+            # a misconfiguration that should fail loudly.
+            if [[ "${EXPANDED_CODE_SIGN_IDENTITY:-}" == "-" || -z "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]]; then
+              echo "note: ad-hoc-signed build has no embedded.provisionprofile; helper embed skipped (expected for Debug, runtime gate ensures helper is never launched here)."
+            else
+              echo "warning: parent app has no embedded.provisionprofile at $PARENT_PROFILE — helper will fail AMFI on launch (No matching profile found). Make sure your Developer ID provisioning profile is embedded in the .app archive."
+            fi
             exit 0
           fi
           cp "$PARENT_PROFILE" "$HELPER_APP/Contents/embedded.provisionprofile"
