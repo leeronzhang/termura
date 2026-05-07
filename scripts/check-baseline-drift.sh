@@ -7,9 +7,11 @@
 #      value MUST be `termura-harness` (path-only). Any change to the
 #      pattern body is rejected.
 #   2. `scripts/pre-commit` declares SELF_EXCLUDE_FILES exactly once
-#      with exactly four path tokens (`scripts/pre-commit`,
+#      with exactly five path tokens (`scripts/pre-commit`,
 #      `scripts/regen-all.sh`, `scripts/quality-gate.sh`,
-#      `scripts/check-baseline-drift.sh`). Adding a 5th entry is rejected.
+#      `scripts/check-baseline-drift.sh`, `CLAUDE.md`). The fifth
+#      (`CLAUDE.md`) is required because §12 documents the open-core
+#      boundary by name. Adding a 6th entry is rejected.
 #   3. `scripts/pre-commit` does NOT contain a `WHITELIST_REGEX` variable
 #      anymore — re-introducing it is rejected.
 #
@@ -89,16 +91,17 @@ if [[ "$SELF_LINE_COUNT" != "1" ]]; then
     echo "FAIL: scripts/pre-commit must declare SELF_EXCLUDE_FILES exactly once (got $SELF_LINE_COUNT)." >&2
     exit 1
 fi
-EXPECTED_SELF_LINE="SELF_EXCLUDE_FILES='^(scripts/pre-commit|scripts/regen-all\\.sh|scripts/quality-gate\\.sh|scripts/check-baseline-drift\\.sh)\$'"
+EXPECTED_SELF_LINE="SELF_EXCLUDE_FILES='^(scripts/pre-commit|scripts/regen-all\\.sh|scripts/quality-gate\\.sh|scripts/check-baseline-drift\\.sh|CLAUDE\\.md)\$'"
 if ! grep -qFx "$EXPECTED_SELF_LINE" "$HOOK"; then
     echo "FAIL: scripts/pre-commit SELF_EXCLUDE_FILES drifted from baseline." >&2
     echo "       Expected: $EXPECTED_SELF_LINE" >&2
     echo "       Got:      $(grep -E '^SELF_EXCLUDE_FILES=' "$HOOK")" >&2
     echo "" >&2
-    echo "Per CLAUDE.md §12.3, SELF_EXCLUDE_FILES is reserved for the four" >&2
-    echo "scanner / cross-repo orchestrator scripts that physically must" >&2
-    echo "self-reference the leak literal. Adding any 5th entry is a" >&2
-    echo "policy regression. Reject this PR." >&2
+    echo "Per CLAUDE.md §12.3, SELF_EXCLUDE_FILES is reserved for the five" >&2
+    echo "files that physically must self-reference the leak literal: four" >&2
+    echo "scanner / cross-repo orchestrator scripts plus CLAUDE.md (whose" >&2
+    echo "§12 names the sibling repo). Adding any 6th entry is a policy" >&2
+    echo "regression. Reject this PR." >&2
     exit 1
 fi
 

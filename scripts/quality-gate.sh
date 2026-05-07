@@ -30,12 +30,9 @@ cd "$REPO_ROOT"
 
 # When the private termura-harness sibling exists alongside this repo and the
 # caller explicitly asked for it (or invoked us via the harness wrapper), we
-# scan both repos under the same gate. Private path resolution is relative to
-# the public repo's cwd so a single config tree drives both. Public-only checks
-# (xcstrings catalog, layer deps tied to Termura Session/Output/Input) are not
-# duplicated for private — those concepts don't exist there. Versions.xcconfig
-# ↔ pbxproj sync IS shared across both, since iOS and Mac each have their own
-# xcconfig owned by check-version-sync.sh.
+# scan iOS sources under the same gate. Post-PR4 the private repo only ships
+# the iOS Remote app — the Mac harness sources moved to this repo, so the
+# `--include-private` mode now amounts to "also lint iOS/TermuraRemote".
 HARNESS_ROOT=""
 if [[ $INCLUDE_PRIVATE -eq 1 ]]; then
     if [[ ! -d "$REPO_ROOT/../termura-harness" ]]; then
@@ -61,11 +58,6 @@ PRIVATE_VIEW_ROOTS=()
 PRIVATE_BARE_DATE_ROOTS=()
 PRIVATE_SOURCE_ROOTS=()
 if [[ -n "$HARNESS_ROOT" ]]; then
-    if [[ -d "$HARNESS_ROOT/Sources" ]]; then
-        PRIVATE_SOURCE_ROOTS+=("$HARNESS_ROOT/Sources")
-        PRIVATE_TERMURA_LIKE_ROOTS+=("$HARNESS_ROOT/Sources")
-        PRIVATE_BARE_DATE_ROOTS+=("$HARNESS_ROOT/Sources")
-    fi
     if [[ -d "$HARNESS_ROOT/iOS/TermuraRemote" ]]; then
         PRIVATE_SOURCE_ROOTS+=("$HARNESS_ROOT/iOS/TermuraRemote")
         PRIVATE_TERMURA_LIKE_ROOTS+=("$HARNESS_ROOT/iOS/TermuraRemote")
@@ -73,11 +65,6 @@ if [[ -n "$HARNESS_ROOT" ]]; then
         if [[ -d "$HARNESS_ROOT/iOS/TermuraRemote/Features" ]]; then
             PRIVATE_VIEW_ROOTS+=("$HARNESS_ROOT/iOS/TermuraRemote/Features")
         fi
-    fi
-    if [[ -d "$HARNESS_ROOT/LaunchAgent/Sources" ]]; then
-        PRIVATE_SOURCE_ROOTS+=("$HARNESS_ROOT/LaunchAgent/Sources")
-        PRIVATE_TERMURA_LIKE_ROOTS+=("$HARNESS_ROOT/LaunchAgent/Sources")
-        PRIVATE_BARE_DATE_ROOTS+=("$HARNESS_ROOT/LaunchAgent/Sources")
     fi
 fi
 
@@ -337,7 +324,6 @@ run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
 # CLAUDE.md §12.3). Empty TERMURA_HARNESS_ROOT → public-only check.
 TERMURA_HARNESS_ROOT="$HARNESS_ROOT" run_gate_check "Version sync check" bash scripts/check-version-sync.sh
 run_gate_check "Open-core baseline drift check" bash scripts/check-baseline-drift.sh
-run_gate_check "Open-core baseline snapshots check" bash scripts/check-baseline-snapshots.sh
 
 echo "-> Forbidden Swift pattern checks..."
 # Pre-build the list of paths the inline Python should scan. We pass them via

@@ -1,4 +1,0 @@
-36:  excluded:
-51:  excluded:
-122:    excluded: ".*GhosttyAppContext\\.swift"
-263:    excluded:

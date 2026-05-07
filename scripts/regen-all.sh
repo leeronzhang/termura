@@ -16,12 +16,12 @@
 #
 # Project map (each row = one yml → one pbxproj):
 #   PUBLIC  project.yml                          → Termura.xcodeproj
-#   PRIVATE <private repo>/project-mac.yml       → <private repo>/Termura-Mac.xcodeproj
 #   PRIVATE <private repo>/iOS/project-ios.yml   → <private repo>/iOS/TermuraRemote.xcodeproj
 #
-# Private rows are skipped silently when the sibling private repo isn't
-# present (Free build / clean clone), so this script is safe to run from
-# any working tree.
+# The private row is skipped silently when the sibling private repo isn't
+# present, so this script is safe to run from any working tree. Post-PR4
+# the Mac harness implementation lives in this repo, so there is no
+# private Mac yml to regenerate.
 
 set -euo pipefail
 
@@ -32,9 +32,8 @@ MODE="${1:-regen}"
 declare -a TARGETS=(
     "$REPO_ROOT|project.yml|Termura.xcodeproj/project.pbxproj"
 )
-if [ -d "$HARNESS_ROOT" ]; then
+if [ -d "$HARNESS_ROOT/iOS" ]; then
     TARGETS+=(
-        "$HARNESS_ROOT|project-mac.yml|Termura-Mac.xcodeproj/project.pbxproj"
         "$HARNESS_ROOT/iOS|project-ios.yml|TermuraRemote.xcodeproj/project.pbxproj"
     )
 fi
@@ -76,9 +75,6 @@ check_one() {
     case "$yml" in
         project.yml)
             roots=("Sources/Termura" "Sources/TermuraNotesKit")
-            ;;
-        project-mac.yml)
-            roots=("Sources" "../termura/Sources/Termura" "../termura/Sources/TermuraNotesKit")
             ;;
         project-ios.yml)
             roots=("TermuraRemote")

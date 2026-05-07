@@ -90,11 +90,13 @@ vendor/ghostty-resources
 docs/
 
 # Claude Code
-CLAUDE.md
+# CLAUDE.md was previously gitignored as part of the open-core cleanup
+# (force-tracked entries were dropped). Post-PR4 the open-core boundary
+# only protects against sibling-repo path leaks; CLAUDE.md is the canonical
+# engineering policy and is tracked normally so changes go through review.
 .claude/
 # Claude Code's per-project auto-memory (cross-conversation state).
-# Local-only; never tracked. The previous force-tracked entry was
-# removed in the open-core whitelist cleanup.
+# Local-only; never tracked.
 memory/
 
 # Landing page (separate repo)
