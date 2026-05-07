@@ -107,7 +107,13 @@ final class EditorViewModel {
         }
         history.push(text)
         currentText = ""
-        clearAttachments()
+        // Clear UI state synchronously, but defer temp-file deletion until after the
+        // PTY has consumed the path. WHY: engine.send() returning only means bytes are
+        // in the PTY buffer — the downstream CLI (e.g. Claude Code) still has to read
+        // the image file. Deleting in parallel races that read; first-attempt images
+        // were silently dropped because the temp PNG vanished before the CLI opened it.
+        let tempURLsToDelete = attachments.filter(\.isTemporary).map(\.url)
+        attachments.removeAll()
         modeController.switchToPassthrough()
         logger.debug("Submitting command length=\(fullCommand.count)")
         onCommandSubmit?(text) // user text only — used for agent detection
@@ -116,10 +122,36 @@ final class EditorViewModel {
         // Dismiss must happen after send+pressReturn so the ghostty surface is in a stable
         // state (dismissComposer triggers SwiftUI view tree changes that could race).
         let capturedEngine = engine
+        let capturedFileManager = fileManager
         Task {
             await capturedEngine.send(fullCommand)
             await capturedEngine.pressReturn()
             onSubmit?()
+            guard !tempURLsToDelete.isEmpty else { return }
+            // WHY: PTY bytes ≠ CLI consumed; give the downstream agent a buffer to
+            // open the attachment file before we delete it. The 2s window is coarse
+            // — there's no signal we can wait on without a roundtrip protocol.
+            // OWNER: chained off the submit task; one-shot per submit() call.
+            // TEARDOWN: detached delete loop is fire-and-forget; the OS reclaims any
+            // missed temp files on next reboot.
+            // TEST: cover submit-with-temp-image and assert file persists past send.
+            Task.detached {
+                do {
+                    try await Task.sleep(for: .seconds(2))
+                } catch {
+                    // Non-critical: cancellation while waiting just means we skip
+                    // cleanup this round; OS reclaims temp files at next reboot.
+                    logger.debug("Temp attachment cleanup wait interrupted: \(error.localizedDescription)")
+                    return
+                }
+                for url in tempURLsToDelete {
+                    do {
+                        try capturedFileManager.removeItem(at: url)
+                    } catch {
+                        logger.debug("Temp attachment removal skipped: \(error.localizedDescription)")
+                    }
+                }
+            }
         }
     }
 
