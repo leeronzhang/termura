@@ -19,20 +19,15 @@ DerivedData/
 # Each developer can regenerate with their own paths.
 Termura.xcworkspace/
 
-# Tests (internal)
-Tests/
+# Tests/ is fully tracked per CLAUDE.md §12.1 ("公开 target tests"). The
+# pre-PR2 catch-all `Tests/` rule has been removed so newly added test
+# files (Tests/TermuraTests/Harness/* from the harness migration) are
+# visible to git without per-file negation gymnastics.
 
-# Harness directory: exclude private implementations, keep public stubs and protocols.
-# Real implementations live in the private harness Swift Package (sibling repo).
-Sources/Termura/Harness/*
-!Sources/Termura/Harness/HarnessModels.swift
-!Sources/Termura/Harness/RuleFileRepositoryProtocol.swift
-!Sources/Termura/Harness/HarnessViewModel+Stub.swift
-!Sources/Termura/Harness/ExperienceCodifier+Stub.swift
-!Sources/Termura/Harness/RemoteIntegration+Stub.swift
-!Sources/Termura/Harness/HarnessBootstrap.swift
-!Sources/Termura/Harness/AgentEventSource.swift
-!Sources/Termura/Harness/RemoteTransportFailure.swift
+# Harness directory: previously a stub-only allowlist when the Mac harness
+# implementation lived in the private repo. PR2 of the harness migration
+# inlined the real implementation into Sources/Termura/Harness/ — the
+# directory is now fully tracked, with no whitelist gymnastics.
 
 # Public-package contract tests for the wire library. The line-22 `Tests/`
 # rule was meant for the internal Termura app's tests, not the public

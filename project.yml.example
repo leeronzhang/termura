@@ -1,19 +1,19 @@
-# Open-Core build template. Copy to `project.yml`, replace `DEVELOPMENT_TEAM`
+# Build template. Copy to `project.yml`, replace `DEVELOPMENT_TEAM`
 # with your Apple Developer team ID, then run `xcodegen generate`.
 #
 # Debug builds use `Resources/TermuraDebug.entitlements`, which deliberately
 # omits CloudKit/push capabilities so a fresh machine can sign and run locally
 # without owning the production container/profile setup.
 #
-# Release / Free builds keep the full remote-control entitlements. If you need
+# Release builds keep the full remote-control entitlements. If you need
 # to archive or test those capabilities under your own team, replace the bundle
 # identifiers and CloudKit container values with resources your team owns.
 #
 # `project.yml` itself is gitignored (and untracked since PR9.x) so each
-# developer's signing identity stays local. The public open-core build
-# never bundles the LaunchAgent helper — that is the harness build's job
-# (see the private harness project file). This template is intentionally
-# harness-naive and produces a Free-buildable Termura.app on its own.
+# developer's signing identity stays local. The Mac app target builds and
+# embeds the LaunchAgent helper binary (Packages/LaunchAgent) automatically
+# — see the preBuildScript "Build LaunchAgent helper binary" below for the
+# Sonoma TCC / Xcode 26 codesign daemon workarounds the helper depends on.
 
 name: Termura
 options:
@@ -27,7 +27,6 @@ options:
 configs:
   Debug: debug
   Release: release
-  Free: release
 
 # Versions.xcconfig is the single source of truth for MARKETING_VERSION /
 # CURRENT_PROJECT_VERSION. Edit them in Xcode UI (General → Identity →
@@ -37,7 +36,6 @@ configs:
 configFiles:
   Debug: Versions.xcconfig
   Release: Versions.xcconfig
-  Free: Versions.xcconfig
 
 settings:
   base:
@@ -65,6 +63,8 @@ packages:
     exactVersion: "1.1.4"
   TermuraRemoteKit:
     path: Packages/TermuraRemoteKit
+  TermuraAgentXPC:
+    path: Packages/AgentXPCInterfaces
 
 targets:
   Termura:
@@ -99,6 +99,140 @@ targets:
           else
             echo "warning: SwiftLint not installed. Run: brew install swiftlint"
           fi
+      - name: Build LaunchAgent helper binary
+        # IMPORTANT: This script only invokes `swift build` to produce the
+        # helper binary at Packages/LaunchAgent/.build/release/termura-remote-agent.
+        # It MUST NOT mkdir or cp anything into Termura.app/. macOS Sonoma+
+        # App Management TCC labels the .app bundle's creator: any bash
+        # write into .app/ before Xcode populates it makes Xcode's later
+        # builtin-copy fail with EPERM ("Operation not permitted") on
+        # every Resources/CpResource step. The actual embed-into-app
+        # happens via the `copyFiles` entry below, which uses Xcode's
+        # native CopyFiles build phase (Code Sign On Copy enabled).
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/Packages/LaunchAgent/Package.swift
+          - $(SRCROOT)/Packages/LaunchAgent/Sources/termura-remote-agent/main.swift
+        outputFiles:
+          - $(SRCROOT)/Packages/LaunchAgent/.build/release/termura-remote-agent
+        script: |
+          AGENT_PKG="$SRCROOT/Packages/LaunchAgent"
+          if [[ ! -d "$AGENT_PKG" ]]; then
+            echo "error: $AGENT_PKG not found; LaunchAgent sources are required for the harness build"
+            exit 1
+          fi
+          export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin"
+          # Build helper for every architecture the parent app declares
+          # (`ARCHS = arm64 x86_64`), then `lipo` them into a universal
+          # binary at the canonical .build/release/ output path. Pre-fix
+          # `swift build` defaulted to host-only and produced an
+          # arm64-only helper; on Intel Macs launchd refused the binary
+          # and reported exit code 78 (EX_CONFIG) on every bootstrap, so
+          # `Settings → Remote Control → Enable` looked successful (UI
+          # toggle on, plist installed) but no daemon was actually
+          # listening, leaving cross-network reconnect stuck on
+          # "Reconnecting…" forever because no one polled the iCloud
+          # private DB.
+          ARCHS_LIST="${ARCHS:-arm64}"
+          BIN_PATH="$AGENT_PKG/.build/release/termura-remote-agent"
+          mkdir -p "$(dirname "$BIN_PATH")"
+          BUILT_BINS=()
+          for ARCH in $ARCHS_LIST; do
+            echo "Building termura-remote-agent for $ARCH"
+            (cd "$AGENT_PKG" && swift build -c release --product termura-remote-agent --arch "$ARCH")
+            ARCH_BIN="$AGENT_PKG/.build/$ARCH-apple-macosx/release/termura-remote-agent"
+            if [[ ! -f "$ARCH_BIN" ]]; then
+              echo "error: termura-remote-agent build for $ARCH did not produce $ARCH_BIN"
+              exit 1
+            fi
+            BUILT_BINS+=("$ARCH_BIN")
+          done
+          if [[ ${#BUILT_BINS[@]} -eq 1 ]]; then
+            cp "${BUILT_BINS[0]}" "$BIN_PATH"
+          else
+            lipo -create "${BUILT_BINS[@]}" -output "$BIN_PATH"
+          fi
+          if [[ ! -f "$BIN_PATH" ]]; then
+            echo "error: termura-remote-agent merged universal binary did not appear at $BIN_PATH"
+            exit 1
+          fi
+          # Wrap the bare Mach-O into a child `.app` bundle so the
+          # post-build embedded.provisionprofile drop point is inside
+          # a sealed bundle (codesign treats Contents/Helpers/ as a
+          # code-only region; a bare `.provisionprofile` data file
+          # next to a Mach-O there fails the parent app's CodeSign
+          # step with "code object is not signed at all"). Wrapping
+          # into `.app` lets the profile live at
+          # `<wrapper>/Contents/embedded.provisionprofile`, which
+          # codesign seals as part of the bundle's normal signature.
+          # AMFI then finds the profile via the child bundle's own
+          # provisioning lookup at exec time.
+          HELPER_APP="$AGENT_PKG/.build/release/termura-remote-agent.app"
+          rm -rf "$HELPER_APP"
+          mkdir -p "$HELPER_APP/Contents/MacOS"
+          mv "$BIN_PATH" "$HELPER_APP/Contents/MacOS/termura-remote-agent"
+          cat > "$HELPER_APP/Contents/Info.plist" <<INFOPLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.termura.app</string>
+            <key>CFBundleExecutable</key>
+            <string>termura-remote-agent</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0</string>
+            <key>LSUIElement</key>
+            <true/>
+          </dict>
+          </plist>
+          INFOPLIST
+          BIN_PATH="$HELPER_APP/Contents/MacOS/termura-remote-agent"
+          # Pre-sign the helper here with the parent app's identity, so the
+          # CopyFiles phase below is a pure binary copy (no `CodeSignOnCopy`
+          # attribute). Xcode's `CodeSignOnCopy` invokes codesign with
+          # `--preserve-metadata=identifier,entitlements,flags`, which
+          # interacts badly with the `adhoc, linker-signed` signature
+          # `swift build` emits on arm64 and bails as
+          # "internal error in Code Signing subsystem" inside the IDE
+          # build (the same args succeed when run from a clean shell —
+          # likely a stale per-target cache in Xcode's signing daemon).
+          # Strip + re-sign here side-steps the whole code-path.
+          codesign --remove-signature "$BIN_PATH" 2>/dev/null || true
+          # The agent process itself talks to CloudKit, so it must declare
+          # the iCloud container entitlement — `CKContainer.init(identifier:)`
+          # otherwise traps `EXC_BREAKPOINT` at startup. AMFI then enforces
+          # that entitlement against an embedded provisioning profile;
+          # without one, exec is killed with SIGKILL. We side-step the
+          # "agent needs its own profile" problem by signing the agent
+          # with the **parent app's bundle identifier** (`-i com.termura.app`)
+          # so it inherits the parent's `Contents/embedded.provisionprofile`
+          # at AMFI check time. The entitlements file is the same one the
+          # parent app uses (Resources/Termura.entitlements) — content is
+          # an exact mirror of what the helper used to claim out of the
+          # private repo.
+          AGENT_ENTITLEMENTS="$SRCROOT/Resources/Termura.entitlements"
+          if [[ ! -f "$AGENT_ENTITLEMENTS" ]]; then
+            echo "error: agent entitlements file not found at $AGENT_ENTITLEMENTS"
+            exit 1
+          fi
+          PARENT_BUNDLE_ID="${PRODUCT_BUNDLE_IDENTIFIER:-com.termura.app}"
+          # Mirror parent's `ENABLE_HARDENED_RUNTIME`. Debug disables it
+          # (Xcode 26 IDE bug workaround — see Debug config note); Release
+          # keeps it on for App Store / notarization compliance. Without
+          # this, agent would over-claim hardened runtime relative to
+          # parent and AMFI would mismatch.
+          RUNTIME_FLAG=""
+          if [[ "${ENABLE_HARDENED_RUNTIME:-NO}" == "YES" ]]; then
+            RUNTIME_FLAG="--options runtime"
+          fi
+          SIGN_IDENT="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+          codesign --force --sign "$SIGN_IDENT" -i "$PARENT_BUNDLE_ID" $RUNTIME_FLAG --timestamp=none --entitlements "$AGENT_ENTITLEMENTS" "$BIN_PATH"
+          echo "Built and signed LaunchAgent at $BIN_PATH (codeSigningID=$PARENT_BUNDLE_ID, runtime=${RUNTIME_FLAG:-disabled})"
     sources:
       - Sources/Termura
       - Sources/TermuraNotesKit
@@ -119,6 +253,74 @@ targets:
       - path: vendor/ghostty-resources/ghostty
         type: folder
         buildPhase: resources
+      # Embed the LaunchAgent helper binary via Xcode's native CopyFiles
+      # build phase. `destination: wrapper` for a macOS .app means the
+      # wrapper bundle root (= `Termura.app/`), and we want the helper at
+      # `Termura.app/Contents/Helpers/` because `RemoteHelperPathResolver`
+      # hard-codes that layout — so the subpath includes the `Contents/`
+      # prefix. `CodeSignOnCopy` lets Xcode sign the helper with the
+      # parent app's identity without an extra shell-script step writing
+      # into the .app (which would re-trigger macOS Sonoma+ App Management
+      # TCC EPERM on subsequent CpResource ops).
+      - path: Packages/LaunchAgent/.build/release/termura-remote-agent.app
+        optional: true
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Helpers
+    postBuildScripts:
+      - name: Embed provisioning profile inside LaunchAgent helper bundle
+        # AMFI's provisioning-profile lookup for a standalone Mach-O at
+        # `<parent>.app/Contents/Helpers/<binary>` does NOT walk up to
+        # the parent's `Contents/embedded.provisionprofile`. Pre-fix the
+        # helper claimed iCloud entitlements but AMFI reported "No
+        # matching profile found" (Code=-413) and SIGKILL'd the helper
+        # before `main()`, leaving `launchctl list` showing exit -9 / no
+        # PID and the cross-network reconnect path completely silent (no
+        # one polling the iCloud private DB).
+        #
+        # Solution: the helper is now wrapped in a child `.app` at
+        # `Contents/Helpers/termura-remote-agent.app/` (see the helper
+        # build script). This step copies the parent app's
+        # `embedded.provisionprofile` into the child bundle and re-signs
+        # the bundle so its codesign envelope seals the profile. AMFI's
+        # bundle profile lookup then finds the profile next to the
+        # helper Mach-O at `<helper.app>/Contents/embedded.provisionprofile`,
+        # validates the iCloud entitlements against it, and lets the
+        # process exec.
+        basedOnDependencyAnalysis: false
+        script: |
+          HELPER_APP="$BUILT_PRODUCTS_DIR/$WRAPPER_NAME/Contents/Helpers/termura-remote-agent.app"
+          HELPER_BIN="$HELPER_APP/Contents/MacOS/termura-remote-agent"
+          PARENT_PROFILE="$BUILT_PRODUCTS_DIR/$WRAPPER_NAME/Contents/embedded.provisionprofile"
+          if [[ ! -d "$HELPER_APP" ]]; then
+            echo "warning: helper bundle not at $HELPER_APP; skipping profile embed"
+            exit 0
+          fi
+          if [[ ! -f "$PARENT_PROFILE" ]]; then
+            echo "warning: parent app has no embedded.provisionprofile at $PARENT_PROFILE — helper will fail AMFI on launch (No matching profile found). Make sure your Developer ID provisioning profile is embedded in the .app archive."
+            exit 0
+          fi
+          cp "$PARENT_PROFILE" "$HELPER_APP/Contents/embedded.provisionprofile"
+          # Re-sign the helper bundle so its codesign envelope re-seals
+          # everything inside (binary + Info.plist + provisioning
+          # profile). Same identity / entitlements / hardened-runtime
+          # flag as the initial sign step in the helper's build script.
+          AGENT_ENTITLEMENTS="$SRCROOT/Resources/Termura.entitlements"
+          if [[ ! -f "$AGENT_ENTITLEMENTS" ]]; then
+            echo "error: agent entitlements file not found at $AGENT_ENTITLEMENTS"
+            exit 1
+          fi
+          SIGN_IDENT="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+          RUNTIME_FLAG=""
+          if [[ "${ENABLE_HARDENED_RUNTIME:-NO}" == "YES" ]]; then
+            RUNTIME_FLAG="--options runtime"
+          fi
+          # Sign inner Mach-O first (AMFI checks the binary's own
+          # signature), then seal the bundle around it.
+          codesign --force --sign "$SIGN_IDENT" -i "${PRODUCT_BUNDLE_IDENTIFIER:-com.termura.app}" $RUNTIME_FLAG --timestamp=none --entitlements "$AGENT_ENTITLEMENTS" "$HELPER_BIN"
+          codesign --force --sign "$SIGN_IDENT" -i "${PRODUCT_BUNDLE_IDENTIFIER:-com.termura.app}" $RUNTIME_FLAG --timestamp=none --entitlements "$AGENT_ENTITLEMENTS" "$HELPER_APP"
+          echo "Embedded provisioning profile inside helper bundle at $HELPER_APP/Contents/embedded.provisionprofile and re-signed bundle"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.termura.app
@@ -135,15 +337,52 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_ENTITLEMENTS: Resources/TermuraDebug.entitlements
           DEVELOPMENT_TEAM: ""
-          OTHER_SWIFT_FLAGS: "$(inherited)"
+          OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
+          # Xcode 26.0 (17A324) IDE has a reproducible bug in
+          # `XCBBuildService`'s codesign daemon: every `codesign --force`
+          # invocation that the IDE makes on nested Mach-Os has a chance
+          # to return "Operation not permitted" or "internal error in
+          # Code Signing subsystem", and once it fails the daemon's
+          # internal state degrades so subsequent builds fail too. The
+          # *same* codesign commands run from terminal `xcodebuild`
+          # always succeed.
+          #
+          # The permanent workaround is to MINIMISE the number of
+          # nested-Mach-O codesign calls the IDE has to make in a Debug
+          # build. The three settings below disable the Mach-Os Xcode
+          # would otherwise ship in Debug-only artefacts, so the IDE only
+          # has to sign the main `Termura` executable + the LaunchAgent
+          # helper (the helper is already pre-signed by our own shell
+          # in the preBuildScript and copied via CopyFiles, so the IDE
+          # essentially does one codesign per build → daemon never gets
+          # the chance to corrupt itself).
+          #
+          # 1. `ENABLE_HARDENED_RUNTIME=NO` removes the `-o runtime` flag
+          #    from the codesign command line; that flag is one of the
+          #    triggers in the buggy daemon path.
+          # 2. `ENABLE_DEBUG_DYLIB=NO` disables Xcode 14+'s "Debug Dylib
+          #    for Faster Iteration" feature which otherwise emits a
+          #    separate `Contents/MacOS/Termura.debug.dylib`. With it
+          #    off, the main exec links directly and there's no extra
+          #    .debug.dylib for the IDE to sign. (`EAGER_LINKING` is
+          #    related but doesn't control this dylib in Xcode 26.)
+          #    Slight cost: marginally slower incremental Debug builds.
+          # 3. `ENABLE_PREVIEWS=NO` disables SwiftUI Canvas Previews for
+          #    Debug builds via ⌘R. SwiftUI's preview canvas needs
+          #    `__preview.dylib`, which Xcode would emit + sign on every
+          #    build (and that's another buggy codesign target).
+          #    Re-enable temporarily if you actually use the Previews
+          #    canvas; the Run-via-Simulator/Mac flow doesn't need it.
+          #
+          # Release keeps Hardened Runtime on for App Store /
+          # notarisation; debug.dylib + Previews don't run in Release
+          # so no need to override there.
+          ENABLE_HARDENED_RUNTIME: NO
+          ENABLE_DEBUG_DYLIB: NO
+          ENABLE_PREVIEWS: NO
         Release:
           CODE_SIGN_ENTITLEMENTS: Resources/Termura.entitlements
-          OTHER_SWIFT_FLAGS: "$(inherited)"
-          SKIP_INSTALL: NO
-          INSTALL_PATH: /Applications
-        Free:
-          CODE_SIGN_ENTITLEMENTS: Resources/Termura.entitlements
-          OTHER_SWIFT_FLAGS: "$(inherited)"
+          OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
           SKIP_INSTALL: NO
           INSTALL_PATH: /Applications
     dependencies:
@@ -159,6 +398,10 @@ targets:
         product: DequeModule
       - package: TermuraRemoteKit
         product: TermuraRemoteProtocol
+      - package: TermuraRemoteKit
+        product: TermuraRemoteServer
+      - package: TermuraAgentXPC
+        product: TermuraAgentXPCInterfaces
 
   TermuraTests:
     type: bundle.unit-test
@@ -169,6 +412,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.termura.tests
         GENERATE_INFOPLIST_FILE: YES
+        # Match the host target's `-DHARNESS_ENABLED` so test files
+        # gated on it (Tests/TermuraTests/Harness/, Support/Mock*,
+        # Services/RuleFileRepositoryTests) actually compile and run.
+        OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
     dependencies:
       - target: Termura
 
@@ -205,6 +452,13 @@ schemes:
       targets:
         - TermuraTests
         - TermuraUITests
+      environmentVariables:
+        # Skip the agent ↔ app bridge auto-start during tests so
+        # CKContainer / Keychain / NSXPCConnection side-effects don't
+        # crash the host app on launch.
+        - variable: TERMURA_DISABLE_REMOTE_AGENT_BRIDGE
+          value: "1"
+          isEnabled: true
     profile:
       config: Release
     archive:

@@ -501,21 +501,10 @@ if [[ -n "$HARNESS_ROOT" && -d "$HARNESS_ROOT/iOS/TermuraRemote" ]]; then
         bash scripts/check-mirrored-state-freshness.sh "$HARNESS_ROOT/iOS/TermuraRemote"
 fi
 
-echo "-> Harness private file leak check..."
-HARNESS_WHITELIST='HarnessModels.swift|RuleFileRepositoryProtocol.swift|HarnessViewModel\+Stub.swift|ExperienceCodifier\+Stub.swift|RemoteIntegration\+Stub.swift|HarnessBootstrap.swift|AgentEventSource.swift|RemoteTransportFailure.swift'
-if [[ "$MODE" == "staged" ]]; then
-    HARNESS_CANDIDATES="$(git diff --cached --name-only --diff-filter=ACMR | grep '^Sources/Termura/Harness/' || true)"
-else
-    HARNESS_CANDIDATES="$(find Sources/Termura/Harness -type f 2>/dev/null | sed 's#^\./##' || true)"
-fi
-HARNESS_LEAKED="$(printf '%s\n' "$HARNESS_CANDIDATES" | grep -vE "$HARNESS_WHITELIST" | sed '/^$/d' || true)"
-if [[ -n "$HARNESS_LEAKED" ]]; then
-    echo -e "${RED}FAIL: Private Harness file(s) detected:${NC}"
-    echo "$HARNESS_LEAKED" | sed 's/^/  /'
-    record_failure
-else
-    echo -e "${GREEN}OK: Harness directory is within whitelist${NC}"
-fi
+# PR2 of the harness migration removed the "private Harness file leak"
+# check that previously enforced an 8-file allowlist on
+# Sources/Termura/Harness/. The harness implementation now lives in this
+# repo, so the directory is fully tracked.
 
 echo "-> Chinese character check..."
 CHINESE_FILES="$(staged_or_repo_source_files | xargs -I{} grep -lP '[\x{4e00}-\x{9fff}\x{3400}-\x{4dbf}\x{20000}-\x{2a6df}\x{2a700}-\x{2b73f}\x{2b740}-\x{2b81f}\x{2b820}-\x{2ceaf}\x{f900}-\x{faff}\x{2f800}-\x{2fa1f}]' {} 2>/dev/null || true)"
