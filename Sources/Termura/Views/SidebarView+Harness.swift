@@ -6,7 +6,6 @@ import SwiftUI
 extension SidebarView {
     @ViewBuilder
     var harnessContent: some View {
-        #if HARNESS_ENABLED
         let projectRoot = activeSessionWorkingDirectory
         SidebarHarnessContent(
             repository: dataScope.ruleFileRepository,
@@ -14,9 +13,6 @@ extension SidebarView {
             activeContentTab: activeContentTab,
             onOpenFile: onOpenFile
         )
-        #else
-        HarnessUpsellView()
-        #endif
     }
 
     var activeSessionWorkingDirectory: String {

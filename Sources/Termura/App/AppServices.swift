@@ -24,18 +24,14 @@ struct AppServices {
     /// Bridges the iOS remote-control feature to the active project's session store.
     /// Always present; falls back to `NullRemoteSessionsAdapter` when unused.
     let remoteSessionsAdapter: any RemoteSessionsAdapter
-    /// Remote-control server. `NullRemoteIntegration` in Free build; real
-    /// implementation from the paid harness when `HARNESS_ENABLED`. Lifecycle
-    /// controlled via Settings UI.
+    /// Remote-control server. Constructed via `HarnessIntegrationFactory.make`;
+    /// lifecycle controlled via Settings UI.
     let remoteIntegration: any RemoteIntegration
     /// SwiftUI-bindable wrapper over `remoteIntegration`. Owned at the app
     /// scope so the Settings window can re-open without losing state.
     let remoteControlController: RemoteControlController
-    /// PR8 Phase 2 — agent ↔ app bridge lifecycle. Free build:
-    /// `NullRemoteAgentBridgeLifecycle` (no-op). Harness build: a
-    /// concrete impl wired by `RemoteIntegrationLauncher.makeAgentBridge`
-    /// that owns the XPC client + ingress + auto-connector. Call sites
-    /// only see the protocol surface (no harness concrete types leak
-    /// into the open-core repo).
+    /// Agent ↔ app bridge lifecycle. Constructed via
+    /// `HarnessIntegrationFactory.makeAgentBridge`; owns the XPC client +
+    /// ingress + auto-connector. Call sites see the protocol surface only.
     let remoteAgentBridge: any RemoteAgentBridgeLifecycle
 }

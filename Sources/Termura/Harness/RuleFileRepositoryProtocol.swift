@@ -9,7 +9,7 @@ protocol RuleFileRepositoryProtocol: Actor {
     func fetchAll() async throws -> [RuleFileRecord]
 }
 
-// MARK: - Null Object (production stub for Free builds without HARNESS_ENABLED)
+// MARK: - Null Object (preview / test fallback when no DB-backed repository is needed)
 
 actor NullRuleFileRepository: RuleFileRepositoryProtocol {
     func save(_ record: RuleFileRecord) async throws {}

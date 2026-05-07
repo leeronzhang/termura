@@ -151,11 +151,7 @@ extension ProjectContext {
         db: any DatabaseServiceProtocol,
         projectURL: URL
     ) -> ProjectRepositories {
-        #if HARNESS_ENABLED
         let ruleRepo: any RuleFileRepositoryProtocol = RuleFileRepository(db: db)
-        #else
-        let ruleRepo: any RuleFileRepositoryProtocol = NullRuleFileRepository()
-        #endif
         let notesDir = notesDirectory(for: projectURL)
         let noteRepo = FileBackedNoteRepository(
             notesDirectory: notesDir,

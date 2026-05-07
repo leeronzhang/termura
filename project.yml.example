@@ -337,7 +337,7 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_ENTITLEMENTS: Resources/TermuraDebug.entitlements
           DEVELOPMENT_TEAM: ""
-          OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
+          OTHER_SWIFT_FLAGS: "$(inherited)"
           # Xcode 26.0 (17A324) IDE has a reproducible bug in
           # `XCBBuildService`'s codesign daemon: every `codesign --force`
           # invocation that the IDE makes on nested Mach-Os has a chance
@@ -382,7 +382,7 @@ targets:
           ENABLE_PREVIEWS: NO
         Release:
           CODE_SIGN_ENTITLEMENTS: Resources/Termura.entitlements
-          OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
+          OTHER_SWIFT_FLAGS: "$(inherited)"
           SKIP_INSTALL: NO
           INSTALL_PATH: /Applications
     dependencies:
@@ -412,10 +412,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.termura.tests
         GENERATE_INFOPLIST_FILE: YES
-        # Match the host target's `-DHARNESS_ENABLED` so test files
-        # gated on it (Tests/TermuraTests/Harness/, Support/Mock*,
-        # Services/RuleFileRepositoryTests) actually compile and run.
-        OTHER_SWIFT_FLAGS: "$(inherited) -DHARNESS_ENABLED"
     dependencies:
       - target: Termura
 

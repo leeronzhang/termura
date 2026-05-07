@@ -42,11 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Init
 
     override init() {
-        // Wave 1 hook — install harness factory closures (no-op in Free
-        // build) before any service constructor reads them. Single
-        // entry point; idempotent.
-        HarnessBootstrap.runIfNeeded()
-
         // Register bundled fonts before any UI or FontSettings init.
         Self.registerBundledFonts()
 

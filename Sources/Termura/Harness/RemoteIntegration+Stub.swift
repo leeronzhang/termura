@@ -1,8 +1,8 @@
-// Public protocol surface for the iOS remote-control feature. Always compiled.
-// Real implementation lives in the paid harness module and is gated by
-// HARNESS_ENABLED. Public callers go through `RemoteIntegrationLauncher` (defined
-// below); when HARNESS_ENABLED is absent (Free build), the launcher returns
-// `NullRemoteIntegration`, so call sites compile and run without changes.
+// Public protocol surface for the iOS remote-control feature. Pre-PR3 the
+// real implementation lived in a private repo behind HARNESS_ENABLED; PR3
+// inlined it under Sources/Termura/Harness/Remote/, so the launcher now
+// dispatches directly to `HarnessIntegrationFactory`. The Null* fallbacks
+// remain for tests / previews that inject empty integrations explicitly.
 
 import Foundation
 import TermuraRemoteProtocol
@@ -226,25 +226,16 @@ struct NullRemoteAgentBridgeLifecycle: RemoteAgentBridgeLifecycle {
     func resetAgentState() async throws {}
 }
 
-/// Public façade callers go through. After Wave 1 it dispatches via
-/// closures registered in `HarnessBootstrap` rather than `#if`-routed
-/// to a private-impl type name. The harness build wires real factories
-/// inside its `install()`; the Free build leaves the closures `nil` so
-/// the Null fallbacks below take over. Non-stub public files (e.g.
-/// `AppDelegate.swift`) never reference a private-impl symbol.
+/// Public façade for harness integration construction. Delegates to
+/// `HarnessIntegrationFactory` so call sites (e.g. AppDelegate) don't have
+/// to know about the harness implementation type.
 @MainActor
 enum RemoteIntegrationLauncher {
     static func make(adapter: any RemoteSessionsAdapter) -> any RemoteIntegration {
-        if let factory = HarnessBootstrap.currentIntegrationFactory() {
-            return factory(adapter)
-        }
-        return NullRemoteIntegration()
+        HarnessIntegrationFactory.make(adapter: adapter)
     }
 
     static func makeAgentBridge(integration: any RemoteIntegration) -> any RemoteAgentBridgeLifecycle {
-        if let factory = HarnessBootstrap.currentAgentBridgeFactory() {
-            return factory(integration)
-        }
-        return NullRemoteAgentBridgeLifecycle()
+        HarnessIntegrationFactory.makeAgentBridge(integration: integration)
     }
 }
