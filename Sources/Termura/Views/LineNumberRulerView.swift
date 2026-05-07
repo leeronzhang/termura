@@ -191,8 +191,19 @@ final class LineNumberRulerView: NSRulerView {
         let numStr = "\(lineNumber)" as NSString
         let strSize = numStr.size(withAttributes: attrs)
 
-        // Vertically center in the line fragment
-        let drawY = yInRuler + (lineRect.height - strSize.height) / 2
+        // Baseline-align the ruler text to the code glyph baseline. WHY: a line
+        // fragment's height is ascender + |descender| + leading, and the two fonts
+        // have different ascender/descender ratios — geometric centering
+        // (height/2 - strSize/2) treats them as symmetric rectangles and makes the
+        // ruler baseline drift below the code baseline (numbers visibly sit low).
+        // In the flipped ruler coordinates: code baseline = yInRuler + textFont.ascender,
+        // and NSString.draw(at:) takes the bbox top so its baseline sits at
+        // drawY + rulerFont.ascender. Equating the two gives the formula below.
+        // Same approach used by Xcode source editor, Sublime Text, TextMate rulers.
+        let textFont = textView.font
+            ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let rulerFont = (attrs[.font] as? NSFont) ?? textFont
+        let drawY = yInRuler + (textFont.ascender - rulerFont.ascender)
 
         // Right-align within a 3-digit block, centered across the full visual gutter
         // (ruler width + text container inset up to the level-0 guide line)
