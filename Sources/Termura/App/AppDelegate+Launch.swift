@@ -48,17 +48,27 @@ extension AppDelegate {
         // the remote-control transport.
         NSApp.registerForRemoteNotifications()
 
-        // PR8 Phase 2 — kick off the agent ↔ app bridge. Free build is
-        // a no-op; harness build constructs the XPC client + ingress.
-        // PR10 Step 3 — fire `reinstallIfNeeded()` so a relaunch after
-        // an app update / relocate silently re-aligns the on-disk plist
-        // with the current `Termura.app` bundle. Skip when an env flag
-        // is set so unit / UI tests can opt out of CloudKit / Keychain
-        // side-effects during launch.
-        if env["TERMURA_DISABLE_REMOTE_AGENT_BRIDGE"] == nil {
+        // Kick off the agent ↔ app bridge + plist reinstall + remote
+        // integration restore. All three eventually instantiate
+        // `LiveCloudKitDatabaseGateway`, which calls `CKContainer.init(identifier:)`
+        // and traps when the process lacks the iCloud-services entitlement.
+        // Two opt-out paths:
+        //   - `TERMURA_DISABLE_REMOTE_AGENT_BRIDGE` env flag: unit / UI tests
+        //     set this to keep launch free of CloudKit / Keychain side effects.
+        //   - `hasICloudEntitlement` runtime check: Debug builds use
+        //     `TermuraDebug.entitlements` which omits iCloud, so the bridge
+        //     start would trap inside `CKContainer.m:748`. Skipping here
+        //     leaves Settings UI / pairing UI navigable; actual remote-control
+        //     end-to-end testing requires a Release / archive build with
+        //     `Termura.entitlements` (full iCloud capabilities).
+        if env["TERMURA_DISABLE_REMOTE_AGENT_BRIDGE"] == nil, Self.hasICloudEntitlement {
             Self.startRemoteAgentBridge(services.remoteAgentBridge)
             Self.scheduleReinstallIfNeeded(controller: services.remoteControlController)
             Self.restoreRemoteIntegration(controller: services.remoteControlController)
+        } else if !Self.hasICloudEntitlement {
+            // Debug builds use TermuraDebug.entitlements which omits
+            // iCloud; switch to Release / archive for end-to-end testing.
+            logger.warning("Skipping RemoteAgentBridge start: missing com.apple.developer.icloud-services entitlement.")
         }
 
         // Start broadcasting session-list changes to paired iOS clients.

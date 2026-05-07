@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Security
 import TermuraRemoteProtocol
 
 // Closures captured by `LiveRemoteSessionsAdapter` resolve the active project
@@ -16,6 +17,27 @@ extension AppDelegate {
     @MainActor
     static func startRemoteAgentBridge(_ bridge: any RemoteAgentBridgeLifecycle) {
         Task { await bridge.start() }
+    }
+
+    /// Whether the running process carries an iCloud-services entitlement
+    /// that includes "CloudKit" or "CloudKit-Anonymous". Debug builds use
+    /// `Resources/TermuraDebug.entitlements`, which deliberately omits
+    /// the iCloud entitlement (project.yml.example header explains why).
+    /// Calling `CKContainer.init(identifier:)` without that entitlement
+    /// traps inside `CKContainer.m:748` — the harness migration (PR3+)
+    /// removed the `HARNESS_ENABLED` gate that previously kept Debug
+    /// off the CloudKit codepath, so we re-introduce a runtime gate
+    /// here. Release / archive builds with `Resources/Termura.entitlements`
+    /// pass this check and the bridge boots normally.
+    static var hasICloudEntitlement: Bool {
+        guard let task = SecTaskCreateFromSelf(nil) else { return false }
+        guard let value = SecTaskCopyValueForEntitlement(
+            task,
+            "com.apple.developer.icloud-services" as CFString,
+            nil
+        ) else { return false }
+        guard let services = value as? [String] else { return false }
+        return services.contains("CloudKit") || services.contains("CloudKit-Anonymous")
     }
 
     /// PR8 Phase 2 — fires the agent ↔ app bridge `stop()` from
