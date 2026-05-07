@@ -1,0 +1,4 @@
+module TermuraAgentXPCInterfaces {
+    umbrella header "TermuraAgentXPCInterfaces.h"
+    export *
+}

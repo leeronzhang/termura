@@ -51,6 +51,13 @@ Packages/TermuraRemoteKit/Tests/*/*
 !Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/CloudKitReplyChannelEventTests.swift
 !Packages/TermuraRemoteKit/Tests/TermuraRemoteServerTests/CloudKitTransportCircuitBreakerTests.swift
 
+# LaunchAgent SPM executable test target — same rationale as TermuraRemoteKit
+# above: Tests/ at line 23 was meant for the main app's internal test bundle,
+# not the in-tree SPM packages.
+!Packages/LaunchAgent/Tests/
+!Packages/LaunchAgent/Tests/TermuraRemoteAgentTests/
+!Packages/LaunchAgent/Tests/TermuraRemoteAgentTests/*.swift
+
 # CI/CD and internal build tooling
 .github/*
 !.github/workflows/
