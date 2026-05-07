@@ -1,0 +1,128 @@
+disabled_rules:
+  - trailing_whitespace
+  - todo
+
+# 镜像主仓 termura 的体积/复杂度门禁。
+function_body_length:
+  warning: 50
+  error: 70
+
+closure_body_length:
+  warning: 50
+  error: 70
+
+type_body_length:
+  warning: 250
+  error: 500
+
+file_length:
+  warning: 300
+  error: 500
+
+line_length:
+  warning: 140
+  error: 200
+
+cyclomatic_complexity:
+  warning: 15
+  error: 30
+
+type_name:
+  min_length: 3
+  excluded:
+    - ID
+
+identifier_name:
+  min_length: 2
+  excluded:
+    - id
+    - i
+    - n
+
+opt_in_rules:
+  - force_unwrapping
+  - force_try
+  - force_cast
+  - implicitly_unwrapped_optional
+  - closure_body_length
+  - empty_count
+  - empty_string
+  - first_where
+  - legacy_random
+  - redundant_nil_coalescing
+  - fatal_error_message
+  - unneeded_parentheses_in_closure_argument
+  - strict_fileprivate
+  - function_parameter_count
+  - large_tuple
+  - overridden_super_call
+  - collection_alignment
+
+included:
+  - Sources
+
+excluded:
+  - .build
+  - Tests
+
+custom_rules:
+  no_dispatch_queue_main:
+    name: "Concurrency: Use Task/@MainActor instead of DispatchQueue"
+    regex: "DispatchQueue\\.main\\.(async|asyncAfter)"
+    message: "禁止使用 DispatchQueue.main。请使用 Task { @MainActor in ... } 或 Task.sleep。"
+    severity: error
+
+  no_dispatch_global:
+    name: "Concurrency: Use Task.detached instead of DispatchQueue.global"
+    regex: "DispatchQueue\\.global\\("
+    message: "禁止使用 DispatchQueue.global()。请使用 Task.detached 或 async 方法。"
+    severity: warning
+
+  no_try_optional:
+    name: "Error Handling: Avoid try?"
+    regex: "\\btry\\?"
+    message: "禁止使用 try? 吞没错误。请使用 do-catch 显式处理。"
+    severity: error
+
+  no_empty_catch:
+    name: "Error Handling: No Empty Catch"
+    regex: "catch\\s*\\{\\s*\\}"
+    message: "禁止空 catch 块。错误必须被记录、上报或处理。"
+    severity: error
+
+  no_silent_catch_comments:
+    name: "Error Handling: No Silent Catch (Comments Only)"
+    regex: "catch\\s*\\{\\s*//[^\\n]*\\s*\\}"
+    message: "catch 块中只有注释是不允许的。必须有实际的错误处理逻辑。"
+    severity: error
+
+  no_exit_call:
+    name: "Forbidden: exit()"
+    regex: "exit\\("
+    match_kinds: [identifier]
+    message: "禁止使用 exit()。"
+    severity: error
+
+  no_fatal_error_production:
+    name: "Forbidden: fatalError in Production"
+    regex: "fatalError\\("
+    message: "生产代码禁止使用 fatalError。"
+    severity: error
+
+  non_optional_string_data_conversion:
+    name: "Non-optional String -> Data Conversion"
+    regex: '\\.data\(using:\s*\.utf8\)\s*(\?\?|\!)'
+    message: "Prefer non-optional `Data(_:)` initializer when converting `String` to `Data`."
+    severity: error
+
+  no_filter_count:
+    name: "Performance: Use count(where:) instead of filter{}.count"
+    regex: '\.filter\s*(\([^)]*\)|\{[^}]*\})\.count\b'
+    message: "filter{}.count 分配中间数组。请使用 .count(where:)。"
+    severity: warning
+
+  no_sorted_for_single_element:
+    name: "Performance: Use min(by:)/max(by:) instead of sorted{}.first/last"
+    regex: '\.sorted\s*(\(by:\s*)?(\{[^}]*\}|\([^)]*\))\s*\)\s*\.(first|last)\b'
+    message: "sorted{}.first/last 是 O(n log n)。取最值请用 .min(by:) / .max(by:) O(n) 替代。"
+    severity: error

@@ -1,0 +1,94 @@
+# PR8 Phase 2 — harness `Sources/Remote/` lint config. Inherits the
+# public repo's rule set as a baseline, then disables a few rules that
+# are structurally incompatible with NSXPC bridge / `@unchecked
+# Sendable` patterns. The disabled rules are NOT silenced via in-line
+# `// swiftlint:disable` (banned by CLAUDE.md); they are scoped here
+# because the underlying patterns (NSObject + AppMailboxProtocol vended
+# as `exportedObject`; ConnectionHolder closure-bridge across the
+# actor boundary) cannot be expressed without `@unchecked Sendable`.
+#
+# Each disabled rule still applies in its rightful scope (the public
+# `Sources/Termura/` directory, where it is enforced by
+# `scripts/quality-gate.sh`).
+
+disabled_rules:
+  - trailing_whitespace
+  - todo
+
+function_body_length:
+  warning: 50
+  error: 70
+
+closure_body_length:
+  warning: 50
+  error: 70
+
+type_body_length:
+  warning: 250
+  error: 500
+
+file_length:
+  warning: 300
+  error: 500
+
+line_length:
+  warning: 140
+  error: 200
+
+cyclomatic_complexity:
+  warning: 15
+  error: 30
+
+type_name:
+  min_length: 3
+  excluded:
+    - ID
+
+identifier_name:
+  min_length: 2
+  excluded:
+    - id
+    - i
+    - n
+
+opt_in_rules:
+  - force_unwrapping
+  - force_try
+  - force_cast
+  - implicitly_unwrapped_optional
+  - closure_body_length
+  - empty_count
+  - empty_string
+  - first_where
+  - legacy_random
+  - redundant_nil_coalescing
+  - fatal_error_message
+  - unneeded_parentheses_in_closure_argument
+  - strict_fileprivate
+  - large_tuple
+  - overridden_super_call
+  - collection_alignment
+
+# `function_parameter_count` and `weak_delegate` are deliberately
+# omitted: NSXPC handlers expose closures with several parameters by
+# protocol contract, and the `pushAdapter` rename already addresses
+# weak-delegate naming.
+
+custom_rules:
+  no_dispatch_queue_main:
+    name: "Concurrency: Use Task/@MainActor instead of DispatchQueue"
+    regex: "DispatchQueue\\.main\\.(async|asyncAfter)"
+    message: "禁止使用 DispatchQueue.main."
+    severity: error
+
+  no_try_optional:
+    name: "Error Handling: Avoid try?"
+    regex: "\\btry\\?"
+    message: "禁止使用 try?."
+    severity: error
+
+  no_empty_catch:
+    name: "Error Handling: No Empty Catch"
+    regex: "catch\\s*\\{\\s*\\}"
+    message: "禁止空 catch."
+    severity: error
