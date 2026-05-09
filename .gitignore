@@ -101,9 +101,6 @@ docs/
 # Local-only; never tracked.
 memory/
 
-# Landing page (separate repo)
-landing/
-
 # macOS
 .DS_Store
 .termura/

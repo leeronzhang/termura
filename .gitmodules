@@ -1,3 +1,6 @@
 [submodule "vendor/ghostty"]
 	path = vendor/ghostty
 	url = https://github.com/ghostty-org/ghostty
+[submodule "landing"]
+	path = landing
+	url = https://github.com/leeronzhang/termuracom.git
