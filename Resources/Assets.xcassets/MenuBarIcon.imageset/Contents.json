@@ -3,12 +3,14 @@
     {
       "filename" : "menubar_icon.png",
       "idiom" : "mac",
-      "scale" : "1x"
+      "scale" : "1x",
+      "size" : "14x14"
     },
     {
       "filename" : "menubar_icon@2x.png",
       "idiom" : "mac",
-      "scale" : "2x"
+      "scale" : "2x",
+      "size" : "14x14"
     }
   ],
   "info" : {
