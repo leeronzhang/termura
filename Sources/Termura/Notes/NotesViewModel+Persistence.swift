@@ -50,14 +50,24 @@ extension NotesViewModel {
         notes[idx].body = body
         notes[idx].updatedAt = clock.now()
         backlinkIndex.rebuild(from: notes)
-        let updated = notes[idx]
-        // Serialize saves into a chain instead of cancel-and-replace. Swift Task
-        // cancellation is cooperative and `repository.save` has no check points,
-        // so a "cancelled" old save still races the new one on the actor — under
-        // reentrancy at fileService awaits, the older save's deleteNote can win
-        // and the newer save's writeNote silently throws (file already gone),
-        // leaving disk pinned to the older content. Chaining ensures only one
-        // save touches the actor at a time.
+        enqueueChainedSave(notes[idx])
+    }
+
+    // MARK: - Chained persistence
+
+    /// Enqueues a `repository.save(note)` onto the serial chain shared by all
+    /// note disk writes (autosave, createNote, toggleFavorite, silentlyCreateNote).
+    /// Without this single chain, independent saves race on the repository actor
+    /// at fileService awaits; because `FileBackedNoteRepository.save` removes the
+    /// old-named file on rename, a stale save running second deleted the file a
+    /// fresh save just wrote and pinned disk to the stale snapshot — the bug
+    /// pattern that produced empty-bodied "Untitled" notes after rapid
+    /// create-then-edit.
+    ///
+    /// OWNER: NotesViewModel.
+    /// TEARDOWN: `flushPendingWrites` awaits the chain head before returning.
+    @discardableResult
+    func enqueueChainedSave(_ note: NoteRecord) -> UUID {
         let previous = noteSavePendingID.flatMap { pendingWrites[$0] }
         let trackingID = UUID()
         let task = Task { [weak self] in
@@ -65,7 +75,7 @@ extension NotesViewModel {
             await previous?.value
             guard let self else { return }
             do {
-                try await repository.save(updated)
+                try await repository.save(note)
             } catch {
                 errorMessage = "\(error.localizedDescription)"
                 logger.error("Note save error: \(error)")
@@ -73,29 +83,7 @@ extension NotesViewModel {
         }
         pendingWrites[trackingID] = task
         noteSavePendingID = trackingID
-    }
-
-    // MARK: - Tracked persistence
-
-    /// Persists an operation asynchronously while tracking the Task for flush.
-    /// Returns the UUID key under which the task is registered in `pendingWrites`,
-    /// so callers can cancel a prior task before registering a replacement.
-    @discardableResult
-    func persistTracked(
-        _ operation: @Sendable @escaping () async throws -> Void
-    ) -> UUID {
-        let id = UUID()
-        let task = Task { [weak self] in
-            defer { self?.pendingWrites.removeValue(forKey: id) }
-            do {
-                try await operation()
-            } catch {
-                self?.errorMessage = "\(error.localizedDescription)"
-                logger.error("Persistence error: \(error)")
-            }
-        }
-        pendingWrites[id] = task
-        return id
+        return trackingID
     }
 
     /// Awaits all in-flight persistence Tasks and force-saves the currently

@@ -11,9 +11,7 @@ extension NotesViewModel {
         selectedNoteID = note.id
         editingTitle = note.title
         editingBody = note.body
-        persistTracked { [repository] in
-            try await repository.save(note)
-        }
+        enqueueChainedSave(note)
         return note
     }
 
@@ -24,9 +22,7 @@ extension NotesViewModel {
         let note = NoteRecord(title: title, body: body)
         notes.insert(note, at: 0)
         lastSilentNoteID = note.id
-        persistTracked { [repository] in
-            try await repository.save(note)
-        }
+        enqueueChainedSave(note)
     }
 
     func toggleFavorite(id: NoteID) {
@@ -34,9 +30,7 @@ extension NotesViewModel {
         notes[idx].isFavorite.toggle()
         let updated = notes[idx]
         resortNotes()
-        persistTracked { [repository] in
-            try await repository.save(updated)
-        }
+        enqueueChainedSave(updated)
     }
 
     func deleteNote(id: NoteID) async {

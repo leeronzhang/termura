@@ -46,14 +46,20 @@ final class FileBackedNoteRepositoryTests: XCTestCase {
         XCTAssertTrue(all.isEmpty)
     }
 
-    // MARK: - Rename Atomicity (Issue #2)
+    // MARK: - Rename Atomicity
 
-    func testRename_oldDeleteFails_saveThrows() async throws {
+    /// New contract (write-then-delete): the new file is always persisted before the
+    /// rename's old-file delete is attempted. If delete fails the throw still
+    /// surfaces the partial failure, but the latest content is guaranteed on disk —
+    /// the legacy delete-then-write order could lose the user's content entirely
+    /// when racing a stale concurrent save (the bug that produced empty-bodied
+    /// "Untitled" notes after rapid create-then-edit).
+    func testRename_oldDeleteFails_newContentPersisted_saveThrows() async throws {
         let sut = makeSUT()
         let note = NoteRecord(title: "Original", body: "Body")
         try await sut.save(note)
 
-        // Get the URL of the existing file.
+        // Make the old file's delete fail when the rename fires.
         let originalURL = notesDir.appendingPathComponent(NoteFileService.filename(for: note))
         await fileService.setFailingDeleteURL(originalURL)
 
@@ -65,13 +71,17 @@ final class FileBackedNoteRepositoryTests: XCTestCase {
             try await sut.save(renamed)
             XCTFail("Save should throw when old file deletion fails")
         } catch {
-            // Expected: old file delete failure propagates.
+            // Expected: old file delete failure surfaces even though the new
+            // content was already persisted.
         }
 
-        // Verify: no duplicate file was created.
+        // The new file MUST exist on disk (write happened before the failing delete).
+        let renamedURL = notesDir.appendingPathComponent(NoteFileService.filename(for: renamed))
         let written = await fileService.writtenNotes
-        // The original file should still be the only one (delete failed, new file not written).
-        XCTAssertEqual(written.count, 1, "Should not create duplicate file on rename failure")
+        XCTAssertNotNil(written[renamedURL], "Renamed file must be persisted before delete is attempted")
+        XCTAssertEqual(written[renamedURL]?.title, "Renamed Title")
+        // The original file is left as an orphan (failed delete) — better than losing data.
+        XCTAssertNotNil(written[originalURL], "Old file remains as orphan when delete fails — content preserved")
     }
 
     func testRename_sameTitle_noDeleteAttempted() async throws {

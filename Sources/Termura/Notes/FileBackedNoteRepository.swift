@@ -61,14 +61,27 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
         isWriting = true
         defer { isWriting = false }
 
-        // If title changed, remove old file first (abort on failure to prevent duplicates).
-        if let existing = index[note.id],
-           await fileService.filename(for: existing.record) != fileService.filename(for: updated) {
-            try await fileService.deleteNote(at: existing.url)
+        // Write the new file BEFORE deleting the old one so a failure (or, in
+        // an earlier version of this code, a racing stale save) cannot leave
+        // disk without a copy of the latest content. If the old-file delete
+        // fails the new content is already persisted; the throw surfaces the
+        // partial failure so the caller can show an error and the orphan file
+        // can be reconciled on next launch by reloadFromDisk.
+        var oldURL: URL?
+        if let existing = index[note.id] {
+            let existingName = await fileService.filename(for: existing.record)
+            let updatedName = await fileService.filename(for: updated)
+            if existingName != updatedName {
+                oldURL = existing.url
+            }
         }
 
         let url = try await fileService.writeNote(updated, to: notesDirectory)
         index[note.id] = IndexEntry(record: updated, url: url, modificationDate: fileModDate(at: url))
+
+        if let oldURL {
+            try await fileService.deleteNote(at: oldURL)
+        }
 
         try await upsertCache(updated)
     }
