@@ -116,26 +116,6 @@ final class TabManager {
         selectedContentTab = tab
     }
 
-    func openFileTab(path: String, name: String) {
-        let tab = ContentTab.file(path: path, name: name)
-        if let idx = openTabs.firstIndex(where: { $0.id == tab.id }) {
-            openTabs[idx] = tab
-        } else {
-            openTabs.append(tab)
-        }
-        selectedContentTab = tab
-    }
-
-    func openPreviewTab(path: String, name: String) {
-        let tab = ContentTab.preview(path: path, name: name)
-        if let idx = openTabs.firstIndex(where: { $0.id == tab.id }) {
-            openTabs[idx] = tab
-        } else {
-            openTabs.append(tab)
-        }
-        selectedContentTab = tab
-    }
-
     func closeTab(_ tab: ContentTab) {
         switch tab {
         case let .terminal(sid, _):
