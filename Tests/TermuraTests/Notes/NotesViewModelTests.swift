@@ -205,6 +205,102 @@ final class NotesViewModelTests: XCTestCase {
         XCTAssertTrue(saved.first?.isFavorite ?? false, "Favorite flag set by toggleFavorite must persist")
     }
 
+    // MARK: - Create / delete autosave race regressions
+
+    /// Regression: createNote previously assigned `editingTitle`/`editingBody`
+    /// without the `isLoadingNote` fence, so each `didSet` scheduled a 1s
+    /// debounced autosave. If the user deleted the new note within that 1s
+    /// window, the autosave woke after `deleteNote` had switched
+    /// `selectedNoteID` to the next note, and persisted the new note's stale
+    /// "Untitled"/"" snapshot onto that next note — clobbering its real title
+    /// and body on disk. The fix is to fence the assignments inside `createNote`
+    /// the same way `selectNote` does, so no spurious autosave is scheduled.
+    func testCreateNoteSuppressesSpuriousAutoSave() {
+        viewModel.createNote()
+        XCTAssertNil(viewModel.autoSaveTask,
+                     "createNote must not leave a debounced autosave pending — its 'Untitled'/'' snapshot would leak to the next selected note if the user then deleted the new note within the debounce window")
+    }
+
+    /// Regression for the user-reported scenario 2: top note is "Untitled"
+    /// (just created), user right-clicks it and deletes. Previously
+    /// `deleteNote` set `selectedNoteID = next` BEFORE calling
+    /// `selectNote(id: next)`, so `selectNote`'s `if selectedNoteID == id
+    /// { return }` guard tripped and never refreshed `editingTitle`/
+    /// `editingBody` from the next note — they kept the deleted note's
+    /// "Untitled"/"" values. The pending autosave then persisted those onto
+    /// the next note, blanking it out. The fix is to leave `selectedNoteID`
+    /// unchanged so `selectNote` runs to completion and atomically loads the
+    /// next note's title/body into the editing buffers.
+    func testDeleteSelectedNoteLoadsNextNoteContentIntoEditingBuffers() async throws {
+        let realNote = NoteRecord(title: "Real Title", body: "Real body content")
+        try await repository.save(realNote)
+        await viewModel.loadNotes()
+
+        // Create the "Untitled" sibling at the top of the list, currently selected.
+        let untitled = viewModel.createNote()
+        XCTAssertEqual(viewModel.selectedNoteID, untitled.id)
+        XCTAssertEqual(viewModel.editingTitle, "Untitled")
+        XCTAssertEqual(viewModel.editingBody, "")
+
+        await viewModel.deleteNote(id: untitled.id)
+
+        XCTAssertEqual(viewModel.selectedNoteID, realNote.id)
+        XCTAssertEqual(viewModel.editingTitle, "Real Title",
+                       "deleteNote must load the next note's title into editingTitle, otherwise a pending autosave would write the deleted note's 'Untitled' onto realNote")
+        XCTAssertEqual(viewModel.editingBody, "Real body content",
+                       "deleteNote must load the next note's body into editingBody, otherwise a pending autosave would write '' onto realNote")
+    }
+
+    /// Regression: `deleteNote` invoked `repository.delete` directly without
+    /// awaiting the shared save chain. A `createNote` immediately followed by
+    /// `deleteNote` could race save vs delete on the repository actor — if
+    /// delete won, the chain's pending save then re-created the row, and the
+    /// "deleted" note resurfaced. The fix drains in-flight chain saves before
+    /// calling `repository.delete`, so the order is deterministic.
+    func testDeleteNoteWithPendingSaveDoesNotResurrect() async throws {
+        let keep = NoteRecord(title: "Keep", body: "Keep body")
+        try await repository.save(keep)
+        await viewModel.loadNotes()
+
+        // createNote enqueues a save into the chain; this save is racing the
+        // upcoming deleteNote on the repository actor.
+        let doomed = viewModel.createNote()
+        XCTAssertGreaterThanOrEqual(viewModel.pendingWrites.count, 1,
+                                    "createNote must enqueue a pending chain save")
+
+        await viewModel.deleteNote(id: doomed.id)
+
+        let saved = try await repository.fetchAll()
+        XCTAssertEqual(saved.count, 1,
+                       "Deleted note must not be resurrected by a chain save running after delete")
+        XCTAssertEqual(saved.first?.id, keep.id,
+                       "Only the surviving note should remain on disk")
+    }
+
+    /// Edge case for the rewritten deleteNote: deleting an unselected note
+    /// must NOT cancel the currently-selected note's pending autosave (which
+    /// would silently swallow the user's in-progress edits to the unrelated
+    /// selected note).
+    func testDeleteUnselectedNotePreservesSelectedAutoSave() async throws {
+        let selected = NoteRecord(title: "Selected", body: "Selected body")
+        let other = NoteRecord(title: "Other", body: "Other body")
+        try await repository.save(selected)
+        try await repository.save(other)
+        await viewModel.loadNotes()
+
+        viewModel.selectNote(id: selected.id)
+        viewModel.editingTitle = "Selected (edited)"
+        let scheduled = viewModel.autoSaveTask
+        XCTAssertNotNil(scheduled, "Editing the selected note must schedule an autosave")
+
+        await viewModel.deleteNote(id: other.id)
+
+        XCTAssertEqual(viewModel.selectedNoteID, selected.id,
+                       "Selected note must remain selected after deleting an unrelated note")
+        XCTAssertNotNil(viewModel.autoSaveTask,
+                        "Deleting an unselected note must not cancel the selected note's pending autosave")
+    }
+
     /// Regression: silentlyCreateNote (used by "Send to Notes") used a bare
     /// persistTracked path. If the user then opened that note and edited it,
     /// the original creation snapshot could race the autosave save.

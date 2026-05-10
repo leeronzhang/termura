@@ -48,7 +48,7 @@ struct AppCommands: Commands {
             Button("New Note") {
                 dispatcher.createNote()
             }
-            .keyboardShortcut("n", modifiers: [.command, .shift])
+            .keyboardShortcut("n", modifiers: .command)
 
             Divider()
 
