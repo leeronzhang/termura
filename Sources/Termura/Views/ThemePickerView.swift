@@ -10,22 +10,32 @@ struct ThemePickerView: View {
     @State private var importError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppUI.Spacing.xl) {
-            Text("Themes")
-                .font(AppUI.Font.title1)
+        // Wrap the column in a top-leading frame so the content sits
+        // directly under the Settings tab strip instead of being
+        // vertically centered. The other tabs achieve this implicitly
+        // (FontSettingsView uses `Form` which fills, AISettingsView
+        // uses an explicit `maxHeight: .infinity`); without this frame
+        // ThemePickerView's intrinsic ~400pt height left big empty
+        // bands above and below in the 540pt-min Settings window.
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppUI.Spacing.xl) {
+                Text("Themes")
+                    .font(AppUI.Font.title1)
 
-            themeGrid
+                themeGrid
 
-            importSection
+                importSection
 
-            if let error = importError {
-                Text(error)
-                    .font(AppUI.Font.body)
-                    .foregroundColor(.red)
+                if let error = importError {
+                    Text(error)
+                        .font(AppUI.Font.body)
+                        .foregroundColor(.red)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(AppUI.Spacing.xxl)
         }
-        .padding(AppUI.Spacing.xxl)
-        .frame(minWidth: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Theme Grid
@@ -90,6 +100,19 @@ private struct ThemeCard: View {
     let isSelected: Bool
     let onSelect: () -> Void
 
+    /// Accent color for the selected-card highlight. Reads the
+    /// theme's own `statusInfo` (or falls back through `cursor` →
+    /// `keyword` → the global brand accent) so each card lights up
+    /// in a hue that belongs to its palette — instead of pasting the
+    /// same green `brandGreen` over every theme, which looked
+    /// patched-on against Gruvbox/Solarized/Monokai swatches.
+    private var themeAccent: SwiftUI.Color {
+        ThemeDefinition.color(fromHex: definition.colors["statusInfo"])
+            ?? ThemeDefinition.color(fromHex: definition.colors["cursor"])
+            ?? ThemeDefinition.color(fromHex: definition.colors["keyword"])
+            ?? .brandGreen
+    }
+
     var body: some View {
         VStack(spacing: AppUI.Spacing.md) {
             colorSwatches
@@ -102,14 +125,14 @@ private struct ThemeCard: View {
         .background(
             RoundedRectangle(cornerRadius: AppUI.Radius.lg)
                 .fill(isSelected
-                    ? Color.brandGreen.opacity(AppUI.Opacity.selected)
+                    ? themeAccent.opacity(AppUI.Opacity.selected)
                     : Color(nsColor: .windowBackgroundColor))
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppUI.Radius.lg)
                 .stroke(
-                    isSelected ? Color.brandGreen : Color(nsColor: .separatorColor),
-                    lineWidth: 1
+                    isSelected ? themeAccent : Color(nsColor: .separatorColor),
+                    lineWidth: isSelected ? 2 : 1
                 )
         )
         .onTapGesture { onSelect() }

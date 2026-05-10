@@ -76,11 +76,21 @@ extension ThemeManager {
     // MARK: - Private — Extended colors
 
     func buildExtendedColors(from definition: ThemeDefinition) {
+        // 9 syntax + chrome tokens already in the schema, plus 6
+        // semantic UI tokens added so themes can override the
+        // ANSI-derived defaults from `uiStatusColor`. A theme that
+        // omits these keys still works (the lookup falls through to
+        // the derived values), but built-ins now ship them all so
+        // each palette renders self-consistently rather than borrowing
+        // colors from `ThemeColors.dark` / `.light`.
         let tokenMap: [(String, ThemeToken)] = [
             ("keyword", .keyword), ("string", .string), ("comment", .comment),
             ("number", .number), ("function", .function), ("type", .type),
             ("statusBarBackground", .statusBarBackground),
-            ("inputBackground", .inputBackground), ("inputBorder", .inputBorder)
+            ("inputBackground", .inputBackground), ("inputBorder", .inputBorder),
+            ("statusSuccess", .statusSuccess), ("statusError", .statusError),
+            ("statusWarning", .statusWarning), ("statusInfo", .statusInfo),
+            ("borderSubtle", .borderSubtle), ("surfaceOverlay", .surfaceOverlay)
         ]
         extendedColors = [:]
         for (key, token) in tokenMap {

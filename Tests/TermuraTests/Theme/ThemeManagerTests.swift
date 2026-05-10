@@ -178,4 +178,100 @@ final class ThemeManagerTests: XCTestCase {
             XCTAssertNotNil(color, "Token \(token.rawValue) returned nil")
         }
     }
+
+    // MARK: - Built-in palette completeness (regression)
+
+    /// Regression: built-ins previously omitted bright ANSI 8-15 and the
+    /// six status/border/surface keys, so `toThemeColors()` silently fell
+    /// through to `ThemeColors.dark` / `.light`. Effect: Solarized Dark
+    /// and Monokai shipped with identical bright-ANSI palettes (both Dark+
+    /// greys), and importing themes that didn't ship status/border keys
+    /// rendered Termura's defaults instead of their own palette. Pin the
+    /// invariant so every shipped built-in declares the full 31-token set.
+    func testEveryBuiltInDeclaresAllPaletteTokens() {
+        let requiredKeys: [String] = [
+            "background", "foreground", "cursor", "selectionBackground",
+            "sidebarBackground", "sidebarText", "activeSessionHighlight",
+            "ansiBlack", "ansiRed", "ansiGreen", "ansiYellow",
+            "ansiBlue", "ansiMagenta", "ansiCyan", "ansiWhite",
+            "ansiBrightBlack", "ansiBrightRed", "ansiBrightGreen",
+            "ansiBrightYellow", "ansiBrightBlue", "ansiBrightMagenta",
+            "ansiBrightCyan", "ansiBrightWhite",
+            "keyword", "string", "comment", "number", "function", "type",
+            "statusBarBackground", "inputBackground", "inputBorder",
+            "statusSuccess", "statusError", "statusWarning", "statusInfo",
+            "borderSubtle", "surfaceOverlay"
+        ]
+        for definition in ThemeDefinition.builtIn {
+            for key in requiredKeys {
+                XCTAssertNotNil(definition.colors[key],
+                                "Built-in '\(definition.name)' is missing palette key '\(key)' — it would silently fall back to ThemeColors.dark/.light and pollute the theme's identity")
+            }
+        }
+    }
+
+    /// Regression: the six semantic UI tokens (statusSuccess/Error/Warning/
+    /// Info, borderSubtle, surfaceOverlay) were not in `buildExtendedColors`'
+    /// tokenMap, so a theme that defined them in `colors[...]` couldn't
+    /// actually override the ANSI-derived defaults. Verify the new entries
+    /// flow through.
+    func testStatusAndSurfaceTokensFlowThroughExtendedColors() {
+        let manager = makeManager()
+        let probe = ThemeDefinition(
+            id: UUID(),
+            name: "ExtendedProbe",
+            isDark: true,
+            colors: [
+                "statusSuccess": "#112233", "statusError": "#445566",
+                "statusWarning": "#778899", "statusInfo": "#AABBCC",
+                "borderSubtle": "#DDEEFF", "surfaceOverlay": "#001122"
+            ]
+        )
+        manager.apply(definition: probe)
+        // If the tokenMap didn't include these keys, color(for:) would fall
+        // through to `uiStatusColor`'s ANSI-derived default (current.green
+        // for statusSuccess etc.), not the hex we provided.
+        XCTAssertEqual(manager.color(for: .statusSuccess),
+                       ThemeDefinition.color(fromHex: "#112233"))
+        XCTAssertEqual(manager.color(for: .statusError),
+                       ThemeDefinition.color(fromHex: "#445566"))
+        XCTAssertEqual(manager.color(for: .statusWarning),
+                       ThemeDefinition.color(fromHex: "#778899"))
+        XCTAssertEqual(manager.color(for: .statusInfo),
+                       ThemeDefinition.color(fromHex: "#AABBCC"))
+        XCTAssertEqual(manager.color(for: .borderSubtle),
+                       ThemeDefinition.color(fromHex: "#DDEEFF"))
+        XCTAssertEqual(manager.color(for: .surfaceOverlay),
+                       ThemeDefinition.color(fromHex: "#001122"))
+    }
+
+    /// A definition that omits the new keys still works — the lookup
+    /// falls through to `uiStatusColor`'s ANSI-derived defaults rather
+    /// than crashing or returning nil.
+    func testThemeWithoutStatusKeysStillResolvesAllTokens() {
+        let manager = makeManager()
+        let bare = ThemeDefinition(
+            id: UUID(),
+            name: "Bare",
+            isDark: true,
+            colors: ["background": "#101010", "foreground": "#F0F0F0"]
+        )
+        manager.apply(definition: bare)
+        for token in ThemeToken.allCases {
+            XCTAssertNotNil(manager.color(for: token),
+                            "Bare theme should resolve \(token.rawValue) via fallback chain")
+        }
+    }
+
+    func testGruvboxMaterialBuiltinsArePresentAndDarknessFlagsCorrect() {
+        let names = ThemeDefinition.builtIn.map(\.name)
+        XCTAssertTrue(names.contains("Gruvbox Material Light"),
+                      "Gruvbox Material Light must be a shipped built-in")
+        XCTAssertTrue(names.contains("Gruvbox Material Dark"),
+                      "Gruvbox Material Dark must be a shipped built-in")
+        let light = ThemeDefinition.builtIn.first { $0.name == "Gruvbox Material Light" }
+        let dark = ThemeDefinition.builtIn.first { $0.name == "Gruvbox Material Dark" }
+        XCTAssertEqual(light?.isDark, false)
+        XCTAssertEqual(dark?.isDark, true)
+    }
 }
