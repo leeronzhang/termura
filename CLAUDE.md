@@ -470,6 +470,12 @@ bash scripts/regen-all.sh
 # 仅检查 pbxproj 是否落后（pre-build phase 自动调用）
 bash scripts/regen-all.sh --check
 
+# Main currency audit — 分支状态 + 跨仓 wire 协调 (§15.6)
+# 私仓需 export TERMURA_HARNESS_ROOT=<absolute path of private repo>
+bash scripts/check-main-currency.sh             # advisory，列分支与漂移
+bash scripts/check-main-currency.sh --strict    # stale 分支 / wire 漂移 → exit 1
+bash scripts/check-main-currency.sh --no-wire   # 跳过跨仓 wire 扫描（秒级返回）
+
 # 构建
 xcodebuild -scheme Termura -configuration Debug build
 
@@ -489,7 +495,8 @@ log stream --predicate 'process == "Termura"'
 - [ ] 没有新增未受控的大文件 / 大类型
 - [ ] 通过质量门禁
 - [ ] **没有 open-core 边界泄漏**（pre-commit 扫描通过，私仓路径未进公仓追踪文件——type 名保护已不再需要，详见 §12.3）
-- [ ] **在 feat 分支上提交**（不直接 commit / push 到 main，参见 §15）
+- [ ] **在 feat 分支上提交**（不直接 commit / push 到 main，参见 §15.1；hook 已落地此保护）
+- [ ] **未引入 main 漂移**（`bash scripts/check-main-currency.sh` 通过；该看一眼分支健康度，参见 §15.6）
 
 ## 15. Branching & Merge Policy
 
@@ -543,3 +550,58 @@ log stream --predicate 'process == "Termura"'
 **禁止**：把 reversible 的 local 操作（`git branch -d`、`git reset --soft`、editing files）和 destructive 的 remote 操作打包到同一条命令——必须分两步，第二步前显式确认。
 
 Auto mode active 不豁免这条规则——auto mode 系统提示明确说"Auto mode is not a license to destroy"。
+
+### 15.6 Main Currency: Audit + Merge Cadence (P1)
+
+> 目的：让"main 是最新最全合并后的"成为可被脚本验证的不变量，而不是靠记忆。
+
+**执行实际 merge / cherry-pick / ff-only 的动作永远是人为触发——脚本只负责拦截违规操作和报告漂移状态，不替你做合并决策。** §15.3 的策略选择（ff / no-ff / cherry-pick / squash）由人判断，§15.2 的跨仓顺序由人判断。
+
+#### 15.6.1 三层机制
+
+**预防层（hook 自动拦截）**：
+- `scripts/pre-commit` 拒绝在 main 上的手写 commit（§15.1 落地）。允许：merge / cherry-pick / revert / rebase 进行中的 commit。逃生闸：`TERMURA_ALLOW_MAIN_COMMIT=1`，仅限紧急。
+- `scripts/pre-push` 拒绝 force-push / delete-push 到 `refs/heads/main`（§15.5 落地）。逃生闸：`TERMURA_ALLOW_MAIN_FORCE=1`，仅在用户已显式授权后使用。
+
+**检测层（按需 audit）**：
+- `scripts/check-main-currency.sh` — 两仓 main vs 所有 published 分支的状态矩阵，含跨仓 wire 协调检测。
+- `--strict`：未合且非 `archive/` / `wip/` 的分支若超过年龄阈值则 exit 1（用于 CI / release 节点）。
+- `--no-wire`：跳过 wire 检测，秒级返回（用于 quality-gate 集成）。
+- `--quiet`：抑制 per-branch 表格，仅保留 summary。
+
+**流程层（quality-gate 集成）**：
+- `bash scripts/quality-gate.sh`（非 `--staged` 路径）末尾自动追加一次 `--no-wire` advisory；每次 quality-gate 跑都能看到一眼分支健康度。
+
+#### 15.6.2 分支命名约定（噪音控制）
+
+- `feat/*` / `fix/*` / `chore/*` / `refactor/*` / `docs/*` / `build/*` — 默认合并候选。超过 `STALE_DAYS`（默认 3 天）未合且未声明 ready/archive/wip 即报警。
+- `ready/*` — 显式声明完成态、等待合并。`READY_STALE_DAYS`（默认 1 天）即报警。
+- `archive/*` — 永久保留作历史备份，永不报警，无论年龄。
+- `wip/*` — 主动进行中的长命分支，不要求合并，永不报警。
+
+#### 15.6.3 合并触发节点（**人为决策**）
+
+| 触发节点 | 该合 | 备注 |
+|---|---|---|
+| 一个工作单元完成 + quality-gate 全绿 | ✅ | **默认节点** |
+| 跨仓 wire 改动落地 | ✅ | 公仓先合，私仓紧跟（§15.2） |
+| Release / 重要节点前 | ✅ (strict) | 调 `--strict`，零容忍未合 |
+| 每个 commit / push 后 | ❌ | feat 分支会失去原子意义 |
+| 心血来潮 | ⚠️ | 容易漏 conflict / wire 协调，不建议 |
+
+**策略矩阵**（合的时候选哪一种）：
+
+| 分支状态 | 推荐策略 | 命令 |
+|---|---|---|
+| ff-mergeable（main 是 ancestor） | **fast-forward**（默认，§15.3） | `git merge --ff-only <branch>` |
+| diverged 单 commit | **cherry-pick**（线性 atomic，保留分支为备份） | `git cherry-pick <sha>` |
+| diverged 多 commit 内容自洽 | **`--no-ff` merge commit**（保留分支作为一个合并单元） | `git merge --no-ff <branch>` |
+| diverged 累积大量 WIP / fixup | **squash**（§15.3） | `git merge --squash <branch>` |
+| 跨仓 wire 改动 | 按 §15.2 协调顺序，先公仓后私仓 | — |
+
+#### 15.6.4 Audit Cadence
+
+- **每次完成一次 push** → 跑 `bash scripts/check-main-currency.sh`（advisory，看一眼）。
+- **每周 / release / 重要里程碑前** → 跑 `--strict`，目标 exit 0。
+- **跨仓 wire 改动前后** → 跑双仓 audit，确认私仓引用的 protocol 类型都在公仓 main 已存在。
+- **想保留某条不打算合的分支** → 重命名为 `archive/...` 或 `wip/...`，把"为什么留着"落到分支名里，让 audit 自动闭嘴。

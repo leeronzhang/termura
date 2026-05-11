@@ -6,6 +6,36 @@
 
 set -euo pipefail
 
+# ---------- Direct-commit-to-main guard (CLAUDE.md §15.1) ----------
+#
+# main is the published baseline. New work must go through a feat/ branch
+# so reviewers can see atomic intent and so accidental WIP / debug commits
+# never reach the trunk. This hook rejects any commit on main that isn't
+# part of an in-progress merge, cherry-pick, revert, or rebase — those four
+# replay-style operations are the legitimate ways atomic feat-branch commits
+# enter main and are preserved.
+#
+# Escape hatch: set TERMURA_ALLOW_MAIN_COMMIT=1 for a single emergency
+# hotfix or a known-safe administrative commit. Using it is a smell; the
+# default workflow is `git switch -c feat/<theme>`.
+if [[ -z "${TERMURA_ALLOW_MAIN_COMMIT:-}" ]]; then
+    CURRENT_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+    if [[ "$CURRENT_BRANCH" == "main" ]]; then
+        GIT_DIR_PATH="$(git rev-parse --git-dir)"
+        if [[ ! -f "$GIT_DIR_PATH/MERGE_HEAD"        && \
+              ! -f "$GIT_DIR_PATH/CHERRY_PICK_HEAD"  && \
+              ! -f "$GIT_DIR_PATH/REVERT_HEAD"       && \
+              ! -d "$GIT_DIR_PATH/rebase-merge"      && \
+              ! -d "$GIT_DIR_PATH/rebase-apply" ]]; then
+            echo "✘ §15.1 violation: manual commit to main is forbidden." >&2
+            echo "  Switch to a feat branch:  git switch -c feat/<theme>" >&2
+            echo "  Merges / cherry-picks / reverts / rebases on main are allowed." >&2
+            echo "  Emergency override (use sparingly):  TERMURA_ALLOW_MAIN_COMMIT=1 git commit ..." >&2
+            exit 1
+        fi
+    fi
+fi
+
 # ---------- Open-Core boundary check (CLAUDE.md §12.3) ----------
 #
 # Any tracked file in the public repo MUST NOT carry the literal sibling-

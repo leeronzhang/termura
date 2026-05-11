@@ -514,3 +514,17 @@ if [[ $WARNINGS -gt 0 ]]; then
 else
     echo -e "${GREEN}OK: All quality checks passed${NC}"
 fi
+
+# ---------- Advisory: main currency audit (CLAUDE.md §15.6) ----------
+#
+# Runs after the gate verdict because it never blocks: a stale unmerged
+# branch or non-current main is a *workflow* signal, not a code-quality
+# one. In --staged (pre-commit) mode we skip — pre-commit must stay fast
+# and per-file, not per-repo. Run a full gate or call the script directly
+# to surface findings.
+if [[ "$MODE" != "staged" ]]; then
+    if [[ -x "$REPO_ROOT/scripts/check-main-currency.sh" ]]; then
+        echo ""
+        bash "$REPO_ROOT/scripts/check-main-currency.sh" --no-wire || true
+    fi
+fi

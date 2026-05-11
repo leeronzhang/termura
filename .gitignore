@@ -73,7 +73,10 @@ scripts/*
 !scripts/check-version-sync.sh
 !scripts/check-xcstrings-coverage.sh
 !scripts/diagnose-codesign.sh
+!scripts/check-main-currency.sh
 !scripts/pre-commit
+!scripts/pre-commit-private
+!scripts/pre-push
 !scripts/quality-gate.sh
 !scripts/regen-all.sh
 !scripts/sync-version-from-xcode.sh

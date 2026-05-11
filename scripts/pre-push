@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#
+# scripts/pre-push
+#
+# CLAUDE.md §15.5 — refuse destructive remote operations against main without
+# explicit operator authorization. Reads the standard git pre-push stdin
+# protocol:
+#
+#     <local-ref> <local-sha> <remote-ref> <remote-sha>
+#
+# A line is rejected when:
+#   - remote-ref is refs/heads/main, AND
+#       - local-sha is all-zeros (a `git push --delete main`), OR
+#       - remote-sha is non-empty AND remote-sha is NOT an ancestor of
+#         local-sha (a force-push that rewrites published history).
+#
+# Non-fast-forward pushes to feat branches are still allowed (developers
+# routinely rebase feat branches before merge). Only main is protected.
+#
+# Install:  ln -s ../../scripts/pre-push .git/hooks/pre-push
+# Bypass (use only after the user explicitly authorizes the operation,
+# per §15.5):  TERMURA_ALLOW_MAIN_FORCE=1 git push ...
+
+set -euo pipefail
+
+ZERO_SHA='0000000000000000000000000000000000000000'
+
+if [[ -n "${TERMURA_ALLOW_MAIN_FORCE:-}" ]]; then
+    # Operator escape hatch — still let the push through, but log it so the
+    # event isn't silent.
+    echo "pre-push: TERMURA_ALLOW_MAIN_FORCE=1 set; bypassing main-force guard." >&2
+    exit 0
+fi
+
+VIOLATION=""
+
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+    [[ -z "$REMOTE_REF" ]] && continue
+
+    if [[ "$REMOTE_REF" != "refs/heads/main" ]]; then
+        continue
+    fi
+
+    if [[ "$LOCAL_SHA" == "$ZERO_SHA" ]]; then
+        VIOLATION="delete-main"
+        break
+    fi
+
+    # New ref (no remote-side commit yet) is fine — but main should always
+    # already exist on origin, so this branch is mostly defensive.
+    if [[ "$REMOTE_SHA" == "$ZERO_SHA" || -z "$REMOTE_SHA" ]]; then
+        continue
+    fi
+
+    # Force-push detection: remote tip must be an ancestor of what we're
+    # pushing. If it isn't, the push rewrites published history.
+    if ! git merge-base --is-ancestor "$REMOTE_SHA" "$LOCAL_SHA" 2>/dev/null; then
+        VIOLATION="force-main"
+        break
+    fi
+done
+
+case "$VIOLATION" in
+    delete-main)
+        echo "✘ §15.5 violation: refusing to delete origin/main." >&2
+        echo "  This destroys the published baseline. If you really mean to" >&2
+        echo "  retire the branch, do it through GitHub branch settings, not" >&2
+        echo "  a force-delete push." >&2
+        exit 1
+        ;;
+    force-main)
+        echo "✘ §15.5 violation: refusing force-push to origin/main." >&2
+        echo "  Force-pushing main rewrites history other branches/clones" >&2
+        echo "  build on. If a bad commit landed, revert it as a NEW commit." >&2
+        echo "  Emergency override (must be user-authorized per §15.5):" >&2
+        echo "    TERMURA_ALLOW_MAIN_FORCE=1 git push ..." >&2
+        exit 1
+        ;;
+esac
+
+exit 0
