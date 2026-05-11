@@ -41,7 +41,7 @@ fi
 # Any tracked file in the public repo MUST NOT carry the literal sibling-
 # repo path. The detector is intentionally PATH-ONLY:
 #
-#   - Path leaks (`termura-harness/`) have NO legitimate use in tracked
+#   - Path leaks (`termura-remote/`) have NO legitimate use in tracked
 #     source code outside this script and `regen-all.sh` (both
 #     self-excluded below).
 #
@@ -55,11 +55,11 @@ fi
 # DO NOT extend this regex with type names. If a new leak class
 # appears (e.g. a new tracked file mistakenly hardcodes the sibling
 # repo path), fix the file — don't extend the pattern.
-LEAK_PATTERN='termura-harness'
+LEAK_PATTERN='termura-remote'
 # Self-exclude the five files that physically MUST embed the leak literal
 # because that IS their job (the four scanner / cross-repo orchestrator
 # scripts plus CLAUDE.md, whose §12 documents the open-core boundary by
-# name and therefore has to mention `termura-harness`):
+# name and therefore has to mention `termura-remote`):
 #   - scripts/pre-commit              — scanner can't grep its own pattern
 #   - scripts/regen-all.sh            — cross-repo xcodegen orchestrator
 #                                        must `cd` into the sibling repo

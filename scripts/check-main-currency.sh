@@ -6,9 +6,10 @@
 # published branch in the public repo (and the sibling private repo if
 # present). Pure inspector — never modifies refs.
 #
-# Sibling discovery is environment-driven (TERMURA_HARNESS_ROOT) so this
-# script never embeds the private repo path literal. See CLAUDE.md §12.3 for
-# the open-core baseline rules that motivate this indirection.
+# Sibling discovery is environment-driven (TERMURA_REMOTE_ROOT, with legacy
+# TERMURA_HARNESS_ROOT honored for a deprecation grace period) so this script
+# never embeds the private repo path literal. See CLAUDE.md §12.3 for the
+# open-core baseline rules that motivate this indirection.
 #
 # What it reports:
 #   1. main HEAD vs origin/main, plus working-tree cleanliness.
@@ -41,10 +42,12 @@
 # Tunables (env vars):
 #   STALE_DAYS=3        Age threshold for default branches.
 #   READY_STALE_DAYS=1  Tighter age threshold for ready/* branches.
-#   TERMURA_HARNESS_ROOT=...  Absolute path of the sibling private iOS repo.
+#   TERMURA_REMOTE_ROOT=...   Absolute path of the sibling private iOS repo.
 #                       Set this in your shell rc; the script does no path
 #                       discovery on its own so the open-core boundary stays
-#                       free of sibling-name literals (§12.3).
+#                       free of sibling-name literals (§12.3). The legacy
+#                       TERMURA_HARNESS_ROOT name is honored too for now and
+#                       will be removed once shell rcs migrate.
 
 set -euo pipefail
 
@@ -78,9 +81,12 @@ DIM='\033[2m'
 NC='\033[0m'
 
 PUBLIC_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PRIVATE_ROOT="${TERMURA_HARNESS_ROOT:-}"
+PRIVATE_ROOT="${TERMURA_REMOTE_ROOT:-${TERMURA_HARNESS_ROOT:-}}"
+if [[ -n "${TERMURA_HARNESS_ROOT:-}" && -z "${TERMURA_REMOTE_ROOT:-}" ]]; then
+    echo "warn: TERMURA_HARNESS_ROOT is deprecated; please switch to TERMURA_REMOTE_ROOT." >&2
+fi
 if [[ -n "$PRIVATE_ROOT" && ! -d "$PRIVATE_ROOT/.git" ]]; then
-    echo "warn: TERMURA_HARNESS_ROOT=$PRIVATE_ROOT is not a git repo; ignoring." >&2
+    echo "warn: sibling private repo path '$PRIVATE_ROOT' is not a git repo; ignoring." >&2
     PRIVATE_ROOT=""
 fi
 

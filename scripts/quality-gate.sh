@@ -28,18 +28,18 @@ done
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# When the private termura-harness sibling exists alongside this repo and the
+# When the private termura-remote sibling exists alongside this repo and the
 # caller explicitly asked for it (or invoked us via the harness wrapper), we
-# scan iOS sources under the same gate. Post-PR4 the private repo only ships
-# the iOS Remote app — the Mac harness sources moved to this repo, so the
-# `--include-private` mode now amounts to "also lint iOS/TermuraRemote".
+# scan iOS sources under the same gate. Post-rename the private repo only
+# ships the iOS Remote app — the Mac harness sources moved to this repo, so
+# the `--include-private` mode now amounts to "also lint iOS/TermuraRemote".
 HARNESS_ROOT=""
 if [[ $INCLUDE_PRIVATE -eq 1 ]]; then
-    if [[ ! -d "$REPO_ROOT/../termura-harness" ]]; then
-        echo "FAIL: --include-private requested but ../termura-harness sibling missing" >&2
+    if [[ ! -d "$REPO_ROOT/../termura-remote" ]]; then
+        echo "FAIL: --include-private requested but ../termura-remote sibling missing" >&2
         exit 1
     fi
-    HARNESS_ROOT="$(cd "$REPO_ROOT/../termura-harness" && pwd)"
+    HARNESS_ROOT="$(cd "$REPO_ROOT/../termura-remote" && pwd)"
 fi
 
 # Source roots passed to multi-root helpers. Public roots first so violation
@@ -78,7 +78,7 @@ WARNINGS=0
 
 echo "Termura Quality Gate"
 if [[ -n "$HARNESS_ROOT" ]]; then
-    echo "  scope: public + private (termura-harness)"
+    echo "  scope: public + private (termura-remote)"
 else
     echo "  scope: public only"
 fi
@@ -321,8 +321,8 @@ fi
 run_gate_check "Layer dependency check" bash scripts/check-layer-deps.sh
 # Export sibling repo root so check-version-sync.sh can locate the private
 # Mac + iOS pbxprojs without literal path strings (open-core leak baseline,
-# CLAUDE.md §12.3). Empty TERMURA_HARNESS_ROOT → public-only check.
-TERMURA_HARNESS_ROOT="$HARNESS_ROOT" run_gate_check "Version sync check" bash scripts/check-version-sync.sh
+# CLAUDE.md §12.3). Empty TERMURA_REMOTE_ROOT → public-only check.
+TERMURA_REMOTE_ROOT="$HARNESS_ROOT" run_gate_check "Version sync check" bash scripts/check-version-sync.sh
 run_gate_check "Open-core baseline drift check" bash scripts/check-baseline-drift.sh
 
 echo "-> Forbidden Swift pattern checks..."

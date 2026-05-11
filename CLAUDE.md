@@ -377,7 +377,7 @@ log stream --predicate 'process == "Termura"'
 
 ## 12. Open-Core Boundary (P0)
 
-公开 `termura` 仓与私有 `termura-harness` 仓边界已经从"Mac 也分公私"收窄为"只有 iOS 是私有"。任何新代码都按以下规则归属：
+公开 `termura` 仓与私有 `termura-remote` 仓边界已经从"Mac 也分公私"收窄为"只有 iOS 是私有"。任何新代码都按以下规则归属：
 
 ### 12.1 谁住公开 `termura/`
 
@@ -393,13 +393,13 @@ log stream --predicate 'process == "Termura"'
 
 **禁止**追踪：
 - `project.yml`（per-machine 签名/路径，需 cp from `.example`）
-- `Termura.xcworkspace/`（含 `../termura-harness/iOS/...` 引用）
+- `Termura.xcworkspace/`（含 `../termura-remote/iOS/...` 引用）
 - `*.xcodeproj/`（生成物）
 - `.github/workflows/` 中除 `ci.yml` 外的私有流水线
 - `docs/` 内部文档
 - 任何 `iOS/` 目录或 iOS-specific 代码（iOS Remote app 是付费 IAP，仅住私仓）
 
-### 12.2 谁住私有 `termura-harness/`
+### 12.2 谁住私有 `termura-remote/`
 
 私仓只有 iOS Remote app + 必要的 iOS 构建配置：
 - `iOS/`：完整 iOS app（TermuraRemote + TermuraRemoteTests + project-ios.yml + Versions.xcconfig）
@@ -411,14 +411,14 @@ log stream --predicate 'process == "Termura"'
 ### 12.3 字面量泄漏红线
 
 任何**已追踪**到公开 `termura` 仓的文件中，禁止包含：
-- 私仓相对路径片段：`../termura-harness/`、`termura-harness/`（防开发者本地脚本/笔记不小心 commit 把 sibling repo 路径写进 history）
+- 私仓相对路径片段：`../termura-remote/`、`termura-remote/`（防开发者本地脚本/笔记不小心 commit 把 sibling repo 路径写进 history）
 - 真实 Apple Developer Team ID：`DEVELOPMENT_TEAM` 在 `project.yml.example` 必须写 `REPLACE_WITH_YOUR_TEAM_ID`
 
 `scripts/pre-commit` 在 commit 前 grep staged 文件命中以上路径字面量；命中即拒绝。**LEAK_PATTERN 是 path-only by design**——开源边界收窄后再无 Mac 私实现 type 名要防。如有未来再次出现 sibling repo 跨仓 type 引用的需求，仍由 review 把守。
 
 **禁止**扩展 LEAK_PATTERN 加入 type 名条目。任何 PR 试图扩展 pattern → review 应直接拒绝。
 
-**5 文件级豁免**：`SELF_EXCLUDE_FILES` 列出的 5 个文件——4 个 scanner / cross-repo orchestrator 脚本（`scripts/pre-commit`、`scripts/regen-all.sh`、`scripts/quality-gate.sh`、`scripts/check-baseline-drift.sh`），以及 `CLAUDE.md` 自身（§12 文档边界必须点名 `termura-harness`）。它们物理上必须自包含被检测字符串才能履行各自职责。任何 PR 试图把第 6 个文件加入豁免 → review 应直接拒绝。
+**5 文件级豁免**：`SELF_EXCLUDE_FILES` 列出的 5 个文件——4 个 scanner / cross-repo orchestrator 脚本（`scripts/pre-commit`、`scripts/regen-all.sh`、`scripts/quality-gate.sh`、`scripts/check-baseline-drift.sh`），以及 `CLAUDE.md` 自身（§12 文档边界必须点名 `termura-remote`）。它们物理上必须自包含被检测字符串才能履行各自职责。任何 PR 试图把第 6 个文件加入豁免 → review 应直接拒绝。
 
 **Baseline 锁定**：`scripts/check-baseline-drift.sh` 在每次 commit 前由 hook 调用，强制三条不变量（LEAK_PATTERN 必须路径 only、SELF_EXCLUDE_FILES 必须恰好 5 项、WHITELIST_REGEX 不得重新引入）。
 
@@ -433,7 +433,7 @@ bash scripts/check-baseline-drift.sh --print
 ### 12.4 操作纪律
 
 - **绝不 `git add -f`** 跨过 `.gitignore` 强制提交 `Termura.xcworkspace/` 或 `project.yml`——这会把签名 / 私仓路径写进 git history。
-- **新增公仓代码前**确认它能脱离 `../termura-harness/` 编译（cp `project.yml.example` → `project.yml` → `xcodegen generate` → Mac build）。后开源边界收窄后这是 trivially 成立——`scripts/check-open-core.sh` 仍保留作 regression guard，防止后续 build phase 不小心写入 sibling 路径。
+- **新增公仓代码前**确认它能脱离 `../termura-remote/` 编译（cp `project.yml.example` → `project.yml` → `xcodegen generate` → Mac build）。后开源边界收窄后这是 trivially 成立——`scripts/check-open-core.sh` 仍保留作 regression guard，防止后续 build phase 不小心写入 sibling 路径。
 - **新增私仓 iOS 代码前**确认其只依赖公仓 `Packages/TermuraRemoteKit` 的 Protocol + Client product 表面，不引用任何 Server-side 类型。
 
 ### 12.5 工程文件再生成纪律 (P0)
@@ -471,7 +471,8 @@ bash scripts/regen-all.sh
 bash scripts/regen-all.sh --check
 
 # Main currency audit — 分支状态 + 跨仓 wire 协调 (§15.6)
-# 私仓需 export TERMURA_HARNESS_ROOT=<absolute path of private repo>
+# 私仓需 export TERMURA_REMOTE_ROOT=<absolute path of private repo>
+# （legacy TERMURA_HARNESS_ROOT 仍被识别但已 deprecated，请尽快迁移）
 bash scripts/check-main-currency.sh             # advisory，列分支与漂移
 bash scripts/check-main-currency.sh --strict    # stale 分支 / wire 漂移 → exit 1
 bash scripts/check-main-currency.sh --no-wire   # 跳过跨仓 wire 扫描（秒级返回）
@@ -517,7 +518,7 @@ log stream --predicate 'process == "Termura"'
 
 ### 15.2 Public + Private Repo Merge Coordination (P0)
 
-公仓 `termura/` 与私仓 `termura-harness/` 是两个独立 git remote。私仓 iOS app 通过 sibling SPM path 依赖公仓 `Packages/TermuraRemoteKit` 的 Protocol + Client product。merge 时序：
+公仓 `termura/` 与私仓 `termura-remote/` 是两个独立 git remote。私仓 iOS app 通过 sibling SPM path 依赖公仓 `Packages/TermuraRemoteKit` 的 Protocol + Client product。merge 时序：
 
 - 涉及 wire API 变更（`TermuraRemoteProtocol` 公开类型 / 函数签名）时：**公仓 main 先合**或与私仓 main **同时合**——不允许私仓 main 引用公仓 main 还没合并的 wire API（私仓 iOS 编译断）。
 - 不涉及 wire API 的公仓改动（Mac 服务端实现、harness 内部重构、UI、文档）：私仓不受影响，无需协调。

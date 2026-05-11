@@ -15,9 +15,10 @@
 # A divergence means a UI edit is pending and would be silently lost on the
 # next xcodegen run — which is exactly the bug we set out to prevent.
 #
-# Sibling private repo path is supplied via the env var TERMURA_HARNESS_ROOT
-# by the caller (quality-gate.sh / pre-commit). Keeping the string out of
-# this script preserves the open-core leak baseline (CLAUDE.md §12.3).
+# Sibling private repo path is supplied via the env var TERMURA_REMOTE_ROOT
+# (with legacy TERMURA_HARNESS_ROOT honored during a deprecation grace
+# period) by the caller (quality-gate.sh / pre-commit). Keeping the string
+# out of this script preserves the open-core leak baseline (CLAUDE.md §12.3).
 #
 # Exit codes:
 #   0  in sync (or every pbxproj is absent — clean clone)
@@ -30,7 +31,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PUBLIC_XCCONFIG="$REPO_ROOT/Versions.xcconfig"
 PUBLIC_MAC_PBX="$REPO_ROOT/Termura.xcodeproj/project.pbxproj"
 
-SIBLING="${TERMURA_HARNESS_ROOT:-}"
+SIBLING="${TERMURA_REMOTE_ROOT:-${TERMURA_HARNESS_ROOT:-}}"
+if [[ -n "${TERMURA_HARNESS_ROOT:-}" && -z "${TERMURA_REMOTE_ROOT:-}" ]]; then
+    echo "warn: TERMURA_HARNESS_ROOT is deprecated; please switch to TERMURA_REMOTE_ROOT." >&2
+fi
 PRIVATE_MAC_PBX=""
 PRIVATE_IOS_PBX=""
 IOS_XCCONFIG=""
@@ -118,7 +122,7 @@ if [ -n "$SIBLING" ] && [ -d "$SIBLING" ]; then
     check_one "Mac (private)" "$PRIVATE_MAC_PBX" "$PUBLIC_XCCONFIG" || fail=1
     check_one "iOS"           "$PRIVATE_IOS_PBX" "$IOS_XCCONFIG"    || fail=1
 else
-    echo "skip: no sibling repo provided (TERMURA_HARNESS_ROOT unset, Free build)."
+    echo "skip: no sibling repo provided (TERMURA_REMOTE_ROOT unset, Free build)."
 fi
 
 exit "$fail"

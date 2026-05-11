@@ -28,11 +28,12 @@
 # Mac and Mac-paid always ship the same version, so they share one xcconfig.
 # iOS is a separate product and has its own.
 #
-# Sibling private repo path is supplied via the env var TERMURA_HARNESS_ROOT
-# by the caller (regen-all.sh / quality-gate.sh / pre-commit). Keeping the
-# string out of this script preserves the open-core leak baseline (CLAUDE.md
-# §12.3) — only the four whitelisted orchestrator scripts may name the
-# private repo path literally.
+# Sibling private repo path is supplied via the env var TERMURA_REMOTE_ROOT
+# (with legacy TERMURA_HARNESS_ROOT honored during a deprecation grace
+# period) by the caller (regen-all.sh / quality-gate.sh / pre-commit).
+# Keeping the string out of this script preserves the open-core leak
+# baseline (CLAUDE.md §12.3) — only the four whitelisted orchestrator
+# scripts may name the private repo path literally.
 
 set -euo pipefail
 
@@ -42,7 +43,10 @@ PUBLIC_XCCONFIG="$REPO_ROOT/Versions.xcconfig"
 PUBLIC_MAC_PBX="$REPO_ROOT/Termura.xcodeproj/project.pbxproj"
 
 # Optional sibling. Empty → Free / open-core build, only public Mac is checked.
-SIBLING="${TERMURA_HARNESS_ROOT:-}"
+SIBLING="${TERMURA_REMOTE_ROOT:-${TERMURA_HARNESS_ROOT:-}}"
+if [[ -n "${TERMURA_HARNESS_ROOT:-}" && -z "${TERMURA_REMOTE_ROOT:-}" ]]; then
+    echo "warn: TERMURA_HARNESS_ROOT is deprecated; please switch to TERMURA_REMOTE_ROOT." >&2
+fi
 PRIVATE_MAC_PBX=""
 PRIVATE_IOS_PBX=""
 IOS_XCCONFIG=""
@@ -182,7 +186,7 @@ sync_one "Mac" "${PUBLIC_MAC_PBX}:${PRIVATE_MAC_PBX}" "$PUBLIC_XCCONFIG" || fail
 if [ -n "$IOS_XCCONFIG" ]; then
     sync_one "iOS" "$PRIVATE_IOS_PBX" "$IOS_XCCONFIG" || fail=1
 else
-    echo "skip [iOS]: no sibling repo provided (TERMURA_HARNESS_ROOT unset, Free build)."
+    echo "skip [iOS]: no sibling repo provided (TERMURA_REMOTE_ROOT unset, Free build)."
 fi
 
 exit "$fail"

@@ -4,7 +4,7 @@
 # Locks in the current open-core baseline:
 #
 #   1. `scripts/pre-commit` declares LEAK_PATTERN exactly once and the
-#      value MUST be `termura-harness` (path-only). Any change to the
+#      value MUST be `termura-remote` (path-only). Any change to the
 #      pattern body is rejected.
 #   2. `scripts/pre-commit` declares SELF_EXCLUDE_FILES exactly once
 #      with exactly five path tokens (`scripts/pre-commit`,
@@ -73,7 +73,7 @@ if [[ "$LEAK_LINE_COUNT" != "1" ]]; then
     echo "FAIL: scripts/pre-commit must declare LEAK_PATTERN exactly once (got $LEAK_LINE_COUNT)." >&2
     exit 1
 fi
-EXPECTED_LEAK_LINE="LEAK_PATTERN='termura-harness'"
+EXPECTED_LEAK_LINE="LEAK_PATTERN='termura-remote'"
 if ! grep -qFx "$EXPECTED_LEAK_LINE" "$HOOK"; then
     echo "FAIL: scripts/pre-commit LEAK_PATTERN drifted from path-only baseline." >&2
     echo "       Expected: $EXPECTED_LEAK_LINE" >&2

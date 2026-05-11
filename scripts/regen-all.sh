@@ -26,7 +26,18 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HARNESS_ROOT="$(cd "$REPO_ROOT/.." && pwd)/termura-harness"
+# Sibling private iOS repo root. Honor TERMURA_REMOTE_ROOT first; fall back to
+# the legacy TERMURA_HARNESS_ROOT var name (deprecated, will be removed once
+# shell rcs migrate); finally default to the sibling-directory convention.
+SIBLING_NAME="termura-remote"
+if [[ -n "${TERMURA_REMOTE_ROOT:-}" ]]; then
+    HARNESS_ROOT="$TERMURA_REMOTE_ROOT"
+elif [[ -n "${TERMURA_HARNESS_ROOT:-}" ]]; then
+    echo "warn: TERMURA_HARNESS_ROOT is deprecated; please switch to TERMURA_REMOTE_ROOT." >&2
+    HARNESS_ROOT="$TERMURA_HARNESS_ROOT"
+else
+    HARNESS_ROOT="$(cd "$REPO_ROOT/.." && pwd)/${SIBLING_NAME}"
+fi
 MODE="${1:-regen}"
 
 declare -a TARGETS=(
@@ -132,11 +143,11 @@ fi
 # when no pbxproj has any override (the normal case). See
 # scripts/sync-version-from-xcode.sh for the mapping.
 #
-# We export TERMURA_HARNESS_ROOT so the sync script can reach the private
+# We export TERMURA_REMOTE_ROOT so the sync script can reach the private
 # pbxprojs without naming the sibling path itself — keeping the open-core
 # leak baseline intact (CLAUDE.md §12.3).
 echo "regen-all: reverse-syncing Xcode UI version edits → Versions.xcconfig…"
-export TERMURA_HARNESS_ROOT="${HARNESS_ROOT}"
+export TERMURA_REMOTE_ROOT="${HARNESS_ROOT}"
 bash "$REPO_ROOT/scripts/sync-version-from-xcode.sh"
 
 # Step 2 — regenerate every Xcode project, in dependency order.
