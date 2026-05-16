@@ -59,6 +59,8 @@ final class ProjectViewModel {
     @ObservationIgnored private var appActiveObserver: (any NSObjectProtocol)?
     @ObservationIgnored var debounceTask: Task<Void, Never>?
     @ObservationIgnored var persistTask: Task<Void, Never>?
+    @ObservationIgnored var directoryWatcher: ProjectDirectoryWatcher?
+    @ObservationIgnored var directoryWatchTask: Task<Void, Never>?
     var hasRestoredExpandState = false
 
     init(
@@ -86,6 +88,7 @@ final class ProjectViewModel {
         refreshTask?.cancel()
         debounceTask?.cancel()
         persistTask?.cancel()
+        directoryWatchTask?.cancel()
     }
 
     func tearDown() {
@@ -100,6 +103,7 @@ final class ProjectViewModel {
         refreshTask?.cancel()
         debounceTask?.cancel()
         persistTask?.cancel()
+        stopDirectoryWatcher()
         userDefaults.set(Array(expandedNodeIDs), forKey: expandedIDsKey)
     }
 

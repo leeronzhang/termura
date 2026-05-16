@@ -43,7 +43,10 @@ struct SidebarProjectContent: View {
                 bottomGitBar
             }
         }
-        .task { viewModel.refresh() }
+        .task {
+            viewModel.startDirectoryWatcher()
+            viewModel.refresh()
+        }
         .onDisappear { viewModel.tearDown() }
     }
 
