@@ -20,13 +20,32 @@ struct CommitPopover: View {
     @State private var diffStats: [DiffStat] = []
     @State private var isLoadingStats = true
 
-    /// Resolved when the view appears; cached so toggling note text doesn't re-detect.
-    @State private var detectedAgent: AgentType?
-    @State private var detectedSessionLabel: String?
+    /// PATH-fallback agent resolved asynchronously when no session matched.
+    /// nil until probed, or permanently nil when no headless CLI is on PATH.
+    @State private var pathProbedAgent: AgentType?
+    @State private var hasProbed = false
+
+    /// Live, session-derived detection. Recomputed on every body invocation so
+    /// opening a new agent session while the popover is visible updates the
+    /// primary button without requiring a popover reopen.
+    private var sessionDetection: AIAgentDetection? {
+        AIAgentDetector.detect(sessionScope: sessionScope)
+    }
+
+    private var effectiveDetection: AIAgentDetection? {
+        if let live = sessionDetection { return live }
+        if let probed = pathProbedAgent {
+            return AIAgentDetection(agent: probed, sessionLabel: nil)
+        }
+        return nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
-            AICommitPopoverHeader(agent: detectedAgent, sessionLabel: detectedSessionLabel)
+            AICommitPopoverHeader(
+                agent: effectiveDetection?.agent,
+                sessionLabel: effectiveDetection?.sessionLabel
+            )
             CommitDiffList(stats: diffStats, isLoading: isLoadingStats)
                 .frame(minHeight: 120, maxHeight: 240)
                 .padding(.horizontal, AppUI.Spacing.lg)
@@ -68,15 +87,26 @@ struct CommitPopover: View {
     // MARK: - Logic
 
     private var canSubmit: Bool {
-        guard let agent = detectedAgent else { return false }
+        guard let agent = effectiveDetection?.agent else { return false }
         return agent.supportsHeadless && !projectScope.aiCommitService.isBusy
     }
 
     private func onAppear() {
-        let detection = AIAgentDetector.detect(sessionScope: sessionScope)
-        detectedAgent = detection?.agent
-        detectedSessionLabel = detection?.sessionLabel
-        Task { await loadStats() }
+        // WHY: stats + PATH probe are independent reads kicked off on view appear; bundled
+        // into one Task so SwiftLint's consecutive-fire-and-forget guard stays happy and
+        // we only allocate a single Task per popover open.
+        // OWNER: CommitPopover — self-completing, no cancellation needed (cheap reads).
+        // TEARDOWN: completes when both awaits return; view-scoped lifetime is sufficient.
+        Task {
+            await loadStats()
+            await probeAgentIfNeeded()
+        }
+    }
+
+    private func probeAgentIfNeeded() async {
+        guard sessionDetection == nil, !hasProbed else { return }
+        hasProbed = true
+        pathProbedAgent = await projectScope.aiCommitService.probeAvailableHeadlessAgent()
     }
 
     private func loadStats() async {
@@ -90,10 +120,11 @@ struct CommitPopover: View {
     }
 
     private func submit() {
-        guard let agent = detectedAgent else { return }
+        guard let detection = effectiveDetection else { return }
+        let agent = detection.agent
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let userNote = trimmedNote.isEmpty ? nil : trimmedNote
-        let label = detectedSessionLabel
+        let label = detection.sessionLabel
         isPresented = false
         Task { @MainActor in
             commandRouter.showToast("Committing with \(agent.displayName)…", autoDismiss: .seconds(60))

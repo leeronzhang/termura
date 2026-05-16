@@ -15,6 +15,15 @@ protocol GitServiceProtocol: Sendable {
     /// Returns per-file added/removed line counts for the working tree (staged + unstaged combined).
     /// Untracked files are not included by `git diff`; callers that need them must combine with `status`.
     func numstat(at directory: String) async throws -> [DiffStat]
+    /// Returns the short SHA of HEAD, or nil when the repo has no commits yet.
+    /// Used by the AI commit flow to verify a commit actually happened (a
+    /// SHA delta is authoritative; relying on `status().files.isEmpty` mis-fires
+    /// when the agent leaves new untracked files instead of committing).
+    func headSHA(at directory: String) async throws -> String?
+    /// Returns the most recent commit subject (first line of message), or nil
+    /// when the repo has no commits. Used by the AI commit flow to surface
+    /// the real subject in the result toast instead of parsing agent stdout.
+    func lastCommitSubject(at directory: String) async throws -> String?
 }
 
 // MARK: - Live Implementation
@@ -148,6 +157,42 @@ actor GitService: GitServiceProtocol {
             let added = addedField == "-" ? nil : Int(addedField)
             let removed = removedField == "-" ? nil : Int(removedField)
             return DiffStat(path: path, added: added, removed: removed)
+        }
+    }
+
+    func headSHA(at directory: String) async throws -> String? {
+        let signpostID = signposter.makeSignpostID()
+        let state = signposter.beginInterval("GitHeadSHA", id: signpostID)
+        defer { signposter.endInterval("GitHeadSHA", state) }
+
+        do {
+            let output = try await run(["rev-parse", "--short", "HEAD"], at: directory)
+            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        } catch let GitServiceError.commandFailed(_, code, _) where Self.isNotARepoExitCode(code) {
+            throw GitServiceError.notARepo
+        } catch let GitServiceError.commandFailed(_, _, stderr)
+            where stderr.contains("unknown revision") || stderr.contains("ambiguous argument 'HEAD'") {
+            // Empty repo: no HEAD yet. Surface as "no commit" rather than an error
+            // so callers can use this as a "did a commit happen" probe on fresh repos.
+            return nil
+        }
+    }
+
+    func lastCommitSubject(at directory: String) async throws -> String? {
+        let signpostID = signposter.makeSignpostID()
+        let state = signposter.beginInterval("GitLastCommitSubject", id: signpostID)
+        defer { signposter.endInterval("GitLastCommitSubject", state) }
+
+        do {
+            let output = try await run(["log", "-1", "--format=%s"], at: directory)
+            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        } catch let GitServiceError.commandFailed(_, code, _) where Self.isNotARepoExitCode(code) {
+            throw GitServiceError.notARepo
+        } catch GitServiceError.commandFailed {
+            // Empty repo / detached HEAD with no log — surface as "no subject".
+            return nil
         }
     }
 

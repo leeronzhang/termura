@@ -10,12 +10,32 @@ final class AICommitService: AICommitServiceProtocol {
     /// Concurrent AI git tasks are not meaningful for a single repo, so a single
     /// flag gates all entrypoints.
     private(set) var isBusy = false
+    /// Last terminal outcome of a task the service actually executed. Rejections
+    /// (e.g. "another task already in progress") do NOT update this — they're
+    /// not results, they're refusals at the entry gate. Inspect `isBusy` to
+    /// detect a rejection-eligible state instead.
     private(set) var lastResult: AICommitResult?
 
-    @ObservationIgnored private let runner: any CLIProcessRunnerProtocol
-    @ObservationIgnored private let shellEnv: any UserShellEnvironmentProtocol
+    // Internal (not private) so `AICommitService+PathProbe.swift` extension can
+    // reach `runner` and `shellEnv` for the `which <cmd>` probe. Actor / @MainActor
+    // isolation already enforces single-threaded access; intra-target visibility
+    // adds no concurrency risk.
+    @ObservationIgnored let runner: any CLIProcessRunnerProtocol
+    @ObservationIgnored let shellEnv: any UserShellEnvironmentProtocol
     @ObservationIgnored private let gitService: any GitServiceProtocol
     @ObservationIgnored private let timeout: Duration
+    /// Handle on the in-flight task so `cancel()` can tear it down. Stored on
+    /// the @MainActor type so observers and the cancel call are isolation-safe.
+    @ObservationIgnored private var inflightTask: Task<AICommitResult, Never>?
+    /// PATH-probe cache. Boxed `Optional` so non-nil = "we've probed",
+    /// regardless of outcome. Wired by `AICommitService+PathProbe.swift`.
+    @ObservationIgnored var cachedHeadlessAgent: CachedHeadlessAgent?
+
+    /// Boxes the optional probe result so `cachedHeadlessAgent != nil` means
+    /// "we've probed", regardless of whether anything was found.
+    struct CachedHeadlessAgent {
+        let value: AgentType?
+    }
 
     init(
         runner: any CLIProcessRunnerProtocol,
@@ -38,24 +58,23 @@ final class AICommitService: AICommitServiceProtocol {
         fromSessionLabel: String?
     ) async -> AICommitResult {
         let request = AIAgentTaskRequest(
-            taskName: "commit",
+            kind: .commit,
             prompt: AICommitPrompts.commit(note: note),
             projectRoot: projectRoot,
             agent: agent,
-            fromSessionLabel: fromSessionLabel,
-            preCommitHookCheck: true
+            fromSessionLabel: fromSessionLabel
         )
-        return await runAgentTask(request) { [gitService] output in
-            let didCommit = await Self.committedSomething(
-                projectRoot: projectRoot, gitService: gitService
-            )
-            if !didCommit {
+        let preSHA = await Self.snapshotHEAD(projectRoot: projectRoot, gitService: gitService)
+        return await runAgentTask(request) { [gitService] _ in
+            let postSHA = await Self.snapshotHEAD(projectRoot: projectRoot, gitService: gitService)
+            guard let postSHA, postSHA != preSHA else {
                 return .failure(
                     reason: .agentDeclined,
                     message: "\(agent.displayName) did not commit. See terminal for details."
                 )
             }
-            return .success(summary: AIAgentClassifier.commitSubject(from: output) ?? "Committed")
+            let subject = await Self.fetchCommitSubject(projectRoot: projectRoot, gitService: gitService) ?? "Committed"
+            return .success(summary: subject)
         }
     }
 
@@ -66,12 +85,11 @@ final class AICommitService: AICommitServiceProtocol {
         fromSessionLabel: String?
     ) async -> AICommitResult {
         let request = AIAgentTaskRequest(
-            taskName: "remote-setup",
+            kind: .remoteSetup,
             prompt: AICommitPrompts.remoteSetup(note: note),
             projectRoot: projectRoot,
             agent: agent,
-            fromSessionLabel: fromSessionLabel,
-            preCommitHookCheck: false
+            fromSessionLabel: fromSessionLabel
         )
         return await runAgentTask(request) { _ in
             // Exit 0 + no auth/binary failure is enough. The agent has its own tool access;
@@ -80,13 +98,23 @@ final class AICommitService: AICommitServiceProtocol {
         }
     }
 
+    /// Tears down the currently-running agent task, if any. Propagates Task
+    /// cancellation to `CLIProcessRunner`, which terminates the child process
+    /// via its `withTaskCancellationHandler`. Safe to call when idle (no-op).
+    func cancel() {
+        inflightTask?.cancel()
+    }
+
     // MARK: - Shared task runner
 
     /// Runs the request's prompt headless on its agent, classifies common failures,
-    /// and on a clean exit hands the raw output to `successHandler`.
+    /// and on a clean exit hands the raw output to `successHandler`. Result-writing
+    /// rule: `lastResult` is updated on every path that actually invoked the agent
+    /// (including unsupported / launch failures). The single rejection path
+    /// (`isBusy == true` at entry) does not touch `lastResult`.
     private func runAgentTask(
         _ request: AIAgentTaskRequest,
-        successHandler: (CLIProcessOutput) async -> AICommitResult
+        successHandler: @escaping (CLIProcessOutput) async -> AICommitResult
     ) async -> AICommitResult {
         guard !isBusy else {
             return .failure(reason: .other, message: "Another AI task is already in progress")
@@ -101,21 +129,33 @@ final class AICommitService: AICommitServiceProtocol {
         }
 
         isBusy = true
-        defer { isBusy = false }
         logTaskStart(request)
-
-        let result = await invokeAndHandle(request, args: args, successHandler: successHandler)
+        // WHY: storing the inflight Task lets `cancel()` propagate Task cancellation through
+        // CLIProcessRunner's withTaskCancellationHandler, which terminates the child process.
+        // OWNER: AICommitService — replaced atomically per run; the assignment block below clears the slot.
+        // TEARDOWN: isBusy = false + inflightTask = nil run unconditionally after await task.value returns.
+        // TEST: AICommitServiceCancelTests covers the cancel propagation contract.
+        let task = Task { @MainActor [weak self] in
+            guard let self else {
+                return AICommitResult.failure(reason: .other, message: "Service deallocated")
+            }
+            return await invokeAndHandle(request, args: args, successHandler: successHandler)
+        }
+        inflightTask = task
+        let result = await task.value
+        isBusy = false
+        inflightTask = nil
         lastResult = result
-        logger.info("AI \(request.taskName, privacy: .public) result \(String(describing: result), privacy: .public)")
+        logger.info("AI \(request.kind.rawValue, privacy: .public) result \(String(describing: result), privacy: .public)")
         return result
     }
 
     private func logTaskStart(_ request: AIAgentTaskRequest) {
         logger.info(
             """
-            AI \(request.taskName, privacy: .public) start \
+            AI \(request.kind.rawValue, privacy: .public) start \
             agent=\(request.agent.rawValue, privacy: .public) \
-            cwd=\(request.projectRoot.path, privacy: .public) \
+            cwd=\(request.projectRoot.path, privacy: .private) \
             sessionLabel=\(request.fromSessionLabel ?? "nil", privacy: .public)
             """
         )
@@ -140,19 +180,24 @@ final class AICommitService: AICommitServiceProtocol {
                 timeout: timeout
             )
         } catch let CLIProcessRunnerError.launchFailed(_, underlying) {
-            logger.warning("AI agent launch failed: \(underlying.localizedDescription, privacy: .public)")
+            logger.warning("AI agent launch failed: \(underlying.localizedDescription, privacy: .private)")
             return .failure(
                 reason: .agentNotFound,
                 message: "\(request.agent.displayName) not found in PATH — install it or check your shell config"
             )
+        } catch is CancellationError {
+            // CancellationError is expected — `cancel()` propagates Task cancellation to
+            // CLIProcessRunner, which terminates the child; surface as a structured failure
+            // so the popover toast can show "Cancelled" instead of a stack-trace style message.
+            return .failure(reason: .other, message: "Cancelled")
         } catch {
-            logger.warning("AI agent unexpected error: \(error.localizedDescription, privacy: .public)")
+            logger.warning("AI agent unexpected error: \(error.localizedDescription, privacy: .private)")
             return .failure(reason: .other, message: error.localizedDescription)
         }
         return await classify(
             output: output,
             agent: request.agent,
-            preCommitHookCheck: request.preCommitHookCheck,
+            kind: request.kind,
             successHandler: successHandler
         )
     }
@@ -160,7 +205,7 @@ final class AICommitService: AICommitServiceProtocol {
     private func classify(
         output: CLIProcessOutput,
         agent: AgentType,
-        preCommitHookCheck: Bool,
+        kind: AIAgentTaskKind,
         successHandler: (CLIProcessOutput) async -> AICommitResult
     ) async -> AICommitResult {
         if output.timedOut {
@@ -169,7 +214,7 @@ final class AICommitService: AICommitServiceProtocol {
                 message: "AI task timed out — \(agent.displayName) may still be running"
             )
         }
-        if AIAgentClassifier.matchesAuthFailure(stderr: output.stderr, stdout: output.stdout) {
+        if AIAgentClassifier.matchesAuthFailure(stderr: output.stderr, exitCode: output.exitCode) {
             return .failure(
                 reason: .authRequired,
                 message: "Login required: run `\(agent.defaultLaunchCommand) login` in a terminal"
@@ -181,8 +226,8 @@ final class AICommitService: AICommitServiceProtocol {
                 message: "\(agent.displayName) not found in PATH — install it or check your shell config"
             )
         }
-        if preCommitHookCheck,
-           AIAgentClassifier.matchesPreCommitHook(stderr: output.stderr, stdout: output.stdout) {
+        if kind.invokesGitCommit,
+           AIAgentClassifier.matchesPreCommitHook(stderr: output.stderr, exitCode: output.exitCode) {
             return .failure(
                 reason: .gitHookFailed,
                 message: "Pre-commit hook failed — open a session and run `git commit` to debug"
@@ -192,19 +237,5 @@ final class AICommitService: AICommitServiceProtocol {
             return .failure(reason: .other, message: AIAgentClassifier.shortErrorSnippet(output: output))
         }
         return await successHandler(output)
-    }
-
-    private static func committedSomething(
-        projectRoot: URL,
-        gitService: any GitServiceProtocol
-    ) async -> Bool {
-        // After a successful AI commit, the working tree should be clean.
-        // Status query failure → be permissive and trust the agent's exit code.
-        do {
-            let after = try await gitService.status(at: projectRoot.path)
-            return after.files.isEmpty
-        } catch {
-            return true
-        }
     }
 }

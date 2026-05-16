@@ -131,6 +131,10 @@ extension AppConfig {
         /// Hard timeout for a single headless agent invocation. Generous because
         /// agents may take time to read diffs and craft a commit message.
         static let commandTimeout: Duration = .seconds(120)
+        /// Timeout for a single `which <agent>` PATH probe issued by the
+        /// AI-commit fallback path (used when no interactive session is open).
+        /// Short by design — `which` is local and should return in milliseconds.
+        static let probeTimeout: Duration = .seconds(2)
         /// Timeout for the one-shot `zsh -lc 'echo $PATH'` probe at startup.
         static let pathProbeTimeout: Duration = .seconds(2)
         /// Login-shell command used to resolve the user's interactive PATH.

@@ -75,17 +75,15 @@ final class AICommitServiceTests: XCTestCase {
         XCTAssertEqual(reason, .agentNotFound)
     }
 
-    func testAgentDeclinedWhenStatusStillDirty() async {
+    /// Agent exits 0 but HEAD did not move → agentDeclined.
+    /// Stubs the same SHA before and after to model "no commit happened".
+    func testAgentDeclinedWhenHEADUnchanged() async {
         let runner = MockRunner()
         runner.stubbedOutput = CLIProcessOutput(
             exitCode: 0, stdout: "(no commit was made)", stderr: "", timedOut: false
         )
         let git = MockGitService()
-        await git.setStubbed(.init(
-            branch: "main",
-            files: [GitFileStatus(path: "Foo.swift", kind: .modified, isStaged: false)],
-            isGitRepo: true, ahead: 0, behind: 0
-        ))
+        await git.setHeadSHADefault("abc1234")
         let service = makeService(runner: runner, git: git)
         let result = await service.commit(
             note: nil, projectRoot: tmp(), agent: .claudeCode, fromSessionLabel: nil
@@ -96,18 +94,19 @@ final class AICommitServiceTests: XCTestCase {
         XCTAssertEqual(reason, .agentDeclined)
     }
 
+    /// Happy path: pre-SHA `abc1234`, post-SHA `def5678` (HEAD moved), commit
+    /// subject read from git (NOT parsed from agent stdout).
     func testHappyPathReturnsSuccessWithSubject() async {
         let runner = MockRunner()
         runner.stubbedOutput = CLIProcessOutput(
             exitCode: 0,
-            stdout: "[main 1a2b3c4] feat: add commit popover",
+            stdout: "anything the agent printed",
             stderr: "",
             timedOut: false
         )
         let git = MockGitService()
-        await git.setStubbed(.init(
-            branch: "main", files: [], isGitRepo: true, ahead: 0, behind: 0
-        ))
+        await git.enqueueHeadSHAs(["abc1234", "def5678"])
+        await git.setLastCommitSubject("feat: add commit popover")
         let service = makeService(runner: runner, git: git)
         let result = await service.commit(
             note: "test note", projectRoot: tmp(), agent: .claudeCode, fromSessionLabel: "main"
@@ -116,6 +115,20 @@ final class AICommitServiceTests: XCTestCase {
             return XCTFail("Expected success")
         }
         XCTAssertEqual(subject, "feat: add commit popover")
+    }
+
+    /// HEAD moved but git refused to surface a subject. Fallback string keeps the toast useful.
+    func testHappyPathFallsBackToCommittedWhenSubjectMissing() async {
+        let runner = MockRunner()
+        runner.stubbedOutput = CLIProcessOutput(exitCode: 0, stdout: "", stderr: "", timedOut: false)
+        let git = MockGitService()
+        await git.enqueueHeadSHAs([nil, "first1234"]) // empty repo → first commit
+        await git.setLastCommitSubject(nil)
+        let service = makeService(runner: runner, git: git)
+        let result = await service.commit(
+            note: nil, projectRoot: tmp(), agent: .claudeCode, fromSessionLabel: nil
+        )
+        XCTAssertEqual(result, .success(summary: "Committed"))
     }
 
     func testPromptEmbedsUserNote() {
@@ -129,6 +142,14 @@ final class AICommitServiceTests: XCTestCase {
         let promptBlank = AICommitPrompts.commit(note: "   \n\t")
         XCTAssertFalse(promptNil.contains("User context"))
         XCTAssertFalse(promptBlank.contains("User context"))
+    }
+
+    /// Locks in the natural-language-match instruction so a future prompt
+    /// rewrite doesn't silently strip the Chinese-repo fix.
+    func testPromptInstructsMatchingCommitSubjectLanguage() {
+        let prompt = AICommitPrompts.commit(note: nil)
+        XCTAssertTrue(prompt.contains("natural language"))
+        XCTAssertTrue(prompt.contains("Chinese"))
     }
 
     // MARK: - Remote setup
@@ -152,23 +173,20 @@ final class AICommitServiceTests: XCTestCase {
         XCTAssertEqual(summary, "Remote configured")
     }
 
-    func testSetupRemoteSkipsCommitWorkingTreeCheck() async {
-        // setupRemote uses the same auth pattern detection. This verifies a clean exit
-        // with no auth keywords + dirty status does NOT mark agentDeclined for remote setup.
+    /// Verifies remote-setup uses the auth-pattern path but does NOT trigger
+    /// the HEAD-delta check: a clean exit means "remote configured" regardless
+    /// of working-tree state.
+    func testSetupRemoteSkipsHEADCheck() async {
         let runner = MockRunner()
         runner.stubbedOutput = CLIProcessOutput(exitCode: 0, stdout: "", stderr: "", timedOut: false)
         let git = MockGitService()
-        await git.setStubbed(.init(
-            branch: "main",
-            files: [GitFileStatus(path: "Foo.swift", kind: .modified, isStaged: false)],
-            isGitRepo: true, ahead: 0, behind: 0
-        ))
+        await git.setHeadSHADefault("abc1234") // would be "no commit" under commit path
         let service = makeService(runner: runner, git: git)
         let result = await service.setupRemote(
             note: nil, projectRoot: tmp(), agent: .claudeCode, fromSessionLabel: nil
         )
         guard case .success = result else {
-            return XCTFail("Expected success — remote setup must not check working tree")
+            return XCTFail("Expected success — remote setup must not check HEAD")
         }
     }
 
@@ -181,6 +199,55 @@ final class AICommitServiceTests: XCTestCase {
     func testSetupRemotePromptHasFallbackWhenNoteEmpty() {
         let prompt = AICommitPrompts.remoteSetup(note: nil)
         XCTAssertTrue(prompt.contains("sensible remote"))
+    }
+
+    // MARK: - PATH probe caching
+
+    func testProbeReturnsClaudeCodeWhenWhichSucceeds() async {
+        let runner = MockRunner()
+        runner.stubbedOutput = CLIProcessOutput(
+            exitCode: 0, stdout: "/usr/local/bin/claude\n", stderr: "", timedOut: false
+        )
+        let service = makeService(runner: runner)
+        let resolved = await service.probeAvailableHeadlessAgent()
+        XCTAssertEqual(resolved, .claudeCode)
+    }
+
+    func testProbeCachesResultAcrossCalls() async {
+        let runner = MockRunner()
+        runner.stubbedOutput = CLIProcessOutput(
+            exitCode: 0, stdout: "/usr/local/bin/claude\n", stderr: "", timedOut: false
+        )
+        let service = makeService(runner: runner)
+        _ = await service.probeAvailableHeadlessAgent()
+        let probeCallsAfterFirst = runner.callCount
+        _ = await service.probeAvailableHeadlessAgent()
+        _ = await service.probeAvailableHeadlessAgent()
+        XCTAssertEqual(runner.callCount, probeCallsAfterFirst,
+                       "Second + third probe must use cache, not re-shell")
+    }
+
+    func testProbeCachesNegativeResult() async {
+        let runner = MockRunner()
+        runner.stubbedOutput = CLIProcessOutput(
+            exitCode: 1, stdout: "", stderr: "", timedOut: false
+        )
+        let service = makeService(runner: runner)
+        let first = await service.probeAvailableHeadlessAgent()
+        XCTAssertNil(first)
+        let countAfterFirst = runner.callCount
+        _ = await service.probeAvailableHeadlessAgent()
+        XCTAssertEqual(runner.callCount, countAfterFirst,
+                       "Negative probe must also be cached so we don't re-shell on every popover")
+    }
+
+    // MARK: - Cancel
+
+    /// `cancel()` is a no-op while idle and must not crash. Lifecycle invariant.
+    func testCancelWhileIdleIsNoOp() async {
+        let service = makeService(runner: MockRunner())
+        service.cancel()
+        XCTAssertFalse(service.isBusy)
     }
 
     // MARK: - Helpers
@@ -208,6 +275,7 @@ private final class MockRunner: CLIProcessRunnerProtocol, @unchecked Sendable {
     var stubbedOutput = CLIProcessOutput(exitCode: 0, stdout: "", stderr: "", timedOut: false)
     var shouldThrowLaunchFailed = false
     private(set) var lastInvocation: (executable: String, args: [String], cwd: URL)?
+    private(set) var callCount = 0
 
     func run(
         executable: String,
@@ -216,6 +284,7 @@ private final class MockRunner: CLIProcessRunnerProtocol, @unchecked Sendable {
         env: [String: String],
         timeout: Duration
     ) async throws -> CLIProcessOutput {
+        callCount += 1
         lastInvocation = (executable, args, cwd)
         if shouldThrowLaunchFailed {
             throw CLIProcessRunnerError.launchFailed(

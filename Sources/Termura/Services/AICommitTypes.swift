@@ -18,7 +18,7 @@ enum AICommitFailureReason: String, Sendable, Equatable {
     /// Agent's headless mode is not supported in this build.
     case agentUnsupported
     /// Agent exited 0 but the verification step decided no work happened
-    /// (e.g. commit task left the working tree dirty).
+    /// (e.g. commit task left HEAD unchanged).
     case agentDeclined
     /// Hard timeout fired before the agent returned.
     case timedOut
@@ -50,17 +50,42 @@ protocol AICommitServiceProtocol: AnyObject, Sendable {
                      projectRoot: URL,
                      agent: AgentType,
                      fromSessionLabel: String?) async -> AICommitResult
+
+    /// Cancels the in-flight agent task, if any. The CLI runner translates
+    /// Task cancellation into a SIGTERM on the child process. No-op when idle.
+    @MainActor
+    func cancel()
+
+    /// Returns the first headless-capable agent whose CLI is on the user's PATH.
+    /// Used as a fallback by `AIAgentDetector` so the Commit / Remote popovers
+    /// can submit even when there is no active interactive session of the agent.
+    /// Result is cached for the service's lifetime (PATH is stable per launch).
+    @MainActor
+    func probeAvailableHeadlessAgent() async -> AgentType?
+}
+
+/// Discrete AI git tasks the service dispatches. Replaces a stringly-typed
+/// taskName so log lines + classifier branches can never typo apart.
+enum AIAgentTaskKind: String, Sendable, Equatable {
+    case commit
+    case remoteSetup = "remote-setup"
+
+    /// True when this task type runs `git commit` and therefore should treat
+    /// pre-commit-hook stderr signals as a real failure.
+    var invokesGitCommit: Bool {
+        switch self {
+        case .commit: true
+        case .remoteSetup: false
+        }
+    }
 }
 
 /// Internal request bundle used by `AICommitService` to keep its dispatch
 /// helper under the function-parameter-count budget.
 struct AIAgentTaskRequest: Sendable {
-    let taskName: String
+    let kind: AIAgentTaskKind
     let prompt: String
     let projectRoot: URL
     let agent: AgentType
     let fromSessionLabel: String?
-    /// True when the pre-commit hook stderr keyword should be treated as a hook failure.
-    /// Only relevant for tasks that actually invoke `git commit`.
-    let preCommitHookCheck: Bool
 }

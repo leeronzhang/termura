@@ -35,4 +35,30 @@ actor MockGitService: GitServiceProtocol {
     func numstat(at directory: String) async throws -> [DiffStat] {
         stubbedNumstat
     }
+
+    /// FIFO queue consumed by `headSHA(at:)` so a single test can stub the
+    /// pre-commit and post-commit SHAs in order. When empty, falls back to
+    /// `stubbedHeadSHADefault` (nil by default — same as "no HEAD yet").
+    var stubbedHeadSHAQueue: [String?] = []
+    var stubbedHeadSHADefault: String?
+    var headSHACallCount = 0
+
+    func enqueueHeadSHAs(_ shas: [String?]) { stubbedHeadSHAQueue.append(contentsOf: shas) }
+    func setHeadSHADefault(_ sha: String?) { stubbedHeadSHADefault = sha }
+
+    func headSHA(at directory: String) async throws -> String? {
+        headSHACallCount += 1
+        if !stubbedHeadSHAQueue.isEmpty {
+            return stubbedHeadSHAQueue.removeFirst()
+        }
+        return stubbedHeadSHADefault
+    }
+
+    var stubbedLastCommitSubject: String?
+
+    func setLastCommitSubject(_ subject: String?) { stubbedLastCommitSubject = subject }
+
+    func lastCommitSubject(at directory: String) async throws -> String? {
+        stubbedLastCommitSubject
+    }
 }

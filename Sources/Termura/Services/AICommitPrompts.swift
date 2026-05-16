@@ -12,6 +12,8 @@ enum AICommitPrompts {
         - Do not push. Local commit only.
         - Prefer a single commit unless the user note below requests otherwise.
         - Match the existing project commit style if discoverable from `git log`.
+        - Match the natural language of the recent commit subjects from `git log` \
+        (e.g. if the project writes commit subjects in Chinese, keep yours in Chinese).
         """
         if let trimmed = trimOrNil(note) {
             prompt += "\n\nUser context:\n\(trimmed)"

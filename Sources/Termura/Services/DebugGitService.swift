@@ -33,6 +33,17 @@ actor DebugGitService: GitServiceProtocol {
     func numstat(at directory: String) async throws -> [DiffStat] {
         stubbedNumstat
     }
+
+    var stubbedHeadSHA: String?
+    var stubbedLastCommitSubject: String?
+
+    func headSHA(at directory: String) async throws -> String? {
+        stubbedHeadSHA
+    }
+
+    func lastCommitSubject(at directory: String) async throws -> String? {
+        stubbedLastCommitSubject
+    }
 }
 
 #endif

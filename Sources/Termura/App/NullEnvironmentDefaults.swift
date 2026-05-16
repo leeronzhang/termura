@@ -67,6 +67,8 @@ struct NullGitService: GitServiceProtocol {
     func trackedFiles(at directory: String) async throws -> Set<String> { [] }
     func showFile(at path: String, directory: String) async throws -> String { "" }
     func numstat(at directory: String) async throws -> [DiffStat] { [] }
+    func headSHA(at directory: String) async throws -> String? { nil }
+    func lastCommitSubject(at directory: String) async throws -> String? { nil }
 }
 
 // MARK: - File Tree

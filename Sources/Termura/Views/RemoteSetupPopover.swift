@@ -19,12 +19,29 @@ struct RemoteSetupPopover: View {
 
     @State private var note: String = ""
 
-    @State private var detectedAgent: AgentType?
-    @State private var detectedSessionLabel: String?
+    /// PATH-fallback agent resolved asynchronously when no session matched.
+    /// nil until probed, or permanently nil when no headless CLI is on PATH.
+    @State private var pathProbedAgent: AgentType?
+    @State private var hasProbed = false
+
+    private var sessionDetection: AIAgentDetection? {
+        AIAgentDetector.detect(sessionScope: sessionScope)
+    }
+
+    private var effectiveDetection: AIAgentDetection? {
+        if let live = sessionDetection { return live }
+        if let probed = pathProbedAgent {
+            return AIAgentDetection(agent: probed, sessionLabel: nil)
+        }
+        return nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppUI.Spacing.md) {
-            AICommitPopoverHeader(agent: detectedAgent, sessionLabel: detectedSessionLabel)
+            AICommitPopoverHeader(
+                agent: effectiveDetection?.agent,
+                sessionLabel: effectiveDetection?.sessionLabel
+            )
             currentStateSection
             noteSection
             AICommitPopoverFooter(
@@ -98,21 +115,26 @@ struct RemoteSetupPopover: View {
     // MARK: - Logic
 
     private var canSubmit: Bool {
-        guard let agent = detectedAgent else { return false }
+        guard let agent = effectiveDetection?.agent else { return false }
         return agent.supportsHeadless && !projectScope.aiCommitService.isBusy
     }
 
     private func onAppear() {
-        let detection = AIAgentDetector.detect(sessionScope: sessionScope)
-        detectedAgent = detection?.agent
-        detectedSessionLabel = detection?.sessionLabel
+        Task { await probeAgentIfNeeded() }
+    }
+
+    private func probeAgentIfNeeded() async {
+        guard sessionDetection == nil, !hasProbed else { return }
+        hasProbed = true
+        pathProbedAgent = await projectScope.aiCommitService.probeAvailableHeadlessAgent()
     }
 
     private func submit() {
-        guard let agent = detectedAgent else { return }
+        guard let detection = effectiveDetection else { return }
+        let agent = detection.agent
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let userNote = trimmedNote.isEmpty ? nil : trimmedNote
-        let label = detectedSessionLabel
+        let label = detection.sessionLabel
         isPresented = false
         Task { @MainActor in
             commandRouter.showToast(
