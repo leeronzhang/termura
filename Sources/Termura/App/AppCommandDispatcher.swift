@@ -15,6 +15,11 @@ protocol AppCommandDispatcher: AnyObject {
     // MARK: - Project commands
 
     func showProjectPicker()
+    func openProject(at url: URL)
+    /// Recents list (existence-filtered) backing File ▸ Open Recent.
+    func recentProjects() -> [RecentProject]
+    /// Standard "Clear Menu" action under File ▸ Open Recent.
+    func clearRecentProjects()
 
     // MARK: - CommandRouter forwarding
 

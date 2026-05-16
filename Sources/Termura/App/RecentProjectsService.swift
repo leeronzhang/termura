@@ -51,6 +51,12 @@ struct RecentProjectsService: Sendable {
         return url
     }
 
+    /// Recents whose on-disk path still resolves — used by the File ▸ Open Recent
+    /// menu so stale entries (project folder moved/deleted) don't appear.
+    func fetchExisting() -> [RecentProject] {
+        fetchRecent().filter { fileManager.fileExists(atPath: $0.path) }
+    }
+
     // MARK: - Write
 
     func addRecent(_ url: URL) {
@@ -69,6 +75,12 @@ struct RecentProjectsService: Sendable {
 
     func removeRecent(_ url: URL) {
         save(fetchRecent().filter { $0.path != url.path })
+    }
+
+    /// Wipe the entire recents list — backs the standard macOS "Clear Menu"
+    /// item under File ▸ Open Recent.
+    func clearAll() {
+        save([])
     }
 
     // MARK: - Private

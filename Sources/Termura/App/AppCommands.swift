@@ -38,6 +38,8 @@ struct AppCommands: Commands {
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])
 
+            openRecentMenu
+
             Divider()
 
             Button("Search\u{2026}") {
@@ -216,14 +218,6 @@ struct AppCommands: Commands {
         }
     }
 
-    @ViewBuilder
-    private var newBranchMenu: some View {
-        Menu("New Branch") {
-            ForEach(BranchType.allCases.filter { $0 != .main }, id: \.self) { type in
-                Button(type.rawValue.capitalized) {
-                    dispatcher.createBranch(type: type)
-                }
-            }
-        }
-    }
+    // Submenus split into AppCommands+Submenus.swift to keep this file under
+    // the soft file-size budget (CLAUDE.md §6.1).
 }

@@ -230,6 +230,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         projectCoordinator.showProjectPicker()
     }
 
+    func recentProjects() -> [RecentProject] {
+        services.recentProjects.fetchExisting()
+    }
+
+    func clearRecentProjects() {
+        services.recentProjects.clearAll()
+    }
+
     /// The context of the most recently focused project window.
     var activeContext: ProjectContext? { projectCoordinator.activeContext }
 }
