@@ -40,8 +40,15 @@ extension SidebarProjectContent {
                 .controlSize(.mini)
                 .opacity(viewModel.isLoading ? 1 : 0)
             Spacer()
-            if git.files.isEmpty == false {
-                commitButton
+            // Keep the Commit / Cancel area visible while an AI commit is in flight,
+            // even if the working tree appears clean (could happen mid-refresh).
+            if git.files.isEmpty == false || projectScope.aiCommitService.isBusy {
+                HStack(spacing: AppUI.Spacing.xxs) {
+                    commitButton
+                    if projectScope.aiCommitService.isBusy {
+                        cancelCommitButton
+                    }
+                }
             }
         }
         .padding(.horizontal, AppUI.Spacing.xxxl)
@@ -140,5 +147,33 @@ extension SidebarProjectContent {
         }
         .help("Commit changes via AI")
         .accessibilityLabel("Commit changes")
+    }
+
+    // MARK: - Cancel button
+
+    /// Visible only while `aiCommitService.isBusy`. SIGTERMs the headless agent
+    /// subprocess via `AICommitService.cancel()` — surfaces as a "Cancelled"
+    /// toast once the runner returns. See `CommitPopover.submit` for the
+    /// fire-and-forget Task that this tears down.
+    var cancelCommitButton: some View {
+        Button {
+            projectScope.aiCommitService.cancel()
+        } label: {
+            Image(systemName: "xmark")
+                .font(AppUI.Font.caption.weight(.semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, AppUI.Spacing.xs)
+                .padding(.vertical, AppUI.Spacing.xs)
+                .background(
+                    RoundedRectangle(cornerRadius: AppUI.Spacing.md)
+                        .stroke(
+                            Color.secondary.opacity(AppUI.Opacity.border),
+                            lineWidth: 1
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Cancel the in-flight AI commit")
+        .accessibilityLabel("Cancel commit")
     }
 }

@@ -166,6 +166,12 @@ final class ProjectCoordinator {
             projectWindows[url]?.projectContext.commandRouter.removeChunkHandler(token: token)
         }
         chunkHandlerTokens.removeAll()
+        // CLAUDE.md §4.3 P0: shutdown must really tear down background work.
+        // Cancel any in-flight AI commit subprocess before window close so the
+        // headless agent child doesn't outlive the app.
+        for (_, controller) in projectWindows {
+            controller.projectContext.projectScope.aiCommitService.cancel()
+        }
         // Termination path: flushPendingWrites() already called by handleTermination()
         // before tearDown() is reached. Only resource cleanup needed here.
         for (_, controller) in projectWindows {
