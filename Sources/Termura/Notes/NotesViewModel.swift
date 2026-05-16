@@ -52,6 +52,17 @@ final class NotesViewModel {
     /// In-memory reverse index: maps note titles to notes that link to them via [[...]].
     @ObservationIgnored var backlinkIndex = BacklinkIndex()
 
+    /// Long-running drain task for the repository's externalChanges() stream.
+    /// Started by `loadNotes()` after the first successful fetch; cancelled in deinit.
+    /// WHY: lets the sidebar refresh when an agent / Finder / sync client writes the notes
+    /// directory while the app is foregrounded — without this, `loadNotes()`'s `isLoaded`
+    /// short-circuit means subsequent edits never reach the UI.
+    /// OWNER: NotesViewModel — `externalChangeWatchTask`.
+    /// TEARDOWN: deinit cancels the task; the repository's stopWatching() also finishes
+    /// the upstream stream, which exits the for-await loop on its own.
+    /// TEST: covered by NotesViewModel external-edit → sidebar list refresh integration.
+    @ObservationIgnored var externalChangeWatchTask: Task<Void, Never>?
+
     /// True after the first successful loadNotes(). Subsequent calls are no-ops so
     /// that view re-mounts (sidebar tab cycling, split layout changes, etc.) do not
     /// clobber in-memory edits with stale repository state. Local mutations
@@ -98,6 +109,7 @@ final class NotesViewModel {
     deinit {
         autoSaveTask?.cancel()
         toastDismissTask?.cancel()
+        externalChangeWatchTask?.cancel()
         pendingWrites.values.forEach { $0.cancel() }
     }
 
@@ -156,7 +168,10 @@ final class NotesViewModel {
     }
 
     func loadNotes() async {
-        if isLoaded { return }
+        if isLoaded {
+            startExternalChangeWatchIfNeeded()
+            return
+        }
         if let inFlight = loadTask {
             await inFlight.value
             return
@@ -177,6 +192,7 @@ final class NotesViewModel {
         }
         loadTask = task
         await task.value
+        startExternalChangeWatchIfNeeded()
     }
 
     /// Shows a transient toast banner with `message` and auto-dismisses after the configured delay.

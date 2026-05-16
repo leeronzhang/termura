@@ -100,6 +100,7 @@ extension FileBackedNoteRepository {
                 guard !writing else { continue }
                 do {
                     try await incrementalSync()
+                    await yieldExternalChange()
                 } catch {
                     logger.error("Failed to sync notes after file change: \(error.localizedDescription)")
                 }
@@ -112,5 +113,6 @@ extension FileBackedNoteRepository {
         watchTask = nil
         await watcher?.stop()
         watcher = nil
+        finishExternalChangeStream()
     }
 }

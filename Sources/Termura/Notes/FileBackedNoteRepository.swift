@@ -23,6 +23,12 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
     /// File-system watcher task — cancelled on stopWatching().
     var watchTask: Task<Void, Never>?
     var watcher: (any NoteDirectoryWatcherProtocol)?
+    /// AsyncStream broadcasting "external change synced" ticks to UI consumers
+    /// (e.g. `NotesViewModel`). Yields once after each successful `incrementalSync`
+    /// triggered by the file-system watcher; never yields for in-process writes
+    /// (`save` / `delete`) because those callers already update their UI directly.
+    nonisolated let externalChangeStream: AsyncStream<Void>
+    private let externalChangeContinuation: AsyncStream<Void>.Continuation
 
     struct IndexEntry {
         var record: NoteRecord
@@ -41,6 +47,29 @@ actor FileBackedNoteRepository: NoteRepositoryProtocol {
         self.db = db
         self.clock = clock
         self.fileManager = fileManager
+        // WHY: bridges incrementalSync completions into the NotesViewModel so external
+        // edits (CLI agent / Finder / sync clients) refresh the sidebar list without
+        // requiring the user to toggle tabs or relaunch.
+        // OWNER: FileBackedNoteRepository — continuation finished in stopWatching().
+        // TEARDOWN: stopWatching() finishes the continuation; the watcher itself is torn
+        // down at the same time so no further yield can occur.
+        // TEST: covered by FileBackedNoteRepository external-change → VM reload integration.
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: Void.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        externalChangeStream = stream
+        externalChangeContinuation = continuation
+    }
+
+    nonisolated func externalChanges() -> AsyncStream<Void> { externalChangeStream }
+
+    func yieldExternalChange() {
+        externalChangeContinuation.yield(())
+    }
+
+    func finishExternalChangeStream() {
+        externalChangeContinuation.finish()
     }
 
     // MARK: - NoteRepositoryProtocol

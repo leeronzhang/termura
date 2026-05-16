@@ -21,6 +21,14 @@ protocol NoteRepositoryProtocol: Actor {
     func startWatching() async throws
     /// Stop monitoring. Must be called symmetrically with `startWatching` on teardown.
     func stopWatching() async
+
+    /// AsyncStream that yields once after each successful external sync the
+    /// repository performs in response to its file-system watcher. Lets the
+    /// view model re-fetch when an agent / Finder / sync client edits the
+    /// notes directory while the app is foregrounded. Default implementation
+    /// returns an empty (immediately-finished) stream for repositories that
+    /// have no watcher.
+    nonisolated func externalChanges() -> AsyncStream<Void>
 }
 
 extension NoteRepositoryProtocol {
@@ -28,4 +36,7 @@ extension NoteRepositoryProtocol {
     func stopWatching() async {}
     func backlinks(toTitle _: String) async throws -> [NoteRecord] { [] }
     func notes(taggedWith _: String) async throws -> [NoteRecord] { [] }
+    nonisolated func externalChanges() -> AsyncStream<Void> {
+        AsyncStream { $0.finish() }
+    }
 }
