@@ -55,7 +55,7 @@ final class ProjectCoordinator {
             ),
             coordinator: self
         )
-        launcher?.restoreLastProjectOrShowPicker()
+        launcher?.coldLaunch()
     }
 
     // MARK: - Project management

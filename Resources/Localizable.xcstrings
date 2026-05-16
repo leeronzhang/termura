@@ -154,6 +154,18 @@
         }
       }
     },
+    "Agent Session Still Open" : {
+      "comment" : "NSAlert title when Cmd-Q is pressed while a project window still has a live agent session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent Session Still Open"
+          }
+        }
+      }
+    },
     "Agents" : {
       "comment" : "Sidebar tab label for the agents panel",
       "extractionState" : "manual",
@@ -258,6 +270,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Choose a location and name for your new project." : {
+      "comment" : "NSSavePanel message for creating a new project from the Welcome window",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a location and name for your new project."
           }
         }
       }
@@ -424,6 +448,18 @@
     "Cost Display" : {
 
     },
+    "Could not create project" : {
+      "comment" : "NSAlert title when project directory creation fails from the Welcome window",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not create project"
+          }
+        }
+      }
+    },
     "Could not open \"%@\": %@" : {
       "comment" : "NSAlert informative text when a project fails to open. First %@ = filename, second %@ = error description.",
       "extractionState" : "manual",
@@ -432,6 +468,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Could not open \"%@\": %@"
+          }
+        }
+      }
+    },
+    "Create" : {
+      "comment" : "NSSavePanel default button label when creating a new project",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create"
+          }
+        }
+      }
+    },
+    "Create New Project" : {
+      "comment" : "NSSavePanel title for creating a new project from the Welcome window",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create New Project"
           }
         }
       }
@@ -1017,6 +1077,9 @@
         }
       }
     },
+    "New Project…" : {
+
+    },
     "New Session" : {
       "comment" : "Menu item / button: create a new terminal session",
       "extractionState" : "manual",
@@ -1098,6 +1161,9 @@
     "No paired devices yet." : {
 
     },
+    "No recent projects" : {
+
+    },
     "No remote configured" : {
 
     },
@@ -1169,6 +1235,9 @@
           }
         }
       }
+    },
+    "Open Existing Project…" : {
+
     },
     "Open in Finder" : {
       "comment" : "Button: reveal the file in Finder",
@@ -1348,6 +1417,42 @@
         }
       }
     },
+    "Project name:" : {
+      "comment" : "NSSavePanel name-field label when creating a new project",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Project name:"
+          }
+        }
+      }
+    },
+    "Quit Anyway" : {
+      "comment" : "NSAlert confirm button: proceed with Cmd-Q despite a live agent session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quit Anyway"
+          }
+        }
+      }
+    },
+    "Quitting ends active agent sessions." : {
+      "comment" : "NSAlert body shown when Cmd-Q is pressed while a project window has a live agent session",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitting ends active agent sessions."
+          }
+        }
+      }
+    },
     "Quote in Composer" : {
       "comment" : "Context menu item: quote the current selection in the AI composer",
       "extractionState" : "manual",
@@ -1361,6 +1466,9 @@
       }
     },
     "Recent commands" : {
+
+    },
+    "Recent Projects" : {
 
     },
     "Refresh" : {
@@ -1850,6 +1958,9 @@
         }
       }
     },
+    "Termura" : {
+
+    },
     "Themes" : {
       "comment" : "Settings tab label and panel title for theme selection",
       "extractionState" : "manual",
@@ -2021,6 +2132,18 @@
         }
       }
     },
+    "Untitled Project" : {
+      "comment" : "Default placeholder name for a new project created from the Welcome window",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untitled Project"
+          }
+        }
+      }
+    },
     "Updated each turn" : {
 
     },
@@ -2063,6 +2186,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Version History"
+          }
+        }
+      }
+    },
+    "Welcome to Termura" : {
+      "comment" : "NSWindow title for the cold-launch Welcome window",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Welcome to Termura"
           }
         }
       }

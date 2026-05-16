@@ -6,6 +6,27 @@ private let logger = Logger(subsystem: "com.termura.app", category: "ProjectCoor
 // MARK: - Termination handoff & flush
 
 extension ProjectCoordinator {
+    /// Whether any open project window has a live terminal session that
+    /// has already hosted an agent. This intentionally uses the
+    /// persisted session record (`agentType`) rather than the transient
+    /// AgentStateStore: shell `executionFinished` clears in-memory agent
+    /// state as soon as the CLI returns to its prompt, but Cmd-Q still
+    /// needs to warn for an idle-yet-live agent session the user may
+    /// want to resume instead of killing mid-work.
+    func hasLiveAgentSessionsRequiringQuitConfirmation() -> Bool {
+        for (_, controller) in projectWindows {
+            let sessions = controller.projectContext.sessionScope.store.activeSessions
+            if sessions.contains(where: Self.sessionRequiresQuitConfirmation) {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func sessionRequiresQuitConfirmation(_ session: SessionRecord) -> Bool {
+        session.status == .active && session.agentType != .unknown
+    }
+
     /// - Parameter metricsFlush: Optional additional async work (e.g. metrics persistence) to include
     ///   in the structured task group so it is protected by the termination timeout.
     ///   `MetricsPersistenceService` is an actor (Sendable) — safe to capture in @Sendable closure.

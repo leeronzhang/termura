@@ -22,6 +22,11 @@ extension AppConfig {
         /// explicit on/off choice; written by `disable()` / re-`enable()`.
         static let remoteControlEnabled = "remoteControlEnabled"
 
+        /// Persisted "Show Welcome window on launch" preference, written
+        /// by the Welcome window's footer toggle. Absent on first launch
+        /// → treated as `true` so the onboarding affordance surfaces once.
+        static let welcomeShowAtStartup = "welcome.showAtStartup"
+
         /// JSON-encoded `RemoteHelperFingerprint` recorded after a
         /// successful `installer.install(...)`. PR10 Step 3 reads this
         /// at app launch and compares it against the file currently

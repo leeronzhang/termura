@@ -173,6 +173,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Guard against accidental Cmd-Q: if any project window still has
+        // a live terminal session that already hosted an agent, require
+        // explicit confirmation before quitting. Uses the persisted
+        // `SessionRecord.agentType` rather than `AgentStateStore` so an
+        // idle-but-live agent session (CLI returned to prompt, shell
+        // `executionFinished` already cleared the transient store) still
+        // triggers the prompt.
+        if projectCoordinator.hasLiveAgentSessionsRequiringQuitConfirmation() {
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Agent Session Still Open")
+            alert.informativeText = String(localized: "Quitting ends active agent sessions.")
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: String(localized: "Quit Anyway"))
+            alert.addButton(withTitle: String(localized: "Cancel"))
+            if alert.runModal() != .alertFirstButtonReturn {
+                return .terminateCancel
+            }
+        }
         // Include metrics flush in handleTermination's structured task group so it is
         // protected by the termination timeout (not fire-and-forget after the reply is sent).
         let persistence = services.metricsPersistenceService
