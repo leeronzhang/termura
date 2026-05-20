@@ -11,8 +11,6 @@ final class EditorTextView: NSTextView {
 
     /// Called when the user submits the current text (Enter / Cmd+Enter).
     var submitHandler: ((String) -> Void)?
-    /// Called when Shift+Enter is pressed (insert literal newline).
-    var newlineHandler: (() -> Void)?
     /// Called when Up (true) or Down (false) is pressed on a single-line buffer.
     var historyNavigationHandler: ((Bool) -> Void)?
 
@@ -200,7 +198,11 @@ final class EditorTextView: NSTextView {
 
     private func handleReturn(isShift: Bool, isCommand: Bool) {
         if isShift {
-            newlineHandler?()
+            // Insert at the current selection so newline lands at the caret —
+            // not at the end of the string. Going through NSTextView's edit
+            // pipeline keeps undo, typing attributes, and selection consistent;
+            // textDidChange propagates the new value to the view model.
+            insertText("\n", replacementRange: selectedRange())
         } else {
             // Enter or Cmd+Enter both submit
             submitHandler?(string)

@@ -100,9 +100,6 @@ struct EditorInputView: NSViewRepresentable {
         textView.submitHandler = { [weak coordinator] text in
             coordinator?.handleSubmit(text)
         }
-        textView.newlineHandler = { [weak coordinator] in
-            coordinator?.handleNewline()
-        }
         textView.historyNavigationHandler = { [weak coordinator] isUp in
             coordinator?.handleHistory(previous: isUp)
         }
@@ -157,10 +154,6 @@ extension EditorInputView {
 
         func handleSubmit(_ text: String) {
             viewModel.submit()
-        }
-
-        func handleNewline() {
-            viewModel.insertNewline()
         }
 
         func handleHistory(previous: Bool) {

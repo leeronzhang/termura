@@ -84,14 +84,6 @@ final class EditorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.currentText, "same")
     }
 
-    // MARK: - Insert newline
-
-    func testInsertNewlineAppendsNewline() {
-        viewModel.updateText("line1")
-        viewModel.insertNewline()
-        XCTAssertEqual(viewModel.currentText, "line1\n")
-    }
-
     // MARK: - Send raw
 
     func testSendRawSendsToEngine() async throws {

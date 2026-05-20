@@ -155,11 +155,6 @@ final class EditorViewModel {
         }
     }
 
-    /// Insert a literal newline at the cursor position.
-    func insertNewline() {
-        currentText += "\n"
-    }
-
     /// Navigate to an older history entry.
     func navigatePrevious() {
         if let entry = history.navigatePrevious() {
