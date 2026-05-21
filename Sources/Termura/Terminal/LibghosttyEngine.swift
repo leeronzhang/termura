@@ -151,7 +151,7 @@ final class LibghosttyEngine: TerminalEngine {
 
     // MARK: - TerminalEngine methods
 
-    func send(_ text: String) async {
+    func send(_ text: String) async -> Bool {
         // Bind sessionID locally so the log-string interpolation closure
         // doesn't trip Swift 6 strict-concurrency's "explicit self capture"
         // rule. (The same pattern is used in `terminate()` below.)
@@ -164,14 +164,15 @@ final class LibghosttyEngine: TerminalEngine {
             // existing guard doesn't catch it; surface a clear log so the
             // failure mode is recoverable from Console rather than silent.
             logger.warning("LibghosttyEngine.send no-op: surface is nil for session \(sid)")
-            return
+            return false
         }
         let len = text.utf8CString.count
-        guard len > 0 else { return }
+        guard len > 0 else { return true }
         logger.info("LibghosttyEngine.send: \(len - 1) bytes to session \(sid)")
         text.withCString { ptr in
             ghostty_surface_text(surface, ptr, UInt(len - 1))
         }
+        return true
     }
 
     func pressReturn() async {
@@ -192,8 +193,13 @@ final class LibghosttyEngine: TerminalEngine {
         _ = ghostty_surface_key(surface, key)
     }
 
-    func sendBytes(_ data: Data) async {
-        guard let surface = ghosttyView.surface, !data.isEmpty else { return }
+    func sendBytes(_ data: Data) async -> Bool {
+        let sid = sessionID.rawValue
+        guard let surface = ghosttyView.surface else {
+            logger.warning("LibghosttyEngine.sendBytes no-op: surface is nil for session \(sid)")
+            return false
+        }
+        guard !data.isEmpty else { return true }
         // The `ghostty_surface_text` API is text-oriented and assumes valid UTF-8,
         // making it unsafe for raw hex, control bytes, or NUL separated payloads.
         // We leverage Ghostty's binding action engine ("text:\xNN...") to bypass
@@ -202,9 +208,12 @@ final class LibghosttyEngine: TerminalEngine {
         for byte in data {
             actionStr.append(String(format: "\\x%02x", byte))
         }
-        actionStr.withCString { ptr in
-            _ = ghostty_surface_binding_action(surface, ptr, UInt(actionStr.utf8.count))
+        let delivered = actionStr.withCString { ptr in
+            ghostty_surface_binding_action(surface, ptr, UInt(actionStr.utf8.count))
         }
+        let level: OSLogType = delivered ? .info : .error
+        logger.log(level: level, "LibghosttyEngine.sendBytes delivered=\(delivered) bytes=\(data.count) session=\(sid)")
+        return delivered
     }
 
     func resize(columns: UInt16, rows: UInt16) async {

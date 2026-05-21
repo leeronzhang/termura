@@ -16,34 +16,38 @@ final class EditorViewModelTests: XCTestCase {
 
     // MARK: - Submit
 
-    func testSubmitClearsText() {
+    func testSubmitClearsText() async throws {
         viewModel.updateText("ls -la")
         viewModel.submit()
+        try await yieldForSubmit()
         XCTAssertEqual(viewModel.currentText, "")
     }
 
-    func testSubmitSwitchesToPassthrough() {
+    func testSubmitSwitchesToPassthrough() async throws {
+        modeController.switchToEditor()
         viewModel.updateText("pwd")
         viewModel.submit()
+        try await yieldForSubmit()
         XCTAssertEqual(modeController.mode, .passthrough)
     }
 
     func testSubmitSendsToEngine() async throws {
         viewModel.updateText("echo hello")
         viewModel.submit()
-        // Yield to allow the fire-and-forget Task inside submit to execute.
-        try await yieldForDuration(seconds: 0.05)
-        let sent = engine.sentTexts
+        try await yieldForSubmit()
+        let sent = sentByteStrings()
         let returnCount = engine.pressReturnCallCount
         XCTAssertTrue(sent.contains("echo hello"))
         XCTAssertEqual(returnCount, 1)
     }
 
-    func testSubmitPushesToHistory() {
+    func testSubmitPushesToHistory() async throws {
         viewModel.updateText("first")
         viewModel.submit()
+        try await yieldForSubmit()
         viewModel.updateText("second")
         viewModel.submit()
+        try await yieldForSubmit()
 
         // Navigate back should get "second" then "first".
         viewModel.navigatePrevious()
@@ -59,9 +63,10 @@ final class EditorViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.currentText, "")
     }
 
-    func testNavigateNextPastEndReturnsEmpty() {
+    func testNavigateNextPastEndReturnsEmpty() async throws {
         viewModel.updateText("cmd")
         viewModel.submit()
+        try await yieldForSubmit()
 
         viewModel.navigatePrevious()
         XCTAssertEqual(viewModel.currentText, "cmd")
@@ -91,5 +96,75 @@ final class EditorViewModelTests: XCTestCase {
         try await yieldForDuration(seconds: 0.05)
         let sent = engine.sentTexts
         XCTAssertTrue(sent.contains("\u{03}"))
+    }
+
+    func testSubmitUsesTextViewStringOverStaleCurrentText() async throws {
+        viewModel.updateText("")
+        viewModel.submit(textOverride: "echo hello")
+
+        try await yieldForSubmit()
+
+        XCTAssertTrue(sentByteStrings().contains("echo hello"))
+        XCTAssertEqual(viewModel.currentText, "")
+    }
+
+    func testSubmitWithAttachmentsSendsPathPrefix() async throws {
+        let url = URL(fileURLWithPath: "/tmp/termura image.png")
+        viewModel.addAttachment(url, kind: .image, isTemporary: false)
+
+        viewModel.submit(textOverride: "describe")
+        try await yieldForSubmit()
+
+        let sent = try XCTUnwrap(sentByteStrings().first)
+        XCTAssertTrue(sent.contains(url.path.shellEscaped))
+        XCTAssertTrue(sent.contains("describe"))
+        XCTAssertTrue(viewModel.attachments.isEmpty)
+    }
+
+    func testSubmitWithEmptyTextAndNoAttachmentsIsNoop() async throws {
+        viewModel.updateText("")
+
+        viewModel.submit(textOverride: "")
+        try await yieldForSubmit()
+
+        XCTAssertTrue(engine.sentTexts.isEmpty)
+        XCTAssertTrue(engine.sentBytes.isEmpty)
+        XCTAssertEqual(engine.pressReturnCallCount, 0)
+        XCTAssertEqual(viewModel.currentText, "")
+    }
+
+    func testSubmitWithMultilineRoutesAsRawBytes() async throws {
+        viewModel.updateText("line1\nline2")
+
+        viewModel.submit()
+        try await yieldForSubmit()
+
+        XCTAssertTrue(engine.sentTexts.isEmpty)
+        XCTAssertEqual(sentByteStrings(), ["line1\nline2"])
+        XCTAssertEqual(engine.pressReturnCallCount, 1)
+    }
+
+    func testSubmitFailurePreservesTextAndAttachments() async throws {
+        let url = URL(fileURLWithPath: "/tmp/keep.png")
+        engine.sendBytesResult = false
+        modeController.switchToEditor()
+        viewModel.updateText("keep me")
+        viewModel.addAttachment(url, kind: .image, isTemporary: false)
+
+        viewModel.submit()
+        try await yieldForSubmit()
+
+        XCTAssertEqual(viewModel.currentText, "keep me")
+        XCTAssertEqual(viewModel.attachments.map(\.url), [url])
+        XCTAssertEqual(engine.pressReturnCallCount, 0)
+        XCTAssertEqual(modeController.mode, .editor)
+    }
+
+    private func yieldForSubmit() async throws {
+        try await yieldForDuration(seconds: 0.05)
+    }
+
+    private func sentByteStrings() -> [String] {
+        engine.sentBytes.compactMap { String(data: $0, encoding: .utf8) }
     }
 }

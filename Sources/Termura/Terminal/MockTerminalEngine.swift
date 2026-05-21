@@ -75,8 +75,9 @@ final class DebugTerminalEngine: TerminalEngine {
 
     // MARK: - TerminalEngine
 
-    func send(_ text: String) async {
+    func send(_ text: String) async -> Bool {
         sentTexts.append(text)
+        return true
     }
 
     private(set) var pressReturnCallCount = 0
@@ -85,8 +86,9 @@ final class DebugTerminalEngine: TerminalEngine {
         pressReturnCallCount += 1
     }
 
-    func sendBytes(_ data: Data) async {
+    func sendBytes(_ data: Data) async -> Bool {
         sentBytes.append(data)
+        return true
     }
 
     func resize(columns: UInt16, rows: UInt16) async {

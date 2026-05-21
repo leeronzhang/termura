@@ -171,17 +171,6 @@ final class EditorTextView: NSTextView {
             return
         }
 
-        // Ctrl+letter -> send raw control byte to PTY (Ctrl+C = 0x03, Ctrl+D = 0x04 etc.)
-        if isCtrl, !isCommand, !isShift,
-           let chars = event.charactersIgnoringModifiers,
-           let scalar = chars.unicodeScalars.first {
-            let byte = UInt8(scalar.value & 0x1F)
-            if let seq = String(bytes: [byte], encoding: .utf8) {
-                controlSequenceHandler?(seq)
-                return
-            }
-        }
-
         switch event.keyCode {
         case KeyCode.returnKey:
             handleReturn(isShift: isShift, isCommand: isCommand)
@@ -190,6 +179,9 @@ final class EditorTextView: NSTextView {
         case KeyCode.downArrow:
             handleDownArrow(originalEvent: event)
         default:
+            if handleControlLetter(event: event, isCtrl: isCtrl, isCommand: isCommand, isShift: isShift) {
+                return
+            }
             super.keyDown(with: event)
         }
     }
@@ -207,6 +199,20 @@ final class EditorTextView: NSTextView {
             // Enter or Cmd+Enter both submit
             submitHandler?(string)
         }
+    }
+
+    private func handleControlLetter(event: NSEvent, isCtrl: Bool, isCommand: Bool, isShift: Bool) -> Bool {
+        // Ctrl+letter -> send raw control byte to PTY (Ctrl+C = 0x03, Ctrl+D = 0x04 etc.).
+        guard isCtrl, !isCommand, !isShift,
+              let chars = event.charactersIgnoringModifiers,
+              let scalar = chars.unicodeScalars.first,
+              scalar.value >= 0x40, scalar.value <= 0x7F else {
+            return false
+        }
+        let byte = UInt8(scalar.value & 0x1F)
+        guard let seq = String(bytes: [byte], encoding: .utf8) else { return false }
+        controlSequenceHandler?(seq)
+        return true
     }
 
     private func handleUpArrow(originalEvent: NSEvent) {

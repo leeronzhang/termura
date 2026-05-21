@@ -31,10 +31,12 @@ protocol TerminalEngine: AnyObject, Sendable {
     var shellEventsStream: AsyncStream<ShellIntegrationEvent> { get }
 
     /// Send a string to the PTY's stdin (through surface text / paste API).
-    func send(_ text: String) async
+    @discardableResult
+    func send(_ text: String) async -> Bool
 
     /// Send raw bytes to the PTY's stdin.
-    func sendBytes(_ data: Data) async
+    @discardableResult
+    func sendBytes(_ data: Data) async -> Bool
 
     /// Simulate pressing the Return key.
     /// Bracketed paste (ghostty_surface_text) treats embedded \\r as literal text;

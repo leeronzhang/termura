@@ -100,10 +100,10 @@ struct ComposerOverlayView: View {
             .background(Circle().fill(hasContent ? Color.brandGreen : Color.secondary.opacity(0.4)))
             .shadow(color: .black.opacity(hasContent ? 0.3 : 0), radius: 4, y: 2)
             .overlay(AppKitClickableOverlay(action: {
-                let hasText = !editorViewModel.currentText
-                    .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                let editorText = editorHandle.textView?.string ?? editorViewModel.currentText
+                let hasText = !editorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 guard hasText || !editorViewModel.attachments.isEmpty else { return }
-                editorViewModel.submit()
+                editorViewModel.submit(textOverride: editorText)
             }))
     }
 

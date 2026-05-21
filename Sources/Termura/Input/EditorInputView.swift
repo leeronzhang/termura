@@ -153,7 +153,7 @@ extension EditorInputView {
         // MARK: - EditorTextView callbacks
 
         func handleSubmit(_ text: String) {
-            viewModel.submit()
+            viewModel.submit(textOverride: text)
         }
 
         func handleHistory(previous: Bool) {

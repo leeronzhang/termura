@@ -92,39 +92,43 @@ final class EditorViewModel {
 
     // MARK: - Command actions
 
-    /// Submit the current text as a command to the terminal, prefixed with any attachment paths.
+    /// Submit text as a command to the terminal, prefixed with any attachment paths.
     /// Switches to passthrough so EditorInputView hides while the command runs.
     /// The view reappears when OSC 133 signals the next shell prompt.
-    func submit() {
-        let text = currentText
+    func submit(textOverride: String? = nil) {
+        let text = textOverride ?? currentText
+        if let textOverride, textOverride != currentText {
+            currentText = textOverride
+        }
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty || !attachments.isEmpty else { return }
+
+        let submittedAttachments = attachments
         let pathPrefix = attachments.map(\.url.path.shellEscaped).joined(separator: " ")
         let fullCommand: String = if pathPrefix.isEmpty {
             text
-        } else if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        } else if trimmedText.isEmpty {
             pathPrefix
         } else {
             pathPrefix + " " + text
         }
-        history.push(text)
-        currentText = ""
-        // Clear UI state synchronously, but defer temp-file deletion until after the
-        // PTY has consumed the path. WHY: engine.send() returning only means bytes are
-        // in the PTY buffer — the downstream CLI (e.g. Claude Code) still has to read
-        // the image file. Deleting in parallel races that read; first-attempt images
-        // were silently dropped because the temp PNG vanished before the CLI opened it.
-        let tempURLsToDelete = attachments.filter(\.isTemporary).map(\.url)
-        attachments.removeAll()
-        modeController.switchToPassthrough()
-        logger.debug("Submitting command length=\(fullCommand.count)")
-        onCommandSubmit?(text) // user text only — used for agent detection
+        let payload = Data(fullCommand.utf8)
+        let submittedAttachmentIDs = Set(submittedAttachments.map(\.id))
+        let tempURLsToDelete = submittedAttachments.filter(\.isTemporary).map(\.url)
+        logSubmission(fullCommand: fullCommand, payloadSize: payload.count)
         // Send text to PTY and press Return BEFORE dismissing the composer.
-        // ghostty_surface_text uses bracketed paste — embedded \r is literal, not "execute".
-        // Dismiss must happen after send+pressReturn so the ghostty surface is in a stable
-        // state (dismissComposer triggers SwiftUI view tree changes that could race).
+        // Dismiss must happen after send+pressReturn so the ghostty surface is in
+        // a stable state (dismissComposer triggers SwiftUI view tree changes that could race).
         let capturedEngine = engine
         let capturedFileManager = fileManager
         Task {
-            await capturedEngine.send(fullCommand)
+            let delivered = await capturedEngine.sendBytes(payload)
+            guard delivered else {
+                logger.error("Composer submit failed; preserving text and attachments")
+                return
+            }
+            completeSuccessfulSubmit(text: text, attachmentIDs: submittedAttachmentIDs)
+            onCommandSubmit?(text) // user text only — used for agent detection
             await capturedEngine.pressReturn()
             onSubmit?()
             guard !tempURLsToDelete.isEmpty else { return }
@@ -153,6 +157,22 @@ final class EditorViewModel {
                 }
             }
         }
+    }
+
+    private func logSubmission(fullCommand: String, payloadSize: Int) {
+        let preview = String(fullCommand.prefix(256))
+        logger.info(
+            "Composer submit payload bytes=\(payloadSize, privacy: .public) preview=\(preview, privacy: .private)"
+        )
+    }
+
+    private func completeSuccessfulSubmit(text: String, attachmentIDs: Set<UUID>) {
+        history.push(text)
+        if currentText == text {
+            currentText = ""
+        }
+        attachments.removeAll { attachmentIDs.contains($0.id) }
+        modeController.switchToPassthrough()
     }
 
     /// Navigate to an older history entry.
