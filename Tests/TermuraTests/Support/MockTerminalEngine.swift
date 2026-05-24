@@ -12,6 +12,7 @@ final class MockTerminalEngine: TerminalEngine {
     let terminalNSView: NSView = .init()
     private(set) var sentTexts: [String] = []
     private(set) var sentBytes: [Data] = []
+    var sendResult = true
     var sendBytesResult = true
     private(set) var resizes: [(UInt16, UInt16)] = []
     private(set) var terminateCallCount = 0
@@ -48,7 +49,7 @@ final class MockTerminalEngine: TerminalEngine {
 
     func send(_ text: String) async -> Bool {
         sentTexts.append(text)
-        return true
+        return sendResult
     }
 
     private(set) var pressReturnCallCount = 0

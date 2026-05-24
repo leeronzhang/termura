@@ -35,9 +35,8 @@ final class EditorViewModelTests: XCTestCase {
         viewModel.updateText("echo hello")
         viewModel.submit()
         try await yieldForSubmit()
-        let sent = sentByteStrings()
         let returnCount = engine.pressReturnCallCount
-        XCTAssertTrue(sent.contains("echo hello"))
+        XCTAssertTrue(engine.sentTexts.contains("echo hello"))
         XCTAssertEqual(returnCount, 1)
     }
 
@@ -104,7 +103,7 @@ final class EditorViewModelTests: XCTestCase {
 
         try await yieldForSubmit()
 
-        XCTAssertTrue(sentByteStrings().contains("echo hello"))
+        XCTAssertTrue(engine.sentTexts.contains("echo hello"))
         XCTAssertEqual(viewModel.currentText, "")
     }
 
@@ -115,7 +114,7 @@ final class EditorViewModelTests: XCTestCase {
         viewModel.submit(textOverride: "describe")
         try await yieldForSubmit()
 
-        let sent = try XCTUnwrap(sentByteStrings().first)
+        let sent = try XCTUnwrap(engine.sentTexts.first)
         XCTAssertTrue(sent.contains(url.path.shellEscaped))
         XCTAssertTrue(sent.contains("describe"))
         XCTAssertTrue(viewModel.attachments.isEmpty)
@@ -128,25 +127,23 @@ final class EditorViewModelTests: XCTestCase {
         try await yieldForSubmit()
 
         XCTAssertTrue(engine.sentTexts.isEmpty)
-        XCTAssertTrue(engine.sentBytes.isEmpty)
         XCTAssertEqual(engine.pressReturnCallCount, 0)
         XCTAssertEqual(viewModel.currentText, "")
     }
 
-    func testSubmitWithMultilineRoutesAsRawBytes() async throws {
+    func testSubmitWithMultilineSendsFullText() async throws {
         viewModel.updateText("line1\nline2")
 
         viewModel.submit()
         try await yieldForSubmit()
 
-        XCTAssertTrue(engine.sentTexts.isEmpty)
-        XCTAssertEqual(sentByteStrings(), ["line1\nline2"])
+        XCTAssertEqual(engine.sentTexts, ["line1\nline2"])
         XCTAssertEqual(engine.pressReturnCallCount, 1)
     }
 
     func testSubmitFailurePreservesTextAndAttachments() async throws {
         let url = URL(fileURLWithPath: "/tmp/keep.png")
-        engine.sendBytesResult = false
+        engine.sendResult = false
         modeController.switchToEditor()
         viewModel.updateText("keep me")
         viewModel.addAttachment(url, kind: .image, isTemporary: false)
@@ -162,9 +159,5 @@ final class EditorViewModelTests: XCTestCase {
 
     private func yieldForSubmit() async throws {
         try await yieldForDuration(seconds: 0.05)
-    }
-
-    private func sentByteStrings() -> [String] {
-        engine.sentBytes.compactMap { String(data: $0, encoding: .utf8) }
     }
 }

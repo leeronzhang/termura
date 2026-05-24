@@ -131,8 +131,10 @@ extension TerminalAreaView {
                 let loc = termView.convert(event.locationInWindow, from: nil)
                 if termView.bounds.contains(loc) {
                     // Don't shift pane focus or give the terminal first responder while
-                    // the composer is open in the currently focused pane.
-                    if router.showComposer && router.focusedDualPaneID != sid { return event }
+                    // the composer is open. Composer backdrop dismissal is handled by
+                    // AppKitClickableOverlay; the EditorTextView retains first responder
+                    // for key input.
+                    if router.showComposer { return event }
                     router.focusedDualPaneID = sid
                     if let window = termView.window, window.firstResponder !== termView {
                         window.makeFirstResponder(termView)

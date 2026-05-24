@@ -112,17 +112,20 @@ final class EditorViewModel {
         } else {
             pathPrefix + " " + text
         }
-        let payload = Data(fullCommand.utf8)
         let submittedAttachmentIDs = Set(submittedAttachments.map(\.id))
         let tempURLsToDelete = submittedAttachments.filter(\.isTemporary).map(\.url)
-        logSubmission(fullCommand: fullCommand, payloadSize: payload.count)
+        logSubmission(fullCommand: fullCommand, payloadSize: fullCommand.utf8.count)
         // Send text to PTY and press Return BEFORE dismissing the composer.
         // Dismiss must happen after send+pressReturn so the ghostty surface is in
         // a stable state (dismissComposer triggers SwiftUI view tree changes that could race).
+        // Uses engine.send (ghostty_surface_text) rather than sendBytes because
+        // composer text is always valid UTF-8; sendBytes routes through Ghostty's
+        // binding-action text:\xHH parser which interprets each hex escape as a
+        // Unicode codepoint and re-encodes it, corrupting multi-byte sequences.
         let capturedEngine = engine
         let capturedFileManager = fileManager
         Task {
-            let delivered = await capturedEngine.sendBytes(payload)
+            let delivered = await capturedEngine.send(fullCommand)
             guard delivered else {
                 logger.error("Composer submit failed; preserving text and attachments")
                 return

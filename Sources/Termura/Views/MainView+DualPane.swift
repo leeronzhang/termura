@@ -28,44 +28,54 @@ extension MainView {
 
     @ViewBuilder
     func dualPaneTerminal(sessionID: SessionID?, slot: PaneSlot, hideButtons: Bool) -> some View {
-        if let sessionID, let engine = engineStore.engine(for: sessionID) {
-            let isFocused = focusedSlot == slot
-            let state = viewStateManager.viewState(for: sessionID, engine: engine)
-            TerminalAreaView(
-                engine: engine,
-                sessionID: sessionID,
-                forceHideMetadata: true,
-                isFocusedPane: isFocused,
-                hideToolbarButtons: hideButtons,
-                state: state
-            )
-            .id(sessionID)
-            .overlay(alignment: .top) {
-                if isFocused {
-                    Rectangle().fill(Color.brandGreen).frame(height: 2)
+        if let sessionID {
+            if let engine = engineStore.engine(for: sessionID) {
+                let isFocused = focusedSlot == slot
+                let state = viewStateManager.viewState(for: sessionID, engine: engine)
+                TerminalAreaView(
+                    engine: engine,
+                    sessionID: sessionID,
+                    forceHideMetadata: true,
+                    isFocusedPane: isFocused,
+                    hideToolbarButtons: hideButtons,
+                    state: state
+                )
+                .id(sessionID)
+                .overlay(alignment: .top) {
+                    if isFocused {
+                        Rectangle().fill(Color.brandGreen).frame(height: 2)
+                    }
                 }
-            }
-            .overlay {
-                if dropTargetSlot == slot {
-                    RoundedRectangle(cornerRadius: AppUI.Radius.sm)
-                        .stroke(Color.brandGreen.opacity(AppUI.Opacity.border), lineWidth: 2)
-                        .allowsHitTesting(false)
+                .overlay {
+                    if dropTargetSlot == slot {
+                        RoundedRectangle(cornerRadius: AppUI.Radius.sm)
+                            .stroke(Color.brandGreen.opacity(AppUI.Opacity.border), lineWidth: 2)
+                            .allowsHitTesting(false)
+                    }
                 }
-            }
-            .background { paneSelectionBackground(slot: slot, sessionID: sessionID) }
-            .dropDestination(for: String.self) { items, _ in
-                guard let str = items.first,
-                      let uuid = UUID(uuidString: str) else { return false }
-                let draggedID = SessionID(rawValue: uuid)
-                let isIntraSplitDrag = resolvedSelectedTab?.containsSession(draggedID) ?? false
-                if isIntraSplitDrag {
-                    swapPanes()
-                } else {
-                    handleDropSession(draggedID, onto: slot)
+                .background { paneSelectionBackground(slot: slot, sessionID: sessionID) }
+                .dropDestination(for: String.self) { items, _ in
+                    guard let str = items.first,
+                          let uuid = UUID(uuidString: str) else { return false }
+                    let draggedID = SessionID(rawValue: uuid)
+                    let isIntraSplitDrag = resolvedSelectedTab?.containsSession(draggedID) ?? false
+                    if isIntraSplitDrag {
+                        swapPanes()
+                    } else {
+                        handleDropSession(draggedID, onto: slot)
+                    }
+                    return true
+                } isTargeted: { isTargeted in
+                    dropTargetSlot = isTargeted ? slot : nil
                 }
-                return true
-            } isTargeted: { isTargeted in
-                dropTargetSlot = isTargeted ? slot : nil
+            } else {
+                // Engine not yet created — the focused session gets its engine during
+                // loadPersistedSessions; all others are created on demand. TerminalEngineStore
+                // is @Observable, so the view re-renders once the engine is inserted.
+                Color.clear
+                    .task(id: sessionID) {
+                        sessionStore.ensureEngine(for: sessionID, shell: nil)
+                    }
             }
         }
     }
