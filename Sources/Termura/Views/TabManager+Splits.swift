@@ -64,6 +64,30 @@ extension TabManager {
         sessionStore?.activateSession(id: targetID)
     }
 
+    /// Shifts split focus to the pane currently holding `sessionID`. Used by pane clicks
+    /// and by terminal file/image drops so a following cmd-k composer targets the pane the
+    /// user just acted on. The slot is derived from the live split assignment, so it stays
+    /// correct after a pane swap. No-op when the composer is open on a *different* pane —
+    /// relocating it mid-edit would move the composer and hand the other terminal first
+    /// responder, sending subsequent Cmd+V to the PTY. Returns whether focus shifted.
+    @discardableResult
+    func focusPane(holding sessionID: SessionID) -> Bool {
+        guard case let .split(leftID, rightID, _, _) = resolvedSelectedTab else { return false }
+        let slot: PaneSlot
+        if sessionID == leftID {
+            slot = .left
+        } else if sessionID == rightID {
+            slot = .right
+        } else {
+            return false
+        }
+        if commandRouter?.showComposer == true, focusedSlot != slot { return false }
+        focusedSlot = slot
+        commandRouter?.focusedDualPaneID = sessionID
+        sessionStore?.activateSession(id: sessionID)
+        return true
+    }
+
     func handleDropSession(_ draggedID: SessionID, onto slot: PaneSlot) {
         // Target the currently selected split tab, not the first split in the list.
         guard let currentSplit = resolvedSelectedTab,

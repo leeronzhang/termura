@@ -21,6 +21,9 @@ struct TerminalAreaView: View {
     var isFocusedPane: Bool = true
     /// When true, toolbar action buttons are hidden (shared toolbar in dual-pane mode).
     var hideToolbarButtons: Bool = false
+    /// Dual-pane only: focuses this pane when a file/image is dropped on its terminal,
+    /// so a following cmd-k composer submits to the same terminal. `nil` in single pane.
+    var onDropFocus: (() -> Void)?
 
     @Environment(\.sessionScope) var sessionScope
     @Environment(\.commandRouter) var commandRouter

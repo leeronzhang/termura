@@ -18,6 +18,11 @@ struct TerminalContainerView: NSViewRepresentable {
     /// When true, hitTest returns nil so that NSWindow falls back to the NSHostingView
     /// and SwiftUI gesture targets (backdrop, composer header buttons) receive events.
     var isComposerActive: Bool = false
+    /// In dual-pane mode, invoked when a file/image is dropped on this pane so the
+    /// pane gains keyboard/composer focus before the path is delivered to its PTY.
+    /// Without it, a drop on a non-focused pane leaves focus elsewhere and a
+    /// subsequent cmd-k composer submits to the wrong terminal. `nil` in single-pane.
+    var onDropFocus: (() -> Void)?
 
     func makeNSView(context: Context) -> TerminalDragContainerView {
         let termView = engine.terminalNSView
@@ -32,6 +37,9 @@ struct TerminalContainerView: NSViewRepresentable {
         container.lastAppliedFontSize = fontSize
         container.lastAppliedTheme = theme
         container.dragHandler = { [weak viewModel] paths in
+            // Focus this pane first so a following cmd-k composer targets the same
+            // terminal the drop landed in (dual-pane only; no-op in single pane).
+            onDropFocus?()
             viewModel?.send(paths)
         }
         return container

@@ -17,7 +17,8 @@ extension TerminalAreaView {
                     theme: themeManager.current,
                     fontFamily: fontSettings.terminalFontFamily,
                     fontSize: fontSettings.terminalFontSize,
-                    isComposerActive: commandRouter.showComposer && isFocusedPane
+                    isComposerActive: commandRouter.showComposer && isFocusedPane,
+                    onDropFocus: onDropFocus
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, AppUI.Spacing.xxl)

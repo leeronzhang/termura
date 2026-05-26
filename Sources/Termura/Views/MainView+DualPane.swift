@@ -38,6 +38,7 @@ extension MainView {
                     forceHideMetadata: true,
                     isFocusedPane: isFocused,
                     hideToolbarButtons: hideButtons,
+                    onDropFocus: { tabManager.focusPane(holding: sessionID) },
                     state: state
                 )
                 .id(sessionID)
@@ -53,7 +54,7 @@ extension MainView {
                             .allowsHitTesting(false)
                     }
                 }
-                .background { paneSelectionBackground(slot: slot, sessionID: sessionID) }
+                .background { paneSelectionBackground(sessionID: sessionID) }
                 .dropDestination(for: String.self) { items, _ in
                     guard let str = items.first,
                           let uuid = UUID(uuidString: str) else { return false }
@@ -81,17 +82,14 @@ extension MainView {
     }
 
     @ViewBuilder
-    private func paneSelectionBackground(slot: PaneSlot, sessionID: SessionID) -> some View {
+    private func paneSelectionBackground(sessionID: SessionID) -> some View {
         Color.clear
             .contentShape(Rectangle())
             .onTapGesture {
-                // Don't shift pane focus while the composer is open in the currently focused
-                // pane — changing focus would move the composer and give the terminal NSView
-                // first responder, causing subsequent Cmd+V paste to land in the PTY.
-                if commandRouter.showComposer && focusedSlot != slot { return }
-                tabManager.focusedSlot = slot
-                commandRouter.focusedDualPaneID = sessionID
-                sessionStore.activateSession(id: sessionID)
+                // Focus the clicked pane. focusPane(holding:) no-ops while the composer is
+                // open on a different pane — changing focus would move the composer and give
+                // the terminal NSView first responder, sending subsequent Cmd+V to the PTY.
+                tabManager.focusPane(holding: sessionID)
             }
     }
 
