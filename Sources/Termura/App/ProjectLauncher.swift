@@ -99,6 +99,38 @@ final class ProjectLauncher {
         }
     }
 
+    /// Menu / Dock "New Project…" entry point. Mirrors `showProjectPicker`'s
+    /// window handling (sheet on the key window, else modal) but uses an
+    /// `NSSavePanel` to name+place a new directory, then opens it as a project.
+    /// Reachable without the Welcome window (e.g. Dock right-click with no open
+    /// window), unlike `handleWelcomeCreateNew`.
+    func showNewProjectPanel() {
+        let panel = makeNewProjectSavePanel()
+        NSApp.activate(ignoringOtherApps: true)
+        if let keyWindow = NSApp.keyWindow {
+            panel.beginSheetModal(for: keyWindow) { [weak self] response in
+                guard response == .OK, let url = panel.url else { return }
+                self?.createProjectDirectory(at: url, parent: keyWindow)
+            }
+        } else {
+            let response = panel.runModal()
+            if response == .OK, let url = panel.url {
+                createProjectDirectory(at: url, parent: nil)
+            }
+        }
+    }
+
+    private func makeNewProjectSavePanel() -> NSSavePanel {
+        let panel = NSSavePanel()
+        panel.title = String(localized: "Create New Project")
+        panel.prompt = String(localized: "Create")
+        panel.message = String(localized: "Choose a location and name for your new project.")
+        panel.nameFieldLabel = String(localized: "Project name:")
+        panel.nameFieldStringValue = String(localized: "Untitled Project")
+        panel.canCreateDirectories = true
+        return panel
+    }
+
     // MARK: - Welcome window
 
     private var shouldShowWelcome: Bool {
@@ -145,13 +177,7 @@ final class ProjectLauncher {
 
     private func handleWelcomeCreateNew() {
         guard let parentWindow = welcomeController?.window else { return }
-        let panel = NSSavePanel()
-        panel.title = String(localized: "Create New Project")
-        panel.prompt = String(localized: "Create")
-        panel.message = String(localized: "Choose a location and name for your new project.")
-        panel.nameFieldLabel = String(localized: "Project name:")
-        panel.nameFieldStringValue = String(localized: "Untitled Project")
-        panel.canCreateDirectories = true
+        let panel = makeNewProjectSavePanel()
         panel.beginSheetModal(for: parentWindow) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             self?.createProjectDirectory(at: url, parent: parentWindow)
@@ -175,7 +201,9 @@ final class ProjectLauncher {
     /// Materialises a fresh project directory then routes through
     /// `coordinator.openProject(at:)`, which lazily creates the
     /// `.termura/` data directory and persists the project to recents.
-    private func createProjectDirectory(at url: URL, parent: NSWindow) {
+    /// `parent` is `nil` for the menu/Dock path when no window is key; the
+    /// failure alert then falls back to a modal run.
+    private func createProjectDirectory(at url: URL, parent: NSWindow?) {
         do {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
         } catch {
@@ -190,12 +218,16 @@ final class ProjectLauncher {
         handleWelcomeOpen(url: url)
     }
 
-    private func presentCreateFailureAlert(error: any Error, parent: NSWindow) {
+    private func presentCreateFailureAlert(error: any Error, parent: NSWindow?) {
         let alert = NSAlert()
         alert.messageText = String(localized: "Could not create project")
         alert.informativeText = error.localizedDescription
         alert.alertStyle = .warning
         alert.addButton(withTitle: String(localized: "OK"))
-        alert.beginSheetModal(for: parent)
+        if let parent {
+            alert.beginSheetModal(for: parent)
+        } else {
+            alert.runModal()
+        }
     }
 }

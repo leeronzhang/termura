@@ -152,6 +152,10 @@ final class ProjectCoordinator {
         launcher?.showProjectPicker()
     }
 
+    func createNewProject() {
+        launcher?.showNewProjectPanel()
+    }
+
     /// Restore the most recently opened project or show the picker.
     /// Called on launch and on Dock icon click.
     func restoreLastProjectOrShowPicker() {

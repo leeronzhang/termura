@@ -15,6 +15,8 @@ protocol AppCommandDispatcher: AnyObject {
     // MARK: - Project commands
 
     func showProjectPicker()
+    /// Creates a new project: prompts for a location+name, makes the directory, opens it.
+    func createNewProject()
     func openProject(at url: URL)
     /// Recents list (existence-filtered) backing File ▸ Open Recent.
     func recentProjects() -> [RecentProject]

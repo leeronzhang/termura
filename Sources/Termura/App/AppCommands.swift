@@ -33,6 +33,11 @@ struct AppCommands: Commands {
 
     private var toolCommands: some Commands {
         CommandGroup(after: .newItem) {
+            Button("New Project\u{2026}") {
+                dispatcher.createNewProject()
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+
             Button("Open Project\u{2026}") {
                 dispatcher.showProjectPicker()
             }
