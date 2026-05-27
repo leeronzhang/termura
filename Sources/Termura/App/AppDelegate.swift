@@ -230,6 +230,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         projectCoordinator.showProjectPicker()
     }
 
+    func createNewProject() {
+        projectCoordinator.createNewProject()
+    }
+
     func recentProjects() -> [RecentProject] {
         services.recentProjects.fetchExisting()
     }
