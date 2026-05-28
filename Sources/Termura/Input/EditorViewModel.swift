@@ -115,13 +115,20 @@ final class EditorViewModel {
         let submittedAttachmentIDs = Set(submittedAttachments.map(\.id))
         let tempURLsToDelete = submittedAttachments.filter(\.isTemporary).map(\.url)
         logSubmission(fullCommand: fullCommand, payloadSize: fullCommand.utf8.count)
-        // Send text to PTY and press Return BEFORE dismissing the composer.
-        // Dismiss must happen after send+pressReturn so the ghostty surface is in
-        // a stable state (dismissComposer triggers SwiftUI view tree changes that could race).
-        // Uses engine.send (ghostty_surface_text) rather than sendBytes because
-        // composer text is always valid UTF-8; sendBytes routes through Ghostty's
-        // binding-action text:\xHH parser which interprets each hex escape as a
-        // Unicode codepoint and re-encodes it, corrupting multi-byte sequences.
+        // Dismiss must happen after the bytes are queued so the ghostty surface
+        // is in a stable state (dismissComposer triggers SwiftUI view tree
+        // changes that could race).
+        //
+        // Text uses engine.send (ghostty_surface_text) because composer text is
+        // valid UTF-8; sendBytes' "text:\xHH" parser re-encodes each escape as a
+        // Unicode codepoint and would corrupt multi-byte sequences.
+        //
+        // Return uses sendBytes(0x0D), NOT pressReturn: ghostty_surface_text
+        // wraps the text in bracketed-paste markers, and Ink-style TUIs
+        // (claude-cli, etc.) drop a synthetic Return key event landing right
+        // after the paste-end marker — user had to press Enter a second time.
+        // sendBytes writes \r through ghostty's text: binding action, sharing
+        // send's raw-PTY write queue while skipping paste-wrap and key encoding.
         let capturedEngine = engine
         let capturedFileManager = fileManager
         Task {
@@ -132,7 +139,7 @@ final class EditorViewModel {
             }
             completeSuccessfulSubmit(text: text, attachmentIDs: submittedAttachmentIDs)
             onCommandSubmit?(text) // user text only — used for agent detection
-            await capturedEngine.pressReturn()
+            await capturedEngine.sendBytes(Data([0x0D]))
             onSubmit?()
             guard !tempURLsToDelete.isEmpty else { return }
             // WHY: PTY bytes ≠ CLI consumed; give the downstream agent a buffer to

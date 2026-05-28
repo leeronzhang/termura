@@ -35,9 +35,10 @@ final class EditorViewModelTests: XCTestCase {
         viewModel.updateText("echo hello")
         viewModel.submit()
         try await yieldForSubmit()
-        let returnCount = engine.pressReturnCallCount
         XCTAssertTrue(engine.sentTexts.contains("echo hello"))
-        XCTAssertEqual(returnCount, 1)
+        // Submit follows the text with a raw 0x0D via sendBytes (not pressReturn)
+        // so it bypasses bracketed-paste wrapping — see EditorViewModel.submit().
+        XCTAssertEqual(engine.sentBytes, [Data([0x0D])])
     }
 
     func testSubmitPushesToHistory() async throws {
@@ -127,7 +128,7 @@ final class EditorViewModelTests: XCTestCase {
         try await yieldForSubmit()
 
         XCTAssertTrue(engine.sentTexts.isEmpty)
-        XCTAssertEqual(engine.pressReturnCallCount, 0)
+        XCTAssertTrue(engine.sentBytes.isEmpty)
         XCTAssertEqual(viewModel.currentText, "")
     }
 
@@ -138,7 +139,7 @@ final class EditorViewModelTests: XCTestCase {
         try await yieldForSubmit()
 
         XCTAssertEqual(engine.sentTexts, ["line1\nline2"])
-        XCTAssertEqual(engine.pressReturnCallCount, 1)
+        XCTAssertEqual(engine.sentBytes, [Data([0x0D])])
     }
 
     func testSubmitFailurePreservesTextAndAttachments() async throws {
@@ -153,7 +154,8 @@ final class EditorViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.currentText, "keep me")
         XCTAssertEqual(viewModel.attachments.map(\.url), [url])
-        XCTAssertEqual(engine.pressReturnCallCount, 0)
+        // send() failure short-circuits before the Return byte fires.
+        XCTAssertTrue(engine.sentBytes.isEmpty)
         XCTAssertEqual(modeController.mode, .editor)
     }
 

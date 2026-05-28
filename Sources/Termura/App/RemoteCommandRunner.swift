@@ -99,8 +99,14 @@ enum RemoteCommandRunner {
         // The next-completing chunk on the same session within `timeout`
         // is treated as the response — adequate for the serialized
         // single-user remote control flow we ship today.
+        // Return uses sendBytes(0x0D), NOT pressReturn: ghostty_surface_text
+        // wraps the text in bracketed-paste markers, and Ink-style TUIs
+        // (claude-cli, etc.) drop a synthetic Return key event landing right
+        // after the paste-end marker, leaving the iOS user's command staged in
+        // the input field without ever executing. sendBytes writes \r through
+        // ghostty's text: binding action, skipping paste-wrap and key encoding.
         await engine.send(line)
-        await engine.pressReturn()
+        await engine.sendBytes(Data([0x0D]))
 
         do {
             return try await awaitChunkOrTimeout(
