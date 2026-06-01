@@ -120,6 +120,10 @@ struct AgentState: Identifiable, Sendable {
     /// File path currently being written/edited by the agent, if detectable.
     var activeFilePath: String?
     let startedAt: Date
+    /// Timestamp of the last output activity that refreshed this state. Stamped by
+    /// `AgentStateStore.update` on every PTY-driven update; the duration tick uses it to detect
+    /// an agent stuck in an active status with no output (see `reconcileStaleStatuses`).
+    var lastActivityAt: Date
 
     init(
         id: UUID = UUID(),
@@ -134,7 +138,8 @@ struct AgentState: Identifiable, Sendable {
         estimatedCostUSD: Double = 0,
         contextWindowLimit: Int? = nil,
         activeFilePath: String? = nil,
-        startedAt: Date = Date()
+        startedAt: Date = Date(),
+        lastActivityAt: Date = Date()
     ) {
         self.id = id
         self.sessionID = sessionID
@@ -149,6 +154,7 @@ struct AgentState: Identifiable, Sendable {
         self.contextWindowLimit = contextWindowLimit ?? agentType.contextWindowLimit
         self.activeFilePath = activeFilePath
         self.startedAt = startedAt
+        self.lastActivityAt = lastActivityAt
     }
 
     /// Whether this agent needs user attention (input or error).

@@ -1,3 +1,4 @@
+import Foundation
 @testable import Termura
 import Testing
 
@@ -207,5 +208,73 @@ struct AgentStateStoreTests {
     func totalTokensZeroWhenEmpty() {
         let store = makeStore()
         #expect(store.totalEstimatedTokens == 0)
+    }
+
+    // MARK: - Stale-status reconciliation (idle-CPU watchdog)
+
+    /// Builds a store on a controllable clock and seeds one agent in `status`, stamping its
+    /// activity time at the clock's current value (mirrors the real `update` path).
+    private func makeStaleScenario(
+        status: AgentStatus
+    ) -> (store: AgentStateStore, clock: TestClock, sid: SessionID) {
+        let clock = TestClock()
+        clock.currentDate = Date(timeIntervalSinceReferenceDate: 1000)
+        let store = AgentStateStore(clock: clock)
+        let sid = SessionID()
+        store.update(state: makeAgent(sessionID: sid, status: status))
+        return (store, clock, sid)
+    }
+
+    @Test("reconcile resets a stalled thinking agent to idle (happy path)")
+    func reconcileResetsStalledThinking() {
+        let (store, clock, sid) = makeStaleScenario(status: .thinking)
+        clock.currentDate.addTimeInterval(AppConfig.Agent.staleActiveStatusTimeout + 1)
+        store.reconcileStaleStatuses(now: clock.now())
+        #expect(store.agents[sid]?.status == .idle)
+    }
+
+    @Test("reconcile resets a stalled toolRunning agent to idle")
+    func reconcileResetsStalledToolRunning() {
+        let (store, clock, sid) = makeStaleScenario(status: .toolRunning)
+        clock.currentDate.addTimeInterval(AppConfig.Agent.staleActiveStatusTimeout + 1)
+        store.reconcileStaleStatuses(now: clock.now())
+        #expect(store.agents[sid]?.status == .idle)
+    }
+
+    @Test("reconcile leaves a recently-active agent untouched (not yet stale)")
+    func reconcileKeepsRecentlyActive() {
+        let (store, clock, sid) = makeStaleScenario(status: .thinking)
+        clock.currentDate.addTimeInterval(AppConfig.Agent.staleActiveStatusTimeout / 2)
+        store.reconcileStaleStatuses(now: clock.now())
+        #expect(store.agents[sid]?.status == .thinking)
+    }
+
+    @Test("reconcile never resets a waitingInput agent (legitimate steady state)")
+    func reconcileIgnoresWaitingInput() {
+        let (store, clock, sid) = makeStaleScenario(status: .waitingInput)
+        clock.currentDate.addTimeInterval(AppConfig.Agent.staleActiveStatusTimeout * 3)
+        store.reconcileStaleStatuses(now: clock.now())
+        #expect(store.agents[sid]?.status == .waitingInput)
+    }
+
+    @Test("a reset agent is restored when new output arrives (optimistic reconciliation)")
+    func resetAgentRestoredOnNewOutput() {
+        let (store, clock, sid) = makeStaleScenario(status: .thinking)
+        clock.currentDate.addTimeInterval(AppConfig.Agent.staleActiveStatusTimeout + 1)
+        store.reconcileStaleStatuses(now: clock.now())
+        #expect(store.agents[sid]?.status == .idle)
+        // New output: detector re-drives thinking; update stamps a fresh activity time.
+        store.update(state: makeAgent(sessionID: sid, status: .thinking))
+        store.reconcileStaleStatuses(now: clock.now())
+        #expect(store.agents[sid]?.status == .thinking)
+    }
+
+    @Test("reconcile syncs the sidebar row state to idle on reset")
+    func reconcileSyncsSidebarRowState() {
+        let (store, clock, sid) = makeStaleScenario(status: .thinking)
+        let rowState = store.sidebarRowState(for: sid)
+        clock.currentDate.addTimeInterval(AppConfig.Agent.staleActiveStatusTimeout + 1)
+        store.reconcileStaleStatuses(now: clock.now())
+        #expect(rowState.status == .idle)
     }
 }

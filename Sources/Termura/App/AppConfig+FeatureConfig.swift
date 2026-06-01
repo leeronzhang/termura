@@ -53,10 +53,21 @@ extension AppConfig {
         static let statusPollInterval: Double = 0.5
         /// Glow animation duration for attention sessions (seconds).
         static let glowAnimationDuration: Double = 2.0
+        /// Number of in-out pulses the waiting-input glow plays on entry before settling to a
+        /// static highlight. A finite count replaces a previous `repeatForever` animation that
+        /// drove a continuous whole-window Core Animation re-layout while an agent sat in the
+        /// (steady) `waitingInput` state — the dominant idle-CPU source.
+        static let waitingGlowPulseCount: Int = 3
         /// Suffix character count for agent output analysis.
         static let outputAnalysisSuffixLength = 2000
         /// Minimum seconds between status transitions (suppresses noisy false positives).
         static let statusChangeCooldown: TimeInterval = 0.5
+        /// Inactivity window (seconds) after which an agent stuck in an active status
+        /// (thinking / toolRunning) with no PTY output is reset to idle. Covers agents whose
+        /// process was killed or crashed without emitting OSC 133 D — without this their pulse
+        /// animation would run forever, driving continuous idle CPU. waitingInput is intentionally
+        /// excluded: it is a legitimate steady state (the agent is waiting for the user).
+        static let staleActiveStatusTimeout: TimeInterval = 60
         /// Suffix character count scanned by InterventionService.detectRisk.
         /// Risk commands (rm -rf, git push --force, etc.) appear near the end of
         /// the agent's current output burst; scanning only the suffix avoids a full

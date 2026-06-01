@@ -30,8 +30,13 @@ struct SessionRowView: View {
     @State private var isEditing = false
     @State private var editTitle = ""
     @State var isHovered = false
+    /// Finite emphasis-pulse overlay for the waiting-input glow. Settles back to 0; the steady
+    /// highlight itself is rendered statically from `isWaiting` in `glowBorder`.
     @State var glowOpacity: Double = 0.0
     @Environment(\.themeManager) var themeManager
+    /// Visibility gating: suspend the entry pulse when the app is inactive (backgrounded /
+    /// occluded / minimized) so no animation drives a whole-window layout pass off-screen.
+    @Environment(\.controlActiveState) var controlActiveState
 
     var isWaiting: Bool { agentStatus == .waitingInput }
 
@@ -61,19 +66,30 @@ struct SessionRowView: View {
         .accessibilityIdentifier("sessionRow")
         .onChange(of: renameTrigger) { _, _ in beginEditing() }
         .animation(.easeOut(duration: AppUI.Animation.quick), value: isHovered)
-        .onChange(of: isWaiting) { _, waiting in
-            if waiting {
-                withAnimation(
-                    .easeInOut(duration: AppConfig.Agent.glowAnimationDuration)
-                        .repeatForever(autoreverses: true)
-                ) {
-                    glowOpacity = AppUI.Opacity.secondary
-                }
-            } else {
-                withAnimation(.easeOut(duration: AppUI.Animation.fadeOut)) {
-                    glowOpacity = 0.0
-                }
-            }
+        .onChange(of: isWaiting) { _, waiting in updateWaitingGlow(waiting: waiting) }
+        .onChange(of: controlActiveState) { _, _ in updateWaitingGlow(waiting: isWaiting) }
+    }
+
+    /// Drive the waiting-input glow. The steady highlight is rendered statically from `isWaiting`
+    /// in `glowBorder`; on entry we play a *finite* emphasis pulse to draw the eye, then settle
+    /// to 0 so no animation keeps running. This replaces a `repeatForever` animation that drove a
+    /// continuous whole-window Core Animation re-layout for as long as the agent waited for input
+    /// — the dominant idle-CPU source. Skipped when the row is already active (it is highlighted
+    /// regardless) or when the app is inactive (off-screen animation is pure waste).
+    private func updateWaitingGlow(waiting: Bool) {
+        guard waiting, !isActive, controlActiveState != .inactive else {
+            glowOpacity = 0
+            return
+        }
+        glowOpacity = 0
+        withAnimation(
+            .easeInOut(duration: AppConfig.Agent.glowAnimationDuration)
+                .repeatCount(AppConfig.Agent.waitingGlowPulseCount, autoreverses: true),
+            completionCriteria: .removed
+        ) {
+            glowOpacity = AppUI.Opacity.secondary
+        } completion: {
+            withAnimation(.easeOut(duration: AppUI.Animation.fadeOut)) { glowOpacity = 0 }
         }
     }
 

@@ -7,6 +7,10 @@ struct AgentStatusBadgeView: View {
     let agentType: AgentType
 
     @State private var isPulsing = false
+    /// Drives visibility gating: when the app is inactive (backgrounded, occluded, or the
+    /// window is minimized) the `repeatForever` pulse is suspended so it stops driving a
+    /// continuous whole-window Core Animation re-layout the user cannot even see.
+    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
         Circle()
@@ -16,6 +20,7 @@ struct AgentStatusBadgeView: View {
             .help(helpText)
             .onAppear { updatePulse() }
             .onChange(of: status) { _, _ in updatePulse() }
+            .onChange(of: controlActiveState) { _, _ in updatePulse() }
             .accessibilityLabel("\(agentType.displayName): \(status.rawValue)")
             .accessibilityValue(helpText)
     }
@@ -35,7 +40,11 @@ struct AgentStatusBadgeView: View {
     }
 
     private func updatePulse() {
-        let shouldPulse = status == .thinking || status == .toolRunning
+        // Gate on visibility: an inactive app (backgrounded / occluded / minimized) keeps the
+        // status value but must not run the repeatForever animation — it is pure waste off-screen
+        // and is not throttled by occlusion the way display-rate work is.
+        let isVisible = controlActiveState != .inactive
+        let shouldPulse = isVisible && (status == .thinking || status == .toolRunning)
         if shouldPulse {
             withAnimation(
                 .easeInOut(duration: AppUI.Animation.pulse).repeatForever(autoreverses: true)

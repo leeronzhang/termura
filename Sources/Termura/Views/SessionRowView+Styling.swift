@@ -37,12 +37,16 @@ extension SessionRowView {
     }
 
     var glowBorder: some View {
+        // Steady waiting-input highlight is static (no animation); the finite entry pulse in
+        // `glowOpacity` is layered on top via max(). Once the pulse settles to 0 the border
+        // holds the static highlight with zero ongoing animation work.
+        let waitingBase = isWaiting ? AppUI.Opacity.border : 0.0
         let borderColor = if isActive {
             Color.brandGreen.opacity(AppUI.Opacity.border)
         } else if isInSplit {
             Color.brandGreen.opacity(AppUI.Opacity.whisper)
         } else {
-            Color.brandGreen.opacity(glowOpacity)
+            Color.brandGreen.opacity(max(waitingBase, glowOpacity))
         }
         return RoundedRectangle(cornerRadius: AppUI.Radius.md)
             .stroke(borderColor, lineWidth: 1)

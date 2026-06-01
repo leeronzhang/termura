@@ -45,6 +45,7 @@ final class AgentStateStore: AgentStateStoreProtocol {
                     break
                 }
                 store.now = store.clock.now()
+                store.reconcileStaleStatuses(now: store.now)
                 store.refreshSidebarRowDurations(now: store.now)
             }
         }
@@ -82,6 +83,11 @@ final class AgentStateStore: AgentStateStoreProtocol {
     // MARK: - Updates
 
     func update(state: AgentState) {
+        // Stamp activity time on every PTY-driven update so the stale-status reconciler can tell
+        // a working agent (output keeps refreshing this) from a stalled one (process killed with
+        // no OSC 133 D — this stops refreshing and the tick resets it to idle).
+        var state = state
+        state.lastActivityAt = clock.now()
         let previous = agents[state.sessionID]
         totalEstimatedTokens += state.tokenCount - (previous?.tokenCount ?? 0)
         agents[state.sessionID] = state
@@ -160,6 +166,30 @@ final class AgentStateStore: AgentStateStoreProtocol {
         for rowState in sidebarRowStates.values {
             rowState.refreshDuration(now: now)
         }
+    }
+
+    /// Reset any agent stuck in an active status (thinking/toolRunning) with no output activity
+    /// for longer than `staleActiveStatusTimeout` back to idle. Covers agents whose process was
+    /// killed or crashed without emitting OSC 133 D — without this their pulse animation runs
+    /// forever, driving continuous idle CPU. Driven by the duration tick; non-private so tests can
+    /// exercise it directly with an injected clock instead of waiting on the real ticker.
+    ///
+    /// Optimistic, display-level reconciliation: the detector remains the source of truth, so if a
+    /// reset agent later produces output `update(state:)` re-drives its real status and restores it.
+    func reconcileStaleStatuses(now: Date) {
+        var didReset = false
+        for (id, state) in agents {
+            guard state.status == .thinking || state.status == .toolRunning,
+                  now.timeIntervalSince(state.lastActivityAt) >= AppConfig.Agent.staleActiveStatusTimeout
+            else { continue }
+            var reset = state
+            reset.status = .idle
+            agents[id] = reset
+            sidebarRowState(for: id).apply(reset, now: now)
+            didReset = true
+            logger.info("Agent in \(id) reset to idle: stalled \(Int(AppConfig.Agent.staleActiveStatusTimeout))s with no output")
+        }
+        if didReset { rebuildDerivedState() }
     }
 
     // MARK: - Priority
