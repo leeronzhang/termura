@@ -63,6 +63,20 @@ final class GhosttyTerminalView: NSView {
     /// Caches the selected text at menu-build time so async action handlers read a stable snapshot.
     var menuCachedSelection: String?
 
+    // MARK: - Left-drag selection state (accessed by GhosttyTerminalView+Mouse)
+
+    /// Routing for the current left-button gesture. When a TUI has mouse
+    /// reporting on, the press is deferred until we know whether the gesture is
+    /// a click (forwarded to the app) or a drag (promoted to a terminal-level
+    /// selection via synthesized shift events). See GhosttyTerminalView+Mouse.
+    enum LeftDragState { case idle, forwarding, pendingCaptured, selectingCaptured }
+    var leftDragState: LeftDragState = .idle
+    /// View-space location of the most recent left mouseDown.
+    var leftMouseDownPoint: NSPoint = .zero
+    /// ghostty modifier flags captured at left mouseDown, replayed on the
+    /// deferred click/selection events.
+    var leftMouseDownMods: ghostty_input_mods_e = GHOSTTY_MODS_NONE
+
     // MARK: - Link hover state
 
     /// URL string when the mouse hovers over a recognized link. Drives cursor shape.
