@@ -16,7 +16,7 @@ final class RemoteHelperPathResolverTests: XCTestCase {
 
         XCTAssertEqual(
             url.path,
-            tempDir.appendingPathComponent("Contents/Helpers/termura-remote-agent").path
+            tempDir.appendingPathComponent(RemoteHelperLayout.executableRelativePath).path
         )
     }
 
@@ -33,7 +33,7 @@ final class RemoteHelperPathResolverTests: XCTestCase {
 
         let url = resolver.helperExecutableURL()
 
-        XCTAssertTrue(url.path.hasSuffix("Contents/Helpers/termura-remote-agent"))
+        XCTAssertTrue(url.path.hasSuffix(RemoteHelperLayout.executableRelativePath))
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
@@ -43,6 +43,6 @@ final class RemoteHelperPathResolverTests: XCTestCase {
         // not crash and returns a URL that ends in the helper relative path.
         let resolver = LiveRemoteHelperPathResolver()
         let url = resolver.helperExecutableURL()
-        XCTAssertTrue(url.path.hasSuffix("Contents/Helpers/termura-remote-agent"))
+        XCTAssertTrue(url.path.hasSuffix(RemoteHelperLayout.executableRelativePath))
     }
 }
